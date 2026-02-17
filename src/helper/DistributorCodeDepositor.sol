@@ -7,7 +7,7 @@ import { Auth, Authority } from "solmate/auth/Auth.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 /// NOTE: I am importing from the one-to-one-queue since the WithdrawQueue update, once merge will have this moved. And
 /// I'd rather avoid the merge conflict
-import { IFeeModule, IERC20 } from "./one-to-one-queue/interfaces/IFeeModule.sol";
+import { IFeeModule, IERC20 } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
 

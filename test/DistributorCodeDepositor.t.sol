@@ -15,7 +15,7 @@ import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 /// NOTE: I am importing from the one-to-one-queue since the WithdrawQueue update, once merge will have this moved. And
 /// I'd rather avoid the merge conflict
-import { IFeeModule } from "src/helper/one-to-one-queue/interfaces/IFeeModule.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Statement, Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 
 interface IERC2612 {

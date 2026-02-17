@@ -68,7 +68,7 @@
     "deploy": true,
     "distributorCodeDepositorSalt": "0x48b53893da2e0b0248268c00000000000000000000000000000000000000001d",
     "nativeSupported": true,
-    "supplyCap": 1000000000000000000000000000,
+    "supplyCap": "1000000000000000000000000000",
     "feeModule": "0x0000000000000000000000000000000000000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "policyOne"
