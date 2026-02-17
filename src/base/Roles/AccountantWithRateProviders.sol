@@ -70,6 +70,33 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      */
     mapping(ERC20 => RateProviderData) public rateProviderData;
 
+    // ========================================= CONSTANTS =========================================
+
+    /**
+     * @notice Maximum allowed minimum update delay - 14 days.
+     */
+    uint32 internal constant MAXIMUM_UPDATE_DELAY = 14 days;
+
+    /**
+     * @notice Minimum allowed upper bound for exchange rate change - 1e4 (100%).
+     */
+    uint16 internal constant MINIMUM_UPPER_BOUND = 1e4;
+
+    /**
+     * @notice Maximum allowed lower bound for exchange rate change - 1e4 (100%).
+     */
+    uint16 internal constant MAXIMUM_LOWER_BOUND = 1e4;
+
+    /**
+     * @notice Maximum allowed management fee - 0.2e4 (20%).
+     */
+    uint16 internal constant MAXIMUM_MANAGEMENT_FEE = 0.2e4;
+
+    /**
+     * @notice Maximum allowed performance fee - 1e4 (100%).
+     */
+    uint16 internal constant MAXIMUM_PERFORMANCE_FEE = 1e4;
+
     //============================== ERRORS ===============================
 
     error AccountantWithRateProviders__UpperBoundTooSmall();
@@ -145,6 +172,23 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
             revert AccountantWithRateProviders__VaultBaseDecimalMismatch();
         }
 
+        // Validate constructor parameters using the same checks as the setter functions
+        if (minimumUpdateDelayInSeconds > MAXIMUM_UPDATE_DELAY) {
+            revert AccountantWithRateProviders__UpdateDelayTooLarge();
+        }
+        if (allowedExchangeRateChangeUpper < MINIMUM_UPPER_BOUND) {
+            revert AccountantWithRateProviders__UpperBoundTooSmall();
+        }
+        if (allowedExchangeRateChangeLower > MAXIMUM_LOWER_BOUND) {
+            revert AccountantWithRateProviders__LowerBoundTooLarge();
+        }
+        if (managementFee > MAXIMUM_MANAGEMENT_FEE) {
+            revert AccountantWithRateProviders__ManagementFeeTooLarge();
+        }
+        if (performanceFee > MAXIMUM_PERFORMANCE_FEE) {
+            revert AccountantWithRateProviders__PerformanceFeeTooLarge();
+        }
+
         ONE_SHARE = 10 ** decimals;
         accountantState = AccountantState({
             payoutAddress: payoutAddress,
@@ -190,7 +234,9 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      * @dev Callable by OWNER_ROLE.
      */
     function updateDelay(uint32 minimumUpdateDelayInSeconds) external requiresAuth {
-        if (minimumUpdateDelayInSeconds > 14 days) revert AccountantWithRateProviders__UpdateDelayTooLarge();
+        if (minimumUpdateDelayInSeconds > MAXIMUM_UPDATE_DELAY) {
+            revert AccountantWithRateProviders__UpdateDelayTooLarge();
+        }
         uint32 oldDelay = accountantState.minimumUpdateDelayInSeconds;
         accountantState.minimumUpdateDelayInSeconds = minimumUpdateDelayInSeconds;
         emit DelayInSecondsUpdated(oldDelay, minimumUpdateDelayInSeconds);
@@ -201,7 +247,9 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      * @dev Callable by OWNER_ROLE.
      */
     function updateUpper(uint16 allowedExchangeRateChangeUpper) external requiresAuth {
-        if (allowedExchangeRateChangeUpper < 1e4) revert AccountantWithRateProviders__UpperBoundTooSmall();
+        if (allowedExchangeRateChangeUpper < MINIMUM_UPPER_BOUND) {
+            revert AccountantWithRateProviders__UpperBoundTooSmall();
+        }
         uint16 oldBound = accountantState.allowedExchangeRateChangeUpper;
         accountantState.allowedExchangeRateChangeUpper = allowedExchangeRateChangeUpper;
         emit UpperBoundUpdated(oldBound, allowedExchangeRateChangeUpper);
@@ -212,7 +260,9 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      * @dev Callable by OWNER_ROLE.
      */
     function updateLower(uint16 allowedExchangeRateChangeLower) external requiresAuth {
-        if (allowedExchangeRateChangeLower > 1e4) revert AccountantWithRateProviders__LowerBoundTooLarge();
+        if (allowedExchangeRateChangeLower > MAXIMUM_LOWER_BOUND) {
+            revert AccountantWithRateProviders__LowerBoundTooLarge();
+        }
         uint16 oldBound = accountantState.allowedExchangeRateChangeLower;
         accountantState.allowedExchangeRateChangeLower = allowedExchangeRateChangeLower;
         emit LowerBoundUpdated(oldBound, allowedExchangeRateChangeLower);
@@ -223,7 +273,7 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      * @dev Callable by OWNER_ROLE.
      */
     function updateManagementFee(uint16 managementFee) external requiresAuth {
-        if (managementFee > 0.2e4) revert AccountantWithRateProviders__ManagementFeeTooLarge();
+        if (managementFee > MAXIMUM_MANAGEMENT_FEE) revert AccountantWithRateProviders__ManagementFeeTooLarge();
         uint16 oldFee = accountantState.managementFee;
         accountantState.managementFee = managementFee;
         emit ManagementFeeUpdated(oldFee, managementFee);
@@ -234,7 +284,7 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
      * @dev Callable by OWNER_ROLE.
      */
     function updatePerformanceFee(uint16 performanceFee) external requiresAuth {
-        if (performanceFee > 0.2e4) revert AccountantWithRateProviders__PerformanceFeeTooLarge();
+        if (performanceFee > MAXIMUM_PERFORMANCE_FEE) revert AccountantWithRateProviders__PerformanceFeeTooLarge();
         uint16 oldFee = accountantState.performanceFee;
         accountantState.performanceFee = performanceFee;
         emit PerformanceFeeUpdated(oldFee, performanceFee);
@@ -271,9 +321,7 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
         AccountantState memory state = accountantState;
         if (state.isPaused) revert AccountantWithRateProviders__Paused();
 
-        if (state.exchangeRate > state.highestExchangeRate) {
-            revert AccountantWithRateProviders__ExchangeRateAlreadyHighest();
-        }
+        assert(state.exchangeRate <= state.highestExchangeRate);
 
         accountantState.highestExchangeRate = state.exchangeRate;
 
@@ -305,6 +353,7 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
             // exchange rate
             // to a better value, and pause it.
             accountantState.isPaused = true;
+            emit Paused();
         } else {
             // Only update fees if we are not paused.
             // Update fee accounting.
@@ -341,13 +390,13 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
             unchecked {
                 accountantState.feesOwedInBase += uint128(newFeesOwedInBase);
             }
+
+            accountantState.exchangeRate = newExchangeRate;
+            accountantState.totalSharesLastUpdate = uint128(currentTotalShares);
+            accountantState.lastUpdateTimestamp = currentTime;
+
+            emit ExchangeRateUpdated(uint96(currentExchangeRate), newExchangeRate, currentTime);
         }
-
-        accountantState.exchangeRate = newExchangeRate;
-        accountantState.totalSharesLastUpdate = uint128(currentTotalShares);
-        accountantState.lastUpdateTimestamp = currentTime;
-
-        emit ExchangeRateUpdated(uint96(currentExchangeRate), newExchangeRate, currentTime);
     }
 
     /**
@@ -361,7 +410,6 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
 
         AccountantState storage state = accountantState;
         if (state.isPaused) revert AccountantWithRateProviders__Paused();
-        if (state.feesOwedInBase == 0) revert AccountantWithRateProviders__ZeroFeesOwed();
 
         // Determine amount of fees owed in feeAsset.
         uint256 feesOwedInFeeAsset;
@@ -379,6 +427,7 @@ contract AccountantWithRateProviders is Auth, IRateProvider {
                 feesOwedInFeeAsset = feesOwedInBaseUsingFeeAssetDecimals.mulDivDown(10 ** feeAssetDecimals, rate);
             }
         }
+        if (feesOwedInFeeAsset == 0) revert AccountantWithRateProviders__ZeroFeesOwed();
         // Zero out fees owed.
         state.feesOwedInBase = 0;
         // Transfer fee asset to payout address.

@@ -6,7 +6,7 @@ import { BaseScript } from "../Base.s.sol";
 import "@forge-std/Script.sol";
 import { OneToOneQueue } from "src/helper/one-to-one-queue/OneToOneQueue.sol";
 import { QueueAccessAuthority } from "src/helper/one-to-one-queue/QueueAccessAuthority.sol";
-import { SimpleFeeModule } from "src/helper/one-to-one-queue/SimpleFeeModule.sol";
+import { SimpleFeeModule } from "src/helper/SimpleFeeModule.sol";
 
 contract DeployOneToOneQueue is BaseScript {
 

@@ -127,7 +127,8 @@ abstract contract VaultArchitectureSharedSetup is Test, MainnetAddresses {
             console.logUint(i);
             console.log("assets[i]", assets[i]);
             if (assets[i] != address(0)) {
-                teller.addAsset(ERC20(assets[i]));
+                teller.addDepositAsset(ERC20(assets[i]));
+                teller.addWithdrawAsset(ERC20(assets[i]));
                 accountant.setRateProviderData(ERC20(assets[i]), true, address(0));
             }
         }

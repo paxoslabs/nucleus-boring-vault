@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { OneToOneQueue } from "src/helper/one-to-one-queue/OneToOneQueue.sol";
-import { SimpleFeeModule } from "src/helper/one-to-one-queue/SimpleFeeModule.sol";
+import { SimpleFeeModule } from "src/helper/SimpleFeeModule.sol";
 import { QueueAccessAuthority } from "src/helper/one-to-one-queue/QueueAccessAuthority.sol";
 import { OneToOneQueueTestBase, tERC20, ERC20, IERC20 } from "../OneToOneQueueTestBase.t.sol";
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";

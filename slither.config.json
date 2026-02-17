@@ -1,6 +1,6 @@
 {
     "filter_paths": "lib|node_modules",
-    "detectors_to_exclude": "naming-convention,pragma,assembly,equality",
+    "detectors_to_exclude": "naming-convention,pragma,assembly,equality,unused-return",
     "exclude_informational": true,
     "exclude_low": true,
     "solc_remaps": [

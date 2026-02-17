@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { OneToOneQueue } from "src/helper/one-to-one-queue/OneToOneQueue.sol";
-import { SimpleFeeModule } from "src/helper/one-to-one-queue/SimpleFeeModule.sol";
+import { SimpleFeeModule } from "src/helper/SimpleFeeModule.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { QueueAccessAuthority, AccessAuthority } from "src/helper/one-to-one-queue/QueueAccessAuthority.sol";
 import { IAccessAuthorityHook } from "src/helper/one-to-one-queue/access/AccessAuthority.sol";

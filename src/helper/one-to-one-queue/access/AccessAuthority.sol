@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { Pausable } from "./Pausable.sol";
 import { VerboseAuth, Authority } from "./VerboseAuth.sol";
-import { IAccessAuthorityHook } from "../interfaces/IAccessAuthorityHook.sol";
+import { IAccessAuthorityHook } from "src/interfaces/IAccessAuthorityHook.sol";
 
 /**
  * @title AccessAuthority

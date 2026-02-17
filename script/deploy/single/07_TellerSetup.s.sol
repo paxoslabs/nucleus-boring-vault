@@ -26,12 +26,14 @@ contract TellerSetup is BaseScript {
         TellerWithMultiAssetSupport teller = TellerWithMultiAssetSupport(config.teller);
 
         // add the base asset by default for all configurations
-        teller.addAsset(ERC20(config.base));
+        teller.addDepositAsset(ERC20(config.base));
+        teller.addWithdrawAsset(ERC20(config.base));
 
         // add the remaining assets specified in the assets array of config
         for (uint256 i; i < config.assets.length; ++i) {
             // add asset
-            teller.addAsset(ERC20(config.assets[i]));
+            teller.addDepositAsset(ERC20(config.assets[i]));
+            teller.addWithdrawAsset(ERC20(config.assets[i]));
 
             string memory isPeggedKey = string(
                 abi.encodePacked(".assetToRateProviderAndPriceFeed.", config.assets[i].toHexString(), ".isPegged")

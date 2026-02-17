@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { ERC721Enumerable, ERC721 } from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IFeeModule } from "./interfaces/IFeeModule.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { VerboseAuth, Authority } from "./access/VerboseAuth.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";

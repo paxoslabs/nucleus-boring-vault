@@ -20,3 +20,6 @@ uint8 constant TELLER_ROLE = 3;
 uint8 constant UPDATE_EXCHANGE_RATE_ROLE = 4;
 uint8 constant SOLVER_ROLE = 5;
 uint8 constant PAUSER_ROLE = 6;
+uint8 constant DEPOSITOR_ROLE = 7;
+uint8 constant SELF_BURN_ROLE = 8;
+uint8 constant WITHDRAW_QUEUE_PROCESSOR_ROLE = 9;

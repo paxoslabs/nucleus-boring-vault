@@ -73,13 +73,16 @@ abstract contract CrossChainBaseTest is Test, MainnetAddresses {
         rolesAuthority.setRoleCapability(BURNER_ROLE, address(boringVault), BoringVault.exit.selector, true);
 
         rolesAuthority.setRoleCapability(
-            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.addAsset.selector, true
+            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.addDepositAsset.selector, true
         );
         rolesAuthority.setRoleCapability(
-            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.removeAsset.selector, true
+            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.removeDepositAsset.selector, true
         );
         rolesAuthority.setRoleCapability(
-            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.bulkDeposit.selector, true
+            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.addWithdrawAsset.selector, true
+        );
+        rolesAuthority.setRoleCapability(
+            ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.removeWithdrawAsset.selector, true
         );
         rolesAuthority.setRoleCapability(
             ADMIN_ROLE, sourceTellerAddr, TellerWithMultiAssetSupport.bulkWithdraw.selector, true
@@ -109,15 +112,25 @@ abstract contract CrossChainBaseTest is Test, MainnetAddresses {
         rolesAuthority.setUserRole(destinationTellerAddr, MINTER_ROLE, true);
         rolesAuthority.setUserRole(destinationTellerAddr, BURNER_ROLE, true);
 
-        sourceTeller.addAsset(WETH);
-        sourceTeller.addAsset(ERC20(NATIVE));
-        sourceTeller.addAsset(EETH);
-        sourceTeller.addAsset(WEETH);
+        sourceTeller.addDepositAsset(WETH);
+        sourceTeller.addDepositAsset(ERC20(NATIVE));
+        sourceTeller.addDepositAsset(EETH);
+        sourceTeller.addDepositAsset(WEETH);
 
-        destinationTeller.addAsset(WETH);
-        destinationTeller.addAsset(ERC20(NATIVE));
-        destinationTeller.addAsset(EETH);
-        destinationTeller.addAsset(WEETH);
+        sourceTeller.addWithdrawAsset(WETH);
+        sourceTeller.addWithdrawAsset(ERC20(NATIVE));
+        sourceTeller.addWithdrawAsset(EETH);
+        sourceTeller.addWithdrawAsset(WEETH);
+
+        destinationTeller.addDepositAsset(WETH);
+        destinationTeller.addDepositAsset(ERC20(NATIVE));
+        destinationTeller.addDepositAsset(EETH);
+        destinationTeller.addDepositAsset(WEETH);
+
+        destinationTeller.addWithdrawAsset(WETH);
+        destinationTeller.addWithdrawAsset(ERC20(NATIVE));
+        destinationTeller.addWithdrawAsset(EETH);
+        destinationTeller.addWithdrawAsset(WEETH);
 
         accountant.setRateProviderData(EETH, true, address(0));
         accountant.setRateProviderData(WEETH, false, address(WEETH_RATE_PROVIDER));

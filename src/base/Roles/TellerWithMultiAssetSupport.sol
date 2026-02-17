@@ -36,9 +36,14 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     // ========================================= STATE =========================================
 
     /**
-     * @notice Mapping ERC20s to an isSupported bool.
+     * @notice Mapping ERC20s to an isDepositSupported bool.
      */
-    mapping(ERC20 => bool) public isSupported;
+    mapping(ERC20 => bool) public isDepositSupported;
+
+    /**
+     * @notice Mapping ERC20s to an isWithdrawSupported bool.
+     */
+    mapping(ERC20 => bool) public isWithdrawSupported;
 
     /**
      * @notice The deposit nonce used to map to a deposit hash.
@@ -87,8 +92,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
 
     event Paused();
     event Unpaused();
-    event AssetAdded(address indexed asset);
-    event AssetRemoved(address indexed asset);
     event Deposit(
         uint256 indexed nonce,
         address indexed receiver,
@@ -101,7 +104,10 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     event BulkDeposit(address indexed asset, uint256 depositAmount);
     event BulkWithdraw(address indexed asset, uint256 shareAmount);
     event DepositRefunded(uint256 indexed nonce, bytes32 depositHash, address indexed user);
-
+    event DepositAssetAdded(address indexed asset);
+    event DepositAssetRemoved(address indexed asset);
+    event WithdrawAssetAdded(address indexed asset);
+    event WithdrawAssetRemoved(address indexed asset);
     //============================== IMMUTABLES ===============================
 
     /**
@@ -150,18 +156,37 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
      * @dev The accountant must also support pricing this asset, else the `deposit` call will revert.
      * @dev Callable by OWNER_ROLE.
      */
-    function addAsset(ERC20 asset) external requiresAuth {
-        isSupported[asset] = true;
-        emit AssetAdded(address(asset));
+    function addDepositAsset(ERC20 asset) external requiresAuth {
+        isDepositSupported[asset] = true;
+        emit DepositAssetAdded(address(asset));
+    }
+
+    /**
+     * @notice Adds this asset as a withdraw asset.
+     * @dev The accountant must also support pricing this asset, else the `bulkWithdraw` call will revert.
+     * @dev Callable by OWNER_ROLE.
+     */
+    function addWithdrawAsset(ERC20 asset) external requiresAuth {
+        isWithdrawSupported[asset] = true;
+        emit WithdrawAssetAdded(address(asset));
     }
 
     /**
      * @notice Removes this asset as a deposit asset.
      * @dev Callable by OWNER_ROLE.
      */
-    function removeAsset(ERC20 asset) external requiresAuth {
-        isSupported[asset] = false;
-        emit AssetRemoved(address(asset));
+    function removeDepositAsset(ERC20 asset) external requiresAuth {
+        isDepositSupported[asset] = false;
+        emit DepositAssetRemoved(address(asset));
+    }
+
+    /**
+     * @notice Removes this asset as a withdraw asset.
+     * @dev Callable by OWNER_ROLE.
+     */
+    function removeWithdrawAsset(ERC20 asset) external requiresAuth {
+        isWithdrawSupported[asset] = false;
+        emit WithdrawAssetRemoved(address(asset));
     }
 
     /**
@@ -251,7 +276,7 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
         returns (uint256 shares)
     {
         if (isPaused) revert TellerWithMultiAssetSupport__Paused();
-        if (!isSupported[depositAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
+        if (!isDepositSupported[depositAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
 
         shares = _erc20Deposit(depositAsset, depositAmount, minimumMint, msg.sender);
 
@@ -277,7 +302,7 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
         returns (uint256 shares)
     {
         if (isPaused) revert TellerWithMultiAssetSupport__Paused();
-        if (!isSupported[depositAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
+        if (!isDepositSupported[depositAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
 
         // solhint-disable-next-line no-empty-blocks
         try depositAsset.permit(msg.sender, address(vault), depositAmount, deadline, v, r, s) { }
@@ -289,28 +314,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
         shares = _erc20Deposit(depositAsset, depositAmount, minimumMint, msg.sender);
 
         _afterPublicDeposit(msg.sender, depositAsset, depositAmount, shares, shareLockPeriod);
-    }
-
-    /**
-     * @notice Allows on ramp role to deposit into this contract.
-     * @dev Does NOT support native deposits.
-     * @dev Callable by SOLVER_ROLE.
-     */
-    function bulkDeposit(
-        ERC20 depositAsset,
-        uint256 depositAmount,
-        uint256 minimumMint,
-        address to
-    )
-        external
-        requiresAuth
-        nonReentrant
-        returns (uint256 shares)
-    {
-        if (!isSupported[depositAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
-
-        shares = _erc20Deposit(depositAsset, depositAmount, minimumMint, to);
-        emit BulkDeposit(address(depositAsset), depositAmount);
     }
 
     /**
@@ -327,7 +330,8 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
         requiresAuth
         returns (uint256 assetsOut)
     {
-        if (!isSupported[withdrawAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
+        if (isPaused) revert TellerWithMultiAssetSupport__Paused();
+        if (!isWithdrawSupported[withdrawAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
 
         if (shareAmount == 0) revert TellerWithMultiAssetSupport__ZeroShares();
         assetsOut = shareAmount.mulDivDown(accountant.getRateInQuoteSafe(withdrawAsset), ONE_SHARE);

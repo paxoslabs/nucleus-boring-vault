@@ -24,7 +24,7 @@ jobs:
           node-version: ${{ matrix.node_version }}
 
       - name: Run Prettier
-        run: npx prettier -c '**/*.{md,yml,yaml}'
+        run: npx prettier -c '**/*.{md,yml,yaml,ts,js}'
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -56,7 +56,7 @@ jobs:
         with:
           check_filenames: true
           ignore_words_list: we,amountIn,aNumber
-          skip: ./.git,./lib,./certora,./audit,./package-lock.json
+          skip: ./.git,./lib,./certora,./audit,./package-lock.json,./bun.lock
 
   solhint:
     runs-on: ${{ matrix.os }}
@@ -88,8 +88,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
@@ -111,4 +109,4 @@ jobs:
 
       - name: Run Slither
         run: |
-          npm i && solc-select install 0.8.21 && export SOLC_VERSION='0.8.21' && slither src
+          npm i && forge install && slither src

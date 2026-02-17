@@ -47,7 +47,7 @@ abstract contract CrossChainTellerBase is TellerWithMultiAssetSupport {
         requiresAuth
         nonReentrant
     {
-        if (!isSupported[depositAsset]) {
+        if (!isDepositSupported[depositAsset]) {
             revert TellerWithMultiAssetSupport__AssetNotSupported();
         }
 

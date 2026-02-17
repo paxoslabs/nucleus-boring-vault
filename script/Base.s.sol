@@ -110,9 +110,26 @@ abstract contract BaseScript is Script {
             return 0x0888c3D797E13892C5e67cD802F93Ffe55Ea2826;
         } else if (block.chainid == 1_380_012_617) {
             return 0x6d0C5a20ac08ED00256aD224F74Ca53afF3D011d;
+        } else if (block.chainid == 11_155_111) {
+            return 0xC48f1361f309C62D9070f7D45E2Ad27dB2Eb3b2E;
         } else {
             revert("bad chain id");
         }
+    }
+
+    function makeSalt(
+        address deployer,
+        bool isCrosschainProtected,
+        string memory nameEntropy
+    )
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes1 crosschainProtectionFlag = isCrosschainProtected ? bytes1(0x01) : bytes1(0x00);
+        bytes32 nameEntropyHash = keccak256(abi.encodePacked(nameEntropy));
+        bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
+        return bytes32(abi.encodePacked(deployer, crosschainProtectionFlag, nameEntropyHash11));
     }
 
 }

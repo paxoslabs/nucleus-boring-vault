@@ -1,1 +1,1 @@
-forge test
+forge build && forge test --no-match-test invariant

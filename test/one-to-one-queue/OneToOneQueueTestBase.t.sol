@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { OneToOneQueue } from "src/helper/one-to-one-queue/OneToOneQueue.sol";
-import { SimpleFeeModule } from "src/helper/one-to-one-queue/SimpleFeeModule.sol";
+import { SimpleFeeModule } from "src/helper/SimpleFeeModule.sol";
 import { QueueAccessAuthority } from "src/helper/one-to-one-queue/QueueAccessAuthority.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
