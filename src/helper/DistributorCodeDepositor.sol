@@ -68,6 +68,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
 
     error SupplyCapError(uint256 resultingSupply, uint256 supplyCap);
     error NoCode(address addressEmptyCode);
+    error UnauthorizedTransaction();
 
     constructor(
         TellerWithMultiAssetSupport _teller,
@@ -185,9 +186,9 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         requiresAuth
         returns (uint256 shares)
     {
-        _authorizeKyt(_attestation, ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
         if (!isNativeDepositSupported) revert NativeDepositNotSupported();
         if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
+        _authorizeKyt(_attestation, ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
         nativeWrapper.deposit{ value: msg.value }();
         return _deposit(ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
     }
@@ -276,6 +277,9 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         shares = teller.deposit(depositAsset, depositAmount, minimumMint);
 
         uint256 feeAmount;
+
+        if (feeAmount >= shares) revert FeesExceedOrEqualShares();
+
         // if fee module is zero, no fees
         if (address(feeModule) != address(0)) {
             feeAmount = feeModule.calculateOfferFees(shares, IERC20(address(depositAsset)), IERC20(boringVault), to);
@@ -285,17 +289,15 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
             }
         }
 
-        if (feeAmount >= shares) revert FeesExceedOrEqualShares();
-
         // Send "to" the shares - fees
         ERC20(boringVault).safeTransfer(to, shares - feeAmount);
         uint256 totalSupply = ERC20(boringVault).totalSupply();
 
-        // Clear leftover allowance
-        _tryClearApproval(depositAsset);
-
         // Enforce the supply cap
         if (totalSupply > supplyCap) revert SupplyCapError(totalSupply, supplyCap);
+
+        // Clear leftover allowance
+        _tryClearApproval(depositAsset);
 
         emit DepositWithDistributorCode(
             msg.sender, depositAsset, depositAmount, minimumMint, to, depositHash, distributorCode
@@ -324,10 +326,9 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
                 to,
                 distributorCode
             );
-            require(
-                _authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value),
-                "MetaCoin: unauthorized transaction"
-            );
+            if (!_authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value)) {
+                revert UnauthorizedTransaction();
+            }
         }
     }
 
