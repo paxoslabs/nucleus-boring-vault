@@ -82,7 +82,7 @@ abstract contract CrossChainTellerBase is TellerWithMultiAssetSupport {
         _beforeBridge(data);
 
         // Since shares are directly burned, call `beforeTransfer` to enforce before transfer hooks.
-        beforeTransfer(msg.sender);
+        beforeTransfer(msg.sender, msg.data);
 
         // Burn shares from sender
         vault.exit(address(0), ERC20(address(0)), 0, msg.sender, shareAmount);

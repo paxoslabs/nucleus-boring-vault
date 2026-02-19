@@ -147,17 +147,17 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
     /**
      * @notice Check if from addresses shares are locked, reverting if so.
      */
-    function _callBeforeTransfer(address from) internal view {
-        if (address(hook) != address(0)) hook.beforeTransfer(from);
+    function _callBeforeTransfer() internal view {
+        if (address(hook) != address(0)) hook.beforeTransfer(msg.sender, msg.data);
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        _callBeforeTransfer(msg.sender);
+        _callBeforeTransfer();
         return super.transfer(to, amount);
     }
 
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
-        _callBeforeTransfer(from);
+        _callBeforeTransfer();
         return super.transferFrom(from, to, amount);
     }
 

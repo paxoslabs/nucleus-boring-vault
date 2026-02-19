@@ -48,9 +48,14 @@ contract FreezeListTest is VaultArchitectureSharedSetup {
         vm.expectRevert(abi.encodeWithSelector(FreezeListBeforeTransferHook.FrozenAddress.selector, frozenUser));
         boringVault.transferFrom(frozenUser, normalUser, 100e18);
 
-        // Verify normal user can still transfer even to the frozen user
+        // Verify normal user can not transfer to the frozen user
         vm.prank(normalUser);
+        vm.expectRevert(abi.encodeWithSelector(FreezeListBeforeTransferHook.FrozenAddress.selector, frozenUser));
         boringVault.transfer(frozenUser, 100e18);
+
+        // normal user can transfer to another normal user
+        vm.prank(normalUser);
+        boringVault.transfer(vm.addr(3), 100e18);
     }
 
 }
