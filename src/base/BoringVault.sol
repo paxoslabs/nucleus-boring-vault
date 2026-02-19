@@ -8,6 +8,7 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
+import { IFallbackHook } from "src/interfaces/IFallbackHook.sol";
 import { Auth, Authority } from "@solmate/auth/Auth.sol";
 
 /**
@@ -27,10 +28,18 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
      */
     BeforeTransferHook public hook;
 
+    /**
+     * @notice Fallback hook contract, if implemented it may add extra functionality without access modifying boring
+     * vault state
+     */
+    IFallbackHook public fallbackHook;
+
     //============================== EVENTS ===============================
 
     event Enter(address indexed from, address indexed asset, uint256 amount, address indexed to, uint256 shares);
     event Exit(address indexed to, address indexed asset, uint256 amount, address indexed from, uint256 shares);
+    event BeforeTransferHookUpdated(address indexed hook);
+    event FallbackHookUpdated(address indexed fallbackHook);
 
     //============================== CONSTRUCTOR ===============================
 
@@ -142,6 +151,18 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
      */
     function setBeforeTransferHook(address _hook) external requiresAuth {
         hook = BeforeTransferHook(_hook);
+        emit BeforeTransferHookUpdated(_hook);
+    }
+
+    /**
+     * @notice Sets the fallback hook
+     * @notice If set to zero address, the fallback function will revert with no data as it would without the fallback
+     * at all
+     * @dev callable by OWNER_ROLE
+     */
+    function setFallbackHook(address _fallbackHook) external requiresAuth {
+        fallbackHook = IFallbackHook(_fallbackHook);
+        emit FallbackHookUpdated(_fallbackHook);
     }
 
     /**
@@ -169,5 +190,17 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
     //============================== RECEIVE ===============================
 
     receive() external payable { }
+
+    /**
+     * @dev If ether is not passed, call the fallback. Optionally a hook can be set to add on functionality that cannot
+     * modify the vault state.
+     * This introduces a sort of pseudo-upgradeability pattern where the vault can be upgraded with simple getters
+     * without fear of breaking existing functionality
+     */
+    fallback(bytes calldata data) external returns (bytes memory result) {
+        // If no fallbackHook is set, we revert with no data as it would without the fallback at all
+        if (address(fallbackHook) == address(0)) revert();
+        result = fallbackHook.onFallback(msg.sender, data);
+    }
 
 }

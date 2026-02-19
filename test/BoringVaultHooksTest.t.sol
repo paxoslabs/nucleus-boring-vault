@@ -4,6 +4,25 @@ pragma solidity 0.8.21;
 import { VaultArchitectureSharedSetup } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { FreezeListBeforeTransferHook } from "src/helper/FreezeListBeforeTransferHook.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { IFallbackHook } from "src/interfaces/IFallbackHook.sol";
+import { console } from "forge-std/console.sol";
+
+contract MockFallbackHook is IFallbackHook {
+
+    struct MyStruct {
+        uint256 a;
+        uint256 b;
+    }
+
+    function onFallback(address sender, bytes calldata data) external returns (bytes memory) {
+        if (bytes4(data[0:4]) == this.foo.selector) return abi.encode(foo());
+    }
+
+    function foo() public pure returns (MyStruct memory a) {
+        return MyStruct({ a: 4, b: 2 });
+    }
+
+}
 
 contract FreezeListTest is VaultArchitectureSharedSetup {
 
@@ -56,6 +75,23 @@ contract FreezeListTest is VaultArchitectureSharedSetup {
         // normal user can transfer to another normal user
         vm.prank(normalUser);
         boringVault.transfer(vm.addr(3), 100e18);
+    }
+
+    function testFallbackHook() public {
+        vm.prank(normalUser);
+        vm.expectRevert(address(boringVault));
+        address(boringVault).call(abi.encodeWithSignature("foo()"));
+
+        MockFallbackHook fallbackHook = new MockFallbackHook();
+
+        vm.prank(boringVault.owner());
+        boringVault.setFallbackHook(address(fallbackHook));
+
+        vm.prank(normalUser);
+        (bool success, bytes memory result) = address(boringVault).call(abi.encodeWithSignature("foo()"));
+        MockFallbackHook.MyStruct memory s = abi.decode(result, (MockFallbackHook.MyStruct));
+        assertEq(s.a, 4);
+        assertEq(s.b, 2);
     }
 
 }
