@@ -7,7 +7,6 @@ import { BoringVault } from "src/base/BoringVault.sol";
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 import { Auth, Authority } from "@solmate/auth/Auth.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
@@ -15,7 +14,7 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
  * @title TellerWithMultiAssetSupport
  * @custom:security-contact security@molecularlabs.io
  */
-contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuard {
+contract TellerWithMultiAssetSupport is Auth, ReentrancyGuard {
 
     using FixedPointMathLib for uint256;
     using SafeTransferLib for ERC20;
@@ -77,7 +76,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     //============================== ERRORS ===============================
 
     error TellerWithMultiAssetSupport__ShareLockPeriodTooLong();
-    error TellerWithMultiAssetSupport__SharesAreLocked();
     error TellerWithMultiAssetSupport__SharesAreUnLocked();
     error TellerWithMultiAssetSupport__BadDepositHash();
     error TellerWithMultiAssetSupport__AssetNotSupported();
@@ -205,15 +203,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     function setShareLockPeriod(uint64 _shareLockPeriod) external requiresAuth {
         if (_shareLockPeriod > MAX_SHARE_LOCK_PERIOD) revert TellerWithMultiAssetSupport__ShareLockPeriodTooLong();
         shareLockPeriod = _shareLockPeriod;
-    }
-
-    // ========================================= BeforeTransferHook FUNCTIONS =========================================
-
-    /**
-     * @notice Implement beforeTransfer hook to check if shares are locked.
-     */
-    function beforeTransfer(address sender, bytes calldata data) public view {
-        if (shareUnlockTime[sender] > block.timestamp) revert TellerWithMultiAssetSupport__SharesAreLocked();
     }
 
     // ========================================= REVERT DEPOSIT FUNCTIONS =========================================
