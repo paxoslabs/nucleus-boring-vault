@@ -109,8 +109,6 @@ contract MultiChainHyperlaneTellerWithMultiAssetSupport is MultiChainTellerBase 
      * @param payload Encoded message.
      */
     function handle(uint32 origin, bytes32 sender, bytes calldata payload) external payable {
-        _beforeReceive();
-
         Chain memory chain = selectorToChains[origin];
 
         // Three things must be checked.
@@ -131,6 +129,11 @@ contract MultiChainHyperlaneTellerWithMultiAssetSupport is MultiChainTellerBase 
         }
 
         (uint256 shareAmount, address receiver, bytes32 messageId) = abi.decode(payload, (uint256, address, bytes32));
+        // We perform the before receive hook here and not first because the above error handling will result in more
+        // verbose errors, while still avoiding any writes. As an example, passing in an invalid bytes32 should fail
+        // with MultiChainHyperlaneTellerWithMultiAssetSupport_InvalidBytes32Address but would instead error with no
+        // data if we tried to parse it and pass in the hook first
+        _beforeReceive(shareAmount, receiver);
 
         // This should never be the case since zero address
         // `destinationChainReceiver` in `_bridge` is not allowed, but we have

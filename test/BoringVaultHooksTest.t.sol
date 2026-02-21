@@ -41,7 +41,7 @@ contract FreezeListTest is VaultArchitectureSharedSetup {
             _deployVaultArchitecture("Test Vault", "TEST", 18, address(WETH), assets, 1e18);
 
         // Deploy and set up the freeze hook
-        freezeHook = new FreezeListBeforeTransferHook();
+        freezeHook = new FreezeListBeforeTransferHook(address(this));
         boringVault.setBeforeTransferHook(address(freezeHook));
 
         // Give both users some vault shares
