@@ -5,6 +5,9 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { BoringVault } from "../base/BoringVault.sol";
 import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetSupport.sol";
+import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
+import { Auth, Authority } from "solmate/auth/Auth.sol";
 
 interface WarpRoute {
 
@@ -27,7 +30,7 @@ interface WarpRoute {
  *
  * @custom:security-contact security@molecularlabs.io
  */
-contract WarpRouteWrapper {
+contract WarpRouteWrapper is Auth, PredicateClient {
 
     using SafeTransferLib for ERC20;
 
@@ -38,16 +41,34 @@ contract WarpRouteWrapper {
     WarpRoute public immutable warpRoute;
     uint32 public immutable destination;
 
-    constructor(TellerWithMultiAssetSupport _teller, WarpRoute _warpRoute, uint32 _destination) {
+    constructor(
+        TellerWithMultiAssetSupport _teller,
+        WarpRoute _warpRoute,
+        uint32 _destination,
+        address _registry,
+        string memory _policyID,
+        address _owner
+    )
+        Auth(_owner, Authority(address(0)))
+    {
         teller = _teller;
         warpRoute = _warpRoute;
         destination = _destination;
+        _initPredicateClient(_registry, _policyID);
 
         boringVault = _teller.vault();
 
         // Infinite approvals to the warpRoute okay because this contract will
         // never hold any balance aside from donations.
         boringVault.approve(address(warpRoute), type(uint256).max);
+    }
+
+    function setPolicyID(string memory _policyID) external requiresAuth {
+        _setPolicyID(_policyID);
+    }
+
+    function setRegistry(address _registry) external requiresAuth {
+        _setRegistry(_registry);
     }
 
     /**
@@ -63,12 +84,16 @@ contract WarpRouteWrapper {
         ERC20 depositAsset,
         uint256 depositAmount,
         uint256 minimumMint,
-        bytes32 recipient
+        bytes32 recipient,
+        Attestation calldata _attestation
     )
         external
         payable
         returns (uint256 sharesMinted, bytes32 messageId)
     {
+        bytes memory encodedSigAndArgs =
+            abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
+        _authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value);
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
         if (depositAsset.allowance(address(this), address(boringVault)) < depositAmount) {
