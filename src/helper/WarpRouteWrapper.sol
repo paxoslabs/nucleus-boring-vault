@@ -41,6 +41,10 @@ contract WarpRouteWrapper is Auth, PredicateClient {
     WarpRoute public immutable warpRoute;
     uint32 public immutable destination;
 
+    mapping(ERC20 => bool) public kytEnabled;
+
+    event KytStatusUpdated(ERC20 indexed depositAsset, bool enabled);
+
     constructor(
         TellerWithMultiAssetSupport _teller,
         WarpRoute _warpRoute,
@@ -72,6 +76,14 @@ contract WarpRouteWrapper is Auth, PredicateClient {
     }
 
     /**
+     * @dev OWNER function to update the KYT status of an asset
+     */
+    function updateKytStatus(ERC20 depositAsset, bool enabled) external requiresAuth {
+        kytEnabled[depositAsset] = enabled;
+        emit KytStatusUpdated(depositAsset, enabled);
+    }
+
+    /**
      * @dev There's two sets of approvals this contract needs to grant. It needs
      * to approve the BoringVault to take its `depositAsset`, and it needs to
      * approve the WarpRoute to take the BoringVault shares. The latter is done
@@ -91,9 +103,11 @@ contract WarpRouteWrapper is Auth, PredicateClient {
         payable
         returns (uint256 sharesMinted, bytes32 messageId)
     {
-        bytes memory encodedSigAndArgs =
-            abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
-        _authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value);
+        if (kytEnabled[depositAsset]) {
+            bytes memory encodedSigAndArgs =
+                abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
+            _authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value);
+        }
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
         if (depositAsset.allowance(address(this), address(boringVault)) < depositAmount) {

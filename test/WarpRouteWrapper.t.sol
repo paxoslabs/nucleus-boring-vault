@@ -36,7 +36,7 @@ contract MockWarpRoute {
         // Return a dummy value since nothing is used in this test with the return messageId. Hyperlane has this value
         // returned through a series of function calls resulting in a hash performed in the Mailbox of a collection of
         // bytes thrown together with a library. We instead return this "magic number" as a way to still test that the
-        // implmentation correctly returns what Hyperlane provides.
+        // implementation correctly returns what Hyperlane provides.
         return MAGIC_VALUE_TRANFER_REMOTE;
     }
 
@@ -87,7 +87,11 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
     // Verifies that depositAndBridge deposits the asset into the vault and
     // calls transferRemote on the warp route, producing a SentTransferRemote event
     // with the correct destination, recipient, and share amount.
-    function test_depositAndBridge_emitsSentTransferRemote() external {
+    // The test should pass when the kyt is enabled for this asset
+    function test_depositAndBridge_emitsSentTransferRemote_predicateEnabled() external {
+        vm.prank(owner);
+        warpRouteWrapper.updateKytStatus(ERC20(address(USDC)), true);
+
         uint256 depositAmount = 100e6;
         uint256 minimumMint = 100e6;
         bytes32 recipient = bytes32(uint256(uint160(address(this))));
@@ -101,6 +105,31 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         Attestation memory attestation = _createAttestationForDepositAndBridge(
             "test-uuid", address(this), address(warpRouteWrapper), address(USDC), depositAmount, minimumMint
         );
+
+        vm.expectEmit(address(mockWarpRoute));
+        emit SentTransferRemote(DESTINATION_DOMAIN, recipient, expectedShares);
+
+        (uint256 sharesMinted, bytes32 messageId) =
+            warpRouteWrapper.depositAndBridge(ERC20(address(USDC)), depositAmount, minimumMint, recipient, attestation);
+
+        assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
+        assertTrue(messageId == MAGIC_VALUE_TRANFER_REMOTE, "messageId must be the magic value");
+        assertEq(USDC.balanceOf(address(boringVault)), depositAmount, "boring vault must hold the deposited USDC");
+    }
+
+    // The same test should work just with a blank attestation
+    function test_depositAndBridge_emitsSentTransferRemote_predicateDisabled() external {
+        uint256 depositAmount = 100e6;
+        uint256 minimumMint = 100e6;
+        bytes32 recipient = bytes32(uint256(uint160(address(this))));
+
+        uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
+        uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
+
+        deal(address(USDC), address(this), depositAmount);
+        USDC.approve(address(warpRouteWrapper), depositAmount);
+
+        Attestation memory attestation;
 
         vm.expectEmit(address(mockWarpRoute));
         emit SentTransferRemote(DESTINATION_DOMAIN, recipient, expectedShares);
