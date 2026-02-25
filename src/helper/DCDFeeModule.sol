@@ -24,11 +24,14 @@ contract DCDFeeModule is IFeeModule, Auth {
 
     error FeePercentageTooHigh(uint256 feePercentage, uint256 maxAllowed);
 
+    event FeeDataUpdated(IERC20 indexed depositToken, uint256 feePercentage, uint256 flatFee);
+
     constructor(address _owner) Auth(_owner, Authority(address(0))) { }
 
     function setFeeData(IERC20 depositToken, uint256 feePercentage, uint256 flatFee) external requiresAuth {
         if (feePercentage > ONE_HUNDRED_PERCENT) revert FeePercentageTooHigh(feePercentage, ONE_HUNDRED_PERCENT);
         depositTokenFeeData[depositToken] = FeeData(feePercentage, flatFee);
+        emit FeeDataUpdated(depositToken, feePercentage, flatFee);
     }
 
     function calculateOfferFees(

@@ -43,7 +43,7 @@ contract WarpRouteWrapper is Auth, PredicateClient {
 
     mapping(ERC20 => bool) public kytEnabled;
 
-    event KytStatusUpdated(ERC20 indexed depositAsset, bool enabled);
+    event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
 
     constructor(
         TellerWithMultiAssetSupport _teller,

@@ -29,7 +29,8 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
     BeforeTransferHook public hook;
 
     /**
-     * @notice Fallback hook contract, if implemented it may add extra functionality without access modifying boring
+     * @notice Fallback hook contract, if implemented it may add extra functionality without internal access to or
+     * modifying boring
      * vault state
      */
     IFallbackHook public fallbackHook;

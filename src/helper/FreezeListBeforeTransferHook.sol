@@ -18,7 +18,7 @@ contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
 
     error FrozenAddress(address frozenAddress);
 
-    event FreezeListUpdated(address indexed addressUpdated, bool isFrozen);
+    event FreezeListUpdated(address indexed addressUpdated, bool indexed isFrozen);
 
     constructor(address owner) Auth(owner, Authority(address(0))) { }
 
