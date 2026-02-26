@@ -25,7 +25,7 @@ contract TellerSetup is BaseScript {
     function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         TellerWithMultiAssetSupport teller = TellerWithMultiAssetSupport(config.teller);
 
-        // NOTE: Unlike previous versions of these scrips, the base asset is NOT given default support for deposit OR
+        // NOTE: Unlike previous versions of these scripts, the base asset is NOT given default support for deposit OR
         // withdrawals. The base asset must be configured in the file under the teller key for deposit/withdrawal
         // support
 

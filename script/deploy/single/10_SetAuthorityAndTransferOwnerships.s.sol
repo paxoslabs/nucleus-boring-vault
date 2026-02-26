@@ -24,23 +24,25 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(address(config.boringVault) != address(0), "boringVault must not be zero address");
         require(address(config.manager) != address(0), "manager must not be zero address");
         require(address(config.accountant) != address(0), "accountant must not be zero address");
-        require(address(config.teller) != address(0), "teller must not be zero addressj");
+        require(address(config.teller) != address(0), "teller must not be zero address");
         require(address(config.withdrawQueue) != address(0), "withdrawQueue must not be zero address");
-        require(
-            address(WithdrawQueue(config.withdrawQueue).feeModule()) != address(0),
-            "withdrawQueue fee module must not be zero address"
-        );
+
         require(address(config.boringVault).code.length != 0, "boringVault must have code");
         require(address(config.manager).code.length != 0, "manager must have code");
         require(address(config.teller).code.length != 0, "teller must have code");
         require(address(config.accountant).code.length != 0, "accountant must have code");
         require(address(config.withdrawQueue).code.length != 0, "withdrawQueue must have code");
+        require(config.rolesAuthority != address(0), "rolesAuthority");
+        require(config.protocolAdmin != address(0), "protocolAdmin");
+
+        require(
+            address(WithdrawQueue(config.withdrawQueue).feeModule()) != address(0),
+            "withdrawQueue fee module must not be zero address"
+        );
         require(
             address(WithdrawQueue(config.withdrawQueue).feeModule()).code.length != 0,
             "withdrawQueue fee module must have code"
         );
-        require(config.rolesAuthority != address(0), "rolesAuthority");
-        require(config.protocolAdmin != address(0), "protocolAdmin");
 
         // Set Authority
         IAuthority(config.boringVault).setAuthority(config.rolesAuthority);
