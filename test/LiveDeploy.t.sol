@@ -359,6 +359,7 @@ contract LiveDeploy is ForkTest, DeployAll {
             asset.transfer(user2, transferAmount);
             assertEq(asset.balanceOf(user1), mintAmount - transferAmount, "user1 balance not removed after transfer");
             assertEq(asset.balanceOf(user2), transferAmount, "user2 balance not incremented after transfer");
+            assertEq(asset.totalSupply(), totalSupplyStart, "asset total supply not the same after transfer");
         }
         address user3 = makeAddr("user3");
         address user4 = makeAddr("user4");
@@ -371,6 +372,7 @@ contract LiveDeploy is ForkTest, DeployAll {
             asset.transfer(user4, transferAmount);
             assertEq(asset.balanceOf(user3), mintAmount - transferAmount, "user3 balance not removed after transfer");
             assertEq(asset.balanceOf(user4), transferAmount, "user4 balance not incremented after transfer");
+            assertEq(asset.totalSupply(), totalSupplyStart, "asset total supply not the same after transfer");
         }
     }
 

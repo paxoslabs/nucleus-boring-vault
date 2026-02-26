@@ -65,7 +65,6 @@ library ConfigReader {
         address withdrawQueueFeeRecipient;
         uint256 withdrawQueueMinimumOrderSize;
         address withdrawQueue;
-        address withdrawQueueFeeModule;
         address withdrawQueueProcessorAddress;
     }
 

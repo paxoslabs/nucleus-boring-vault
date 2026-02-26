@@ -26,6 +26,7 @@
     "peerEid": 30280,
     "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
+      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
       "0xbf5495efe5db9ce00f80364c8b423567e58d2110",
       "0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7",

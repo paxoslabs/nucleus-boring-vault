@@ -25,8 +25,9 @@ contract TellerSetup is BaseScript {
     function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         TellerWithMultiAssetSupport teller = TellerWithMultiAssetSupport(config.teller);
 
-        // add the base asset by default only as a withdraw asset
-        teller.addWithdrawAsset(ERC20(config.base));
+        // NOTE: Unlike previous versions of these scrips, the base asset is NOT given default support for deposit OR
+        // withdrawals. The base asset must be configured in the file under the teller key for deposit/withdrawal
+        // support
 
         // add the withdraw assets specified in the array of config
         for (uint256 i; i < config.withdrawAssets.length; ++i) {
