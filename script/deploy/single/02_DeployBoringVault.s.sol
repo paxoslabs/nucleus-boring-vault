@@ -17,7 +17,8 @@ contract DeployIonBoringVaultScript is BaseScript {
 
     function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
-        require(config.boringVaultSalt != bytes32(0));
+        bytes32 boringVaultSalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":BoringVault")));
         require(keccak256(bytes(config.boringVaultName)) != keccak256(bytes("")));
         require(keccak256(bytes(config.boringVaultSymbol)) != keccak256(bytes("")));
 
@@ -25,7 +26,7 @@ contract DeployIonBoringVaultScript is BaseScript {
         bytes memory creationCode = type(BoringVault).creationCode;
         BoringVault boringVault = BoringVault(
             payable(CREATEX.deployCreate3(
-                    config.boringVaultSalt,
+                    boringVaultSalt,
                     abi.encodePacked(
                         creationCode,
                         abi.encode(

@@ -22,11 +22,14 @@ contract DeployDistributorCodeDepositor is BaseScript {
         address nativeWrapper =
             config.distributorCodeDepositorIsNativeDepositSupported ? config.nativeWrapper : address(0);
 
+        bytes32 distributorCodeDepositorSalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":DistributorCodeDepositor")));
+
         // Create Contract
         bytes memory creationCode = type(DistributorCodeDepositor).creationCode;
         DistributorCodeDepositor distributorCodeDepositor = DistributorCodeDepositor(
             CREATEX.deployCreate3(
-                config.distributorCodeDepositorSalt,
+                distributorCodeDepositorSalt,
                 abi.encodePacked(
                     creationCode,
                     abi.encode(

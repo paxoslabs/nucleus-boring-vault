@@ -10,7 +10,7 @@ import { BaseScript } from "../../Base.s.sol";
 import { ConfigReader } from "../../ConfigReader.s.sol";
 import { CrossChainTellerBase } from "../../../src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
-import "./../../../src/helper/Constants.sol";
+import "src/helper/Constants.sol";
 
 /**
  * NOTE Deploys with `Authority` set to zero bytes.
@@ -70,11 +70,14 @@ contract DeployRolesAuthority is BaseScript {
         require(config.accountant != address(0), "accountant");
         require(config.strategist != address(0), "strategist");
 
+        bytes32 rolesAuthoritySalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":RolesAuthority")));
+
         // Create Contract
         bytes memory creationCode = type(RolesAuthority).creationCode;
         RolesAuthority rolesAuthority = RolesAuthority(
             CREATEX.deployCreate3(
-                config.rolesAuthoritySalt,
+                rolesAuthoritySalt,
                 abi.encodePacked(
                     creationCode,
                     abi.encode(
@@ -140,10 +143,6 @@ contract DeployRolesAuthority is BaseScript {
         rolesAuthority.setUserRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE, true);
         if (config.exchangeRateBot != address(0)) {
             rolesAuthority.setUserRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE, true);
-        }
-
-        if (config.solver != address(0)) {
-            rolesAuthority.setUserRole(config.solver, SOLVER_ROLE, true);
         }
 
         rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);

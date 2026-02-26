@@ -35,11 +35,14 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         IAuthority(config.accountant).setAuthority(config.rolesAuthority);
         IAuthority(config.manager).setAuthority(config.rolesAuthority);
         IAuthority(config.teller).setAuthority(config.rolesAuthority);
+        IAuthority(config.withdrawQueue).setAuthority(config.rolesAuthority);
         IAuthority(config.boringVault).transferOwnership(config.protocolAdmin);
         IAuthority(config.manager).transferOwnership(config.protocolAdmin);
         IAuthority(config.accountant).transferOwnership(config.protocolAdmin);
         IAuthority(config.teller).transferOwnership(config.protocolAdmin);
+        IAuthority(config.withdrawQueue).transferOwnership(config.protocolAdmin);
         IAuthority(config.rolesAuthority).transferOwnership(config.protocolAdmin);
+
         // No need to transfer ownership to distributor code depositor as it is set to protocolAdmin in deployment.
 
         // Post Configuration Check
@@ -47,6 +50,7 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(IAuthority(config.manager).owner() == config.protocolAdmin, "manager");
         require(IAuthority(config.accountant).owner() == config.protocolAdmin, "accountant");
         require(IAuthority(config.teller).owner() == config.protocolAdmin, "teller");
+        require(IAuthority(config.withdrawQueue).owner() == config.protocolAdmin, "withdrawQueue");
         if (config.distributorCodeDepositorDeploy) {
             require(
                 IAuthority(config.distributorCodeDepositor).owner() == config.protocolAdmin, "distributorCodeDepositor"

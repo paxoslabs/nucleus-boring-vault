@@ -21,7 +21,6 @@ contract DeployAccountantWithRateProviders is BaseScript {
         {
             require(config.boringVault.code.length != 0, "boringVault must have code");
             require(config.base.code.length != 0, "base must have code");
-            require(config.accountantSalt != bytes32(0), "accountant salt must not be zero");
             require(config.boringVault != address(0), "boring vault address must not be zero");
             require(config.payoutAddress != address(0), "payout address must not be zero");
             require(config.base != address(0), "base address must not be zero");
@@ -62,7 +61,10 @@ contract DeployAccountantWithRateProviders is BaseScript {
         }
 
         {
-            accountant = AccountantWithRateProviders(CREATEX.deployCreate3(config.accountantSalt, initCode));
+            bytes32 accountantSalt = makeSalt(
+                broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":AccountantWithRateProviders"))
+            );
+            accountant = AccountantWithRateProviders(CREATEX.deployCreate3(accountantSalt, initCode));
         }
 
         _accountantStateCheck(accountant, config, startingExchangeRate);

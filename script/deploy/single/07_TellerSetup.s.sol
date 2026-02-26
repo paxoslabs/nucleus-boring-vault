@@ -25,33 +25,60 @@ contract TellerSetup is BaseScript {
     function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         TellerWithMultiAssetSupport teller = TellerWithMultiAssetSupport(config.teller);
 
-        // add the base asset by default for all configurations
-        teller.addDepositAsset(ERC20(config.base));
+        // add the base asset by default only as a withdraw asset
         teller.addWithdrawAsset(ERC20(config.base));
 
-        // add the remaining assets specified in the assets array of config
-        for (uint256 i; i < config.assets.length; ++i) {
+        // add the withdraw assets specified in the array of config
+        for (uint256 i; i < config.withdrawAssets.length; ++i) {
             // add asset
-            teller.addDepositAsset(ERC20(config.assets[i]));
-            teller.addWithdrawAsset(ERC20(config.assets[i]));
+            teller.addWithdrawAsset(ERC20(config.withdrawAssets[i]));
 
             string memory isPeggedKey = string(
-                abi.encodePacked(".assetToRateProviderAndPriceFeed.", config.assets[i].toHexString(), ".isPegged")
+                abi.encodePacked(
+                    ".assetToRateProviderAndPriceFeed.", config.withdrawAssets[i].toHexString(), ".isPegged"
+                )
             );
 
             bool isPegged = getChainConfigFile().readBool(isPeggedKey);
 
             if (isPegged) {
-                teller.accountant().setRateProviderData(ERC20(config.assets[i]), true, address(0));
+                teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), true, address(0));
             } else {
                 // set the corresponding rate provider
                 string memory key = string(
                     abi.encodePacked(
-                        ".assetToRateProviderAndPriceFeed.", config.assets[i].toHexString(), ".rateProvider"
+                        ".assetToRateProviderAndPriceFeed.", config.withdrawAssets[i].toHexString(), ".rateProvider"
                     )
                 );
                 address rateProvider = getChainConfigFile().readAddress(key);
-                teller.accountant().setRateProviderData(ERC20(config.assets[i]), false, rateProvider);
+                teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), false, rateProvider);
+            }
+        }
+
+        // add the deposit assets specified in the array of config
+        for (uint256 i; i < config.depositAssets.length; ++i) {
+            // add asset
+            teller.addDepositAsset(ERC20(config.depositAssets[i]));
+
+            string memory isPeggedKey = string(
+                abi.encodePacked(
+                    ".assetToRateProviderAndPriceFeed.", config.depositAssets[i].toHexString(), ".isPegged"
+                )
+            );
+
+            bool isPegged = getChainConfigFile().readBool(isPeggedKey);
+
+            if (isPegged) {
+                teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), true, address(0));
+            } else {
+                // set the corresponding rate provider
+                string memory key = string(
+                    abi.encodePacked(
+                        ".assetToRateProviderAndPriceFeed.", config.depositAssets[i].toHexString(), ".rateProvider"
+                    )
+                );
+                address rateProvider = getChainConfigFile().readAddress(key);
+                teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), false, rateProvider);
             }
         }
     }
