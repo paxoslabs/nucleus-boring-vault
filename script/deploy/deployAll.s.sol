@@ -72,7 +72,7 @@ contract DeployAll is BaseScript {
         }
     }
 
-    function deploy(ConfigReader.Config memory config) public override returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override returns (address) {
         address boringVault = new DeployIonBoringVaultScript().deploy(config);
         config.boringVault = boringVault;
         console.log("Boring Vault: ", boringVault);

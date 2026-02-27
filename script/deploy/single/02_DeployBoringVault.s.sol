@@ -15,7 +15,7 @@ contract DeployIonBoringVaultScript is BaseScript {
         return deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
         bytes32 boringVaultSalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":BoringVault")));

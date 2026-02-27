@@ -15,7 +15,7 @@ contract DeployDistributorCodeDepositor is BaseScript {
         deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
         require(config.distributorCodeDepositorDeploy, "Distributor Code Depositor must be set true to be deployed");
 

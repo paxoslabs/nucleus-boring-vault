@@ -58,7 +58,7 @@ contract DeployRolesAuthority is BaseScript {
     // TELLER_ROLE -> TELLER (contract)
     // UPDATE_EXCHANGE_RATE_ROLE -> EXCHANGE_RATE_BOT (EOA) & OWNER (multisig)
     // PAUSER_ROLE -> PAUSER (EOA) & OWNER (multisig)
-    function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         // Require config Values
         require(config.boringVault.code.length != 0, "boringVault must have code");
         require(config.manager.code.length != 0, "manager must have code");

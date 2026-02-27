@@ -17,7 +17,7 @@ contract DeployRedEnvelope is BaseScript {
         return deploy();
     }
 
-    function deploy() public broadcast returns (address) {
+    function _deploy() public broadcast returns (address) {
         bytes32 SALT = 0x1Ab5a40491925cB445fd59e607330046bEac68E5004728234324239e83f23083;
         address createx = address(CREATEX);
         address multisig = getMultisig();

@@ -12,6 +12,7 @@ import { CrossChainTellerBase } from "../../../src/base/Roles/CrossChain/CrossCh
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
+import { console } from "forge-std/console.sol";
 
 contract TellerSetup is BaseScript {
 
@@ -22,7 +23,7 @@ contract TellerSetup is BaseScript {
         deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         TellerWithMultiAssetSupport teller = TellerWithMultiAssetSupport(config.teller);
 
         // NOTE: Unlike previous versions of these scripts, the base asset is NOT given default support for deposit OR
@@ -42,8 +43,10 @@ contract TellerSetup is BaseScript {
 
             bool isPegged = getChainConfigFile().readBool(isPeggedKey);
 
+            console.log("WITHDRAW ASSET: ", config.withdrawAssets[i]);
             if (isPegged) {
                 teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), true, address(0));
+                console.log("- PEGGED");
             } else {
                 // set the corresponding rate provider
                 string memory key = string(
@@ -53,6 +56,7 @@ contract TellerSetup is BaseScript {
                 );
                 address rateProvider = getChainConfigFile().readAddress(key);
                 teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), false, rateProvider);
+                console.log("- RATE PROVIDER: ", rateProvider);
             }
         }
 
@@ -69,8 +73,10 @@ contract TellerSetup is BaseScript {
 
             bool isPegged = getChainConfigFile().readBool(isPeggedKey);
 
+            console.log("DEPOSIT ASSET: ", config.depositAssets[i]);
             if (isPegged) {
                 teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), true, address(0));
+                console.log("- PEGGED");
             } else {
                 // set the corresponding rate provider
                 string memory key = string(
@@ -80,6 +86,7 @@ contract TellerSetup is BaseScript {
                 );
                 address rateProvider = getChainConfigFile().readAddress(key);
                 teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), false, rateProvider);
+                console.log("- RATE PROVIDER: ", rateProvider);
             }
         }
     }

@@ -15,7 +15,7 @@ contract DeployAccountantWithRateProviders is BaseScript {
         return deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require Config Values
         uint256 startingExchangeRate = 10 ** ERC20(config.base).decimals();
         {

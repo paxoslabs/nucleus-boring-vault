@@ -72,7 +72,16 @@ abstract contract BaseScript is Script {
         vm.stopBroadcast();
     }
 
-    function deploy(ConfigReader.Config memory config) public virtual returns (address) {
+    function deploy(ConfigReader.Config memory config) public returns (address) {
+        require(getMultisig() == config.protocolAdmin, "BASE PRE-DEPLOY CHECK: Multisig does not match protocol admin");
+        require(
+            config.boringVaultAndBaseDecimals == ERC20(config.base).decimals(),
+            "BASE PRE-DEPLOY CHECK: Boring vault and base decimals do not match"
+        );
+        return _deploy(config);
+    }
+
+    function _deploy(ConfigReader.Config memory config) internal virtual returns (address) {
         revert("deploy() Not Implemented");
     }
 

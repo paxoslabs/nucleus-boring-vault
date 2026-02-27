@@ -14,7 +14,7 @@ contract DeployManagerWithMerkleVerification is BaseScript {
         manager = deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
         bytes32 managerSalt = makeSalt(
             broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":ManagerWithMerkleVerification"))

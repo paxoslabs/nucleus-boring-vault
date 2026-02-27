@@ -20,7 +20,7 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
         deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         require(
             keccak256(bytes(config.withdrawQueueName)) != keccak256(bytes("")), "withdrawQueueName must not be empty"
         );

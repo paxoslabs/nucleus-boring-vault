@@ -18,7 +18,7 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
 
         require(address(config.boringVault) != address(0), "boringVault must not be zero address");

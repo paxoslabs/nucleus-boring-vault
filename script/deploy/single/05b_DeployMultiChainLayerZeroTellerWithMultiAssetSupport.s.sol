@@ -32,7 +32,7 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
         return deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Get Config Values
 
         // Require config Values
