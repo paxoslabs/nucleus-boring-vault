@@ -9,6 +9,8 @@ import { Script, stdJson } from "@forge-std/Script.sol";
 
 import { ConfigReader, IAuthority } from "./ConfigReader.s.sol";
 
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+
 abstract contract BaseScript is Script {
 
     using stdJson for string;
@@ -81,7 +83,7 @@ abstract contract BaseScript is Script {
         return _deploy(config);
     }
 
-    function _deploy(ConfigReader.Config memory config) internal virtual returns (address) {
+    function _deploy(ConfigReader.Config memory config) public virtual returns (address) {
         revert("deploy() Not Implemented");
     }
 
