@@ -166,6 +166,8 @@ contract LiveDeploy is ForkTest, DeployAll {
         );
 
         // update the rate
+        // We need to warp forward in time to avoid pausing on exchange rate update.
+        vm.warp(block.timestamp + mainConfig.minimumUpdateDelayInSeconds);
         _updateRate(rateChange, accountant);
 
         uint256 expectedAssetsBack = depositAmount * rateChange / 10_000;
@@ -190,6 +192,8 @@ contract LiveDeploy is ForkTest, DeployAll {
         depositAmount = bound(depositAmount, 2, 10_000e18);
 
         // update the rate
+        // We need to warp forward in time to avoid pausing on exchange rate update.
+        vm.warp(block.timestamp + mainConfig.minimumUpdateDelayInSeconds);
         _updateRate(rateChange, accountant);
         _depositAssetWithApprove(ERC20(mainConfig.base), depositAmount);
 
@@ -231,7 +235,6 @@ contract LiveDeploy is ForkTest, DeployAll {
     }
 
     function testDepositASupportedAssetAndUpdateRate(uint256 depositAmount, uint96 rateChange) public {
-        uint256 depositAssetsCount = mainConfig.depositAssets.length;
         AccountantWithRateProviders accountant = AccountantWithRateProviders(mainConfig.accountant);
         // manual bounding done because bound() doesn't exist for uint96
         rateChange = rateChange % uint96(mainConfig.allowedExchangeRateChangeUpper - 1);
@@ -241,63 +244,56 @@ contract LiveDeploy is ForkTest, DeployAll {
 
         depositAmount = bound(depositAmount, 0.5e18, 10_000e18);
 
-        // mint a bunch of extra tokens to the vault for if rate increased
-        deal(mainConfig.base, mainConfig.boringVault, depositAmount);
-        uint256 expecteShares;
-        uint256[] memory expectedSharesByAsset = new uint256[](depositAssetsCount);
-        uint256[] memory rateInQuoteBefore = new uint256[](depositAssetsCount);
-        for (uint256 i; i < depositAssetsCount; ++i) {
-            rateInQuoteBefore[i] = accountant.getRateInQuoteSafe(ERC20(mainConfig.depositAssets[i]));
-            expectedSharesByAsset[i] =
-                depositAmount.mulDivDown(ONE_SHARE, accountant.getRateInQuoteSafe(ERC20(mainConfig.depositAssets[i])));
-            expecteShares += expectedSharesByAsset[i];
-            _depositAssetWithApprove(ERC20(mainConfig.depositAssets[i]), depositAmount);
-        }
+        uint256 depositAssetsLength = mainConfig.depositAssets.length;
+        uint256 withdrawAssetsLength = mainConfig.withdrawAssets.length;
+        uint256 largestAssetArray =
+            withdrawAssetsLength > depositAssetsLength ? withdrawAssetsLength : depositAssetsLength;
 
-        BoringVault boringVault = BoringVault(payable(mainConfig.boringVault));
-        assertEq(boringVault.balanceOf(address(this)), expecteShares, "Should have received expected shares");
+        // Loop through the arrays together in O(n) with modular indexing of the arrays. Purpose is just to: deposit
+        // every deposit asset and withdraw every withdraw asset, not test every combination
+        for (uint256 i; i < largestAssetArray; ++i) {
+            ERC20 depositAsset = ERC20(mainConfig.depositAssets[i % depositAssetsLength]);
+            ERC20 withdrawAsset = ERC20(mainConfig.withdrawAssets[i % withdrawAssetsLength]);
 
-        // update the rate
-        _updateRate(rateChange, accountant);
+            // We need to warp forward in time to avoid pausing on exchange rate update.
+            // We also need to do this before getting the rateInQuoteBefore so that any rates that are time based (like
+            // apxETH) are accounted for
+            vm.warp(block.timestamp + mainConfig.minimumUpdateDelayInSeconds);
+            uint256 rateInQuoteBefore = accountant.getRateInQuoteSafe(ERC20(depositAsset));
+            uint256 expectedShares =
+                depositAmount.mulDivDown(ONE_SHARE, accountant.getRateInQuoteSafe(ERC20(depositAsset)));
 
-        // withdrawal the assets for the same amount back
-        for (uint256 i; i < depositAssetsCount; ++i) {
-            // If the deposit asset is not also a withdraw asset end the test here. Only continue if we may also
-            // withdraw it
-            if (!TellerWithMultiAssetSupport(mainConfig.teller).isWithdrawSupported(ERC20(mainConfig.depositAssets[i])))
-            {
-                continue;
-            }
+            _depositAssetWithApprove(depositAsset, depositAmount);
+
+            BoringVault boringVault = BoringVault(payable(mainConfig.boringVault));
+            assertEq(boringVault.balanceOf(address(this)), expectedShares, "Should have received expected shares");
+
+            // update the rate
+            _updateRate(rateChange, accountant);
 
             assertApproxEqAbs(
-                accountant.getRateInQuote(ERC20(mainConfig.depositAssets[i])),
-                rateInQuoteBefore[i] * rateChange / 10_000,
+                accountant.getRateInQuote(ERC20(depositAsset)),
+                rateInQuoteBefore * rateChange / 10_000,
                 1,
                 "Rate change did not apply to asset"
             );
 
             // mint extra assets for vault to give out
-            deal(mainConfig.depositAssets[i], mainConfig.boringVault, depositAmount * 2);
-
             uint256 expectedAssetsBack = ((depositAmount) * rateChange / 10_000);
+            // We deal extra in order for any failures in accounting to show up in our more verbose testing rather than
+            // the ERC20 error
+            deal(address(withdrawAsset), mainConfig.boringVault, expectedAssetsBack + DELTA);
 
-            uint256 assetsOut = expectedSharesByAsset[i].mulDivDown(
-                accountant.getRateInQuoteSafe(ERC20(mainConfig.depositAssets[i])), ONE_SHARE
-            );
+            uint256 assetsOut = expectedShares.mulDivDown(accountant.getRateInQuoteSafe(ERC20(depositAsset)), ONE_SHARE);
 
             // Delta must be set very high to pass
             assertApproxEqAbs(assetsOut, expectedAssetsBack, DELTA, "assets out not equal to expected assets back");
 
             TellerWithMultiAssetSupport(mainConfig.teller)
-                .bulkWithdraw(
-                    ERC20(mainConfig.depositAssets[i]),
-                    expectedSharesByAsset[i],
-                    expectedAssetsBack * 99 / 100,
-                    address(this)
-                );
+                .bulkWithdraw(ERC20(withdrawAsset), expectedShares, expectedAssetsBack * 99 / 100, address(this));
 
             assertApproxEqAbs(
-                ERC20(mainConfig.depositAssets[i]).balanceOf(address(this)),
+                ERC20(withdrawAsset).balanceOf(address(this)),
                 expectedAssetsBack,
                 DELTA,
                 "Should have been able to withdraw back the depositAmounts"
@@ -434,14 +430,10 @@ contract LiveDeploy is ForkTest, DeployAll {
 
     function _updateRate(uint96 rateChange, AccountantWithRateProviders accountant) internal {
         // update the rate
-        // warp forward the minimumUpdateDelay for the accountant to prevent it from pausing on update test
-        uint256 time = block.timestamp;
-        vm.warp(time + mainConfig.minimumUpdateDelayInSeconds);
         vm.startPrank(mainConfig.exchangeRateBot);
         uint96 newRate = uint96(accountant.getRate()) * rateChange / 10_000;
         accountant.updateExchangeRate(newRate);
         vm.stopPrank();
-        vm.warp(time);
     }
 
 }
