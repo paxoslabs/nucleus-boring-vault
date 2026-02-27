@@ -49,7 +49,6 @@ library ConfigReader {
         address exchangeRateBot;
         address pauser;
         address rolesAuthority;
-        address decoder;
         uint256 maxTimeFromLastUpdate;
         address[] withdrawAssets;
         address[] depositAssets;
@@ -122,9 +121,6 @@ library ConfigReader {
         config.strategist = _config.readAddress(".rolesAuthority.strategist");
         config.exchangeRateBot = _config.readAddress(".rolesAuthority.exchangeRateBot");
         config.pauser = _config.readAddress(".rolesAuthority.pauser");
-
-        // Reading from the 'decoder' section
-        config.decoder = _config.readAddress(".decoder.address");
 
         // Reading from the 'distributorCodeDepositor' section
         config.distributorCodeDepositorDeploy = _config.readBool(".distributorCodeDepositor.deploy");
