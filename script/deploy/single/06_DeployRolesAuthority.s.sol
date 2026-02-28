@@ -2,14 +2,16 @@
 pragma solidity 0.8.21;
 
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { ManagerWithMerkleVerification } from "./../../../src/base/Roles/ManagerWithMerkleVerification.sol";
-import { BoringVault } from "./../../../src/base/BoringVault.sol";
-import { TellerWithMultiAssetSupport } from "./../../../src/base/Roles/TellerWithMultiAssetSupport.sol";
-import { AccountantWithRateProviders } from "./../../../src/base/Roles/AccountantWithRateProviders.sol";
-import { BaseScript } from "../../Base.s.sol";
-import { ConfigReader } from "../../ConfigReader.s.sol";
-import { CrossChainTellerBase } from "../../../src/base/Roles/CrossChain/CrossChainTellerBase.sol";
+import { ManagerWithMerkleVerification } from "src/base/Roles/ManagerWithMerkleVerification.sol";
+import { BoringVault } from "src/base/BoringVault.sol";
+import { TellerWithMultiAssetSupport } from "src/base/Roles/TellerWithMultiAssetSupport.sol";
+import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
+import { BaseScript } from "script/Base.s.sol";
+import { ConfigReader } from "script/ConfigReader.s.sol";
+import { CrossChainTellerBase } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
+
+import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import "src/helper/Constants.sol";
 
 /**

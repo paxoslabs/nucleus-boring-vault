@@ -5,6 +5,7 @@ import { BaseScript } from "./../../Base.s.sol";
 import { ConfigReader } from "../../ConfigReader.s.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { DistributorCodeDepositor } from "../../../src/helper/DistributorCodeDepositor.sol";
+import "src/helper/Constants.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
