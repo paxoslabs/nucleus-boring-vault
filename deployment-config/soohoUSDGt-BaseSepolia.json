@@ -1,0 +1,66 @@
+{
+  "nameEntropy": "soohoUSDGt-Sepolia",
+  "base": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  "protocolAdmin": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+  "boringVaultAndBaseDecimals": "6",
+  "boringVault": {
+    "boringVaultName": "Sooho USDG Treasury",
+    "boringVaultSymbol": "soohoUSDGt",
+    "address": ""
+  },
+  "manager": {
+    "address": ""
+  },
+  "accountant": {
+    "payoutAddress": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "allowedExchangeRateChangeUpper": "10003",
+    "allowedExchangeRateChangeLower": "9998",
+    "minimumUpdateDelayInSeconds": "3600",
+    "managementFee": "2000",
+    "performanceFee": "0",
+    "address": ""
+  },
+  "teller": {
+    "maxGasForPeer": 100000,
+    "minGasForPeer": 0,
+    "peerEid": 40161,
+    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "withdrawAssets": [
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    ],
+    "depositAssets": [
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    ],
+    "dvnIfNoDefault": {
+      "required": [
+        "0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6"
+      ],
+      "optional": [
+        "0xd9222cc3ccd1df7c070d700ea377d4ada2b86eb5",
+        "0xb1b2319767b86800c4cfe8623a72c00d9d90cfb6",
+        "0x63ef73671245d1a290f2a675be9d906090f72a8d"
+      ],
+      "blockConfirmationsRequiredIfNoDefault": 15,
+      "optionalThreshold": 1
+    },
+    "address": ""
+  },
+  "rolesAuthority": {
+    "strategist": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "exchangeRateBot": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
+    "address": ""
+  },
+  "distributorCodeDepositor": {
+    "deploy": true,
+    "nativeSupported": false
+  },
+  "withdrawQueue": {
+    "name": "Example Withdraw Queue",
+    "symbol": "EWQ",
+    "feeRecipient": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "feePercentage": "100",
+    "minimumOrderSize": "10000000",
+    "processorAddress": "0x1Ab5a40491925cB445fd59e607330046bEac68E5"
+  }
+}
