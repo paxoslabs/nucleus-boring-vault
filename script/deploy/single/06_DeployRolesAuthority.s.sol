@@ -128,9 +128,21 @@ contract DeployRolesAuthority is BaseScript {
         );
 
         // --- Set Public Capabilities ---
-        rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
         rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.bridge.selector, true);
-        rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.depositAndBridge.selector, true);
+
+        // With the DCD gating deposits, we do not make depositAndBridge public capability. This must be manually
+        // configured If the DCD is deployed we set the role capability for the DEPOSITOR_ROLE and grant it to the DCD
+        // once deployed
+        if (config.distributorCodeDepositorDeploy) {
+            rolesAuthority.setRoleCapability(
+                DEPOSITOR_ROLE, config.teller, TellerWithMultiAssetSupport.deposit.selector, true
+            );
+        } else {
+            rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
+            rolesAuthority.setPublicCapability(
+                config.distributorCodeDepositor, DistributorCodeDepositor.deposit.selector, true
+            );
+        }
 
         // --- Assign roles to users ---
 

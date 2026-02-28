@@ -56,6 +56,9 @@ contract DeployDistributorCodeDepositor is BaseScript {
                 );
         }
 
+        // Grant the DEPOSITOR ROLE to the distributor code depositor
+        RolesAuthority(config.rolesAuthority).setUserRole(address(distributorCodeDepositor), DEPOSITOR_ROLE, true);
+
         return address(distributorCodeDepositor);
     }
 
