@@ -236,7 +236,8 @@ contract DeployRolesAuthority is BaseScript {
             "protocolAdmin should be able to call accountant.updateExchangeRate"
         );
         require(
-            rolesAuthority.canCall(address(1), config.teller, TellerWithMultiAssetSupport.deposit.selector),
+            config.distributorCodeDepositorDeploy
+                || rolesAuthority.canCall(address(1), config.teller, TellerWithMultiAssetSupport.deposit.selector),
             "anyone should be able to call teller.deposit"
         );
 

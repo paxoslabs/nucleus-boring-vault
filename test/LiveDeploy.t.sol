@@ -130,10 +130,18 @@ contract LiveDeploy is ForkTest, DeployAll {
         rolesAuthority.setRoleCapability(
             SOLVER_ROLE, mainConfig.teller, TellerWithMultiAssetSupport.bulkWithdraw.selector, true
         );
-        vm.stopPrank();
 
-        require(mainConfig.distributorCodeDepositor != address(0), "Distributor Code Depositor is not deployed");
-        require(mainConfig.distributorCodeDepositor.code.length != 0, "Distributor Code Depositor has no code");
+        if (mainConfig.distributorCodeDepositorDeploy) {
+            require(
+                !rolesAuthority.isCapabilityPublic(mainConfig.teller, TellerWithMultiAssetSupport.deposit.selector),
+                "Teller must not have deposit public capability set if using DCD"
+            );
+            // we set it public for the sake of testing here where we use the Teller as an entrypoint for deposits
+            rolesAuthority.setPublicCapability(mainConfig.teller, TellerWithMultiAssetSupport.deposit.selector, true);
+            require(mainConfig.distributorCodeDepositor != address(0), "Distributor Code Depositor is not deployed");
+            require(mainConfig.distributorCodeDepositor.code.length != 0, "Distributor Code Depositor has no code");
+        }
+        vm.stopPrank();
     }
 
     function testDepositAndBridge(uint256 amount) public {
