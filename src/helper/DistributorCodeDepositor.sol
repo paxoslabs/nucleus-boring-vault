@@ -276,11 +276,11 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
 
         uint256 feeAmount;
 
-        if (feeAmount >= shares) revert FeesExceedOrEqualShares();
-
         // if fee module is zero, no fees
         if (address(feeModule) != address(0)) {
             feeAmount = feeModule.calculateOfferFees(shares, IERC20(address(depositAsset)), IERC20(boringVault), to);
+            if (feeAmount >= shares) revert FeesExceedOrEqualShares();
+
             // Send the fees to the fee recipient if fees are taken
             if (feeAmount > 0) {
                 ERC20(boringVault).safeTransfer(feeRecipient, feeAmount);
