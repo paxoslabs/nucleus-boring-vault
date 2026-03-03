@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.4;
+pragma solidity 0.8.21;
 
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
@@ -13,8 +13,6 @@ import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-se
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
 import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
-/// NOTE: I am importing from the one-to-one-queue since the WithdrawQueue update, once merge will have this moved. And
-/// I'd rather avoid the merge conflict
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Statement, Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 

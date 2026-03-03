@@ -20,7 +20,7 @@ contract AssetSpecificFeeModule is IFeeModule, Auth {
 
     mapping(IERC20 => FeeData) public depositTokenFeeData;
 
-    uint256 constant ONE_HUNDRED_PERCENT = 10_000;
+    uint256 public constant ONE_HUNDRED_PERCENT = 10_000;
 
     error FeePercentageTooHigh(uint256 feePercentage, uint256 maxAllowed);
     error ZeroAddress();

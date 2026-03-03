@@ -34,6 +34,7 @@ contract WarpRouteWrapper is Auth, PredicateClient {
 
     using SafeTransferLib for ERC20;
 
+    error ZeroAddress();
     error InvalidDestination();
     error UnauthorizedTransaction();
 
@@ -56,6 +57,11 @@ contract WarpRouteWrapper is Auth, PredicateClient {
     )
         Auth(_owner, Authority(address(0)))
     {
+        if (_owner == address(0)) revert ZeroAddress();
+        if (address(_teller) == address(0)) revert ZeroAddress();
+        if (address(_warpRoute) == address(0)) revert ZeroAddress();
+        if (address(_registry) == address(0)) revert ZeroAddress();
+
         teller = _teller;
         warpRoute = _warpRoute;
         destination = _destination;

@@ -34,6 +34,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     error PermitFailedAndAllowanceTooLow();
     error FeesExceedOrEqualShares();
 
+    string public constant PREDICATE_DEPOSIT_SIGNATURE = "_deposit(address,uint256,uint256,address,bytes)";
     INativeWrapper public immutable nativeWrapper;
 
     TellerWithMultiAssetSupport public immutable teller;
@@ -62,7 +63,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     event SupplyCapUpdated(uint256 newSupplyCap);
     event FeeModuleUpdated(IFeeModule indexed newFeeModule);
     event FeeRecipientUpdated(address indexed newFeeRecipient);
-    event KytStatusUpdated(ERC20 indexed depositAsset, bool enabled);
+    event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
 
     error SupplyCapError(uint256 resultingSupply, uint256 supplyCap);
     error NoCode(address addressEmptyCode);
@@ -98,12 +99,6 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
                 }
             }
         }
-
-        address newFeeModuleAddress = address(_feeModule);
-        if (newFeeModuleAddress != address(0) && newFeeModuleAddress.code.length == 0) {
-            revert NoCode(newFeeModuleAddress);
-        }
-
         if (_feeRecipient == address(0)) revert ZeroAddress();
 
         teller = _teller;
@@ -140,10 +135,6 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
      * this as no fees.
      */
     function updateFeeModule(IFeeModule newFeeModule) external requiresAuth {
-        address newFeeModuleAddress = address(newFeeModule);
-        if (newFeeModuleAddress != address(0) && newFeeModuleAddress.code.length == 0) {
-            revert NoCode(newFeeModuleAddress);
-        }
         feeModule = newFeeModule;
         emit FeeModuleUpdated(newFeeModule);
     }
@@ -317,12 +308,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     {
         if (kytEnabled[depositAsset]) {
             bytes memory encodedSigAndArgs = abi.encodeWithSignature(
-                "_deposit(address,uint256,uint256,address,bytes)",
-                depositAsset,
-                depositAmount,
-                minimumMint,
-                to,
-                distributorCode
+                PREDICATE_DEPOSIT_SIGNATURE, depositAsset, depositAmount, minimumMint, to, distributorCode
             );
             if (!_authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value)) {
                 revert UnauthorizedTransaction();
