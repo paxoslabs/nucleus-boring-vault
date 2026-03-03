@@ -17,10 +17,13 @@ contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
     mapping(address => bool) public freezeList;
 
     error FrozenAddress(address frozenAddress);
+    error ZeroAddress();
 
     event FreezeListUpdated(address indexed addressUpdated, bool indexed isFrozen);
 
-    constructor(address owner) Auth(owner, Authority(address(0))) { }
+    constructor(address owner) Auth(owner, Authority(address(0))) {
+        if (owner == address(0)) revert ZeroAddress();
+    }
 
     /**
      * @notice beforeTransfer hook. Applied in BoringVault on transfer and transferFrom
