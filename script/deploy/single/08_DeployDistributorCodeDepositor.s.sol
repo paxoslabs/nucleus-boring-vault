@@ -32,7 +32,7 @@ contract DeployDistributorCodeDepositor is BaseScript {
                         config.rolesAuthority,
                         config.distributorCodeDepositorIsNativeDepositSupported,
                         config.distributorCodeDepositorSupplyCap,
-                        config.dcdFeeModule,
+                        config.AssetSpecificFeeModule,
                         config.protocolAdmin,
                         config.registry,
                         config.policyID,

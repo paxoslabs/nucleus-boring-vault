@@ -67,7 +67,7 @@ library ConfigReader {
         address distributorCodeDepositor;
         address nativeWrapper;
         uint256 distributorCodeDepositorSupplyCap;
-        address dcdFeeModule;
+        address AssetSpecificFeeModule;
         address registry;
         string policyID;
     }
@@ -140,7 +140,7 @@ library ConfigReader {
         config.distributorCodeDepositorIsNativeDepositSupported =
             _config.readBool(".distributorCodeDepositor.nativeSupported");
         config.distributorCodeDepositorSupplyCap = _config.readUint(".distributorCodeDepositor.supplyCap");
-        config.dcdFeeModule = _config.readAddress(".distributorCodeDepositor.feeModule");
+        config.AssetSpecificFeeModule = _config.readAddress(".distributorCodeDepositor.feeModule");
         config.registry = _config.readAddress(".distributorCodeDepositor.registry");
         config.policyID = _config.readString(".distributorCodeDepositor.policyID");
 
