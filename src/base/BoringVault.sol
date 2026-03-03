@@ -166,11 +166,9 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
         emit FallbackHookUpdated(_fallbackHook);
     }
 
-    /**
-     * @notice Check if from addresses shares are locked, reverting if so.
-     */
-    function _callBeforeTransfer(address from, address to, uint256 amount) internal view {
-        if (address(hook) != address(0)) hook.beforeTransfer(from, to, msg.sender, amount);
+    function setNameAndSymbol(string memory _name, string memory _symbol) external requiresAuth {
+        name = _name;
+        symbol = _symbol;
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
@@ -183,11 +181,12 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
         return super.transferFrom(from, to, amount);
     }
 
-    function setNameAndSymbol(string memory _name, string memory _symbol) external requiresAuth {
-        name = _name;
-        symbol = _symbol;
+    /**
+     * @notice Check if from addresses shares are locked, reverting if so.
+     */
+    function _callBeforeTransfer(address from, address to, uint256 amount) internal view {
+        if (address(hook) != address(0)) hook.beforeTransfer(from, to, msg.sender, amount);
     }
-
     //============================== RECEIVE ===============================
 
     receive() external payable { }
