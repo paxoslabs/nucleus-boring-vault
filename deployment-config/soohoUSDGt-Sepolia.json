@@ -1,24 +1,24 @@
 {
   "nameEntropy": "soohoUSDGt-Sepolia",
   "base": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-  "protocolAdmin": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+  "protocolAdmin": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
   "boringVaultAndBaseDecimals": "6",
   "boringVault": {
     "boringVaultName": "Sooho USDG Treasury",
     "boringVaultSymbol": "soohoUSDGt",
-    "address": ""
+    "address": "0x0000000000000000000000000000000000000000"
   },
   "manager": {
-    "address": ""
+    "address": "0x0000000000000000000000000000000000000000"
   },
   "accountant": {
-    "payoutAddress": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "payoutAddress": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
     "allowedExchangeRateChangeUpper": "10003",
     "allowedExchangeRateChangeLower": "9998",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
     "performanceFee": "2000",
-    "address": ""
+    "address": "0x0000000000000000000000000000000000000000"
   },
   "teller": {
     "maxGasForPeer": 100000,
@@ -26,10 +26,8 @@
     "peerEid": 40245,
     "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
     "withdrawAssets": [
-      ""
     ],
     "depositAssets": [
-      ""
     ],
     "dvnIfNoDefault": {
       "required": [
@@ -43,13 +41,13 @@
       "blockConfirmationsRequiredIfNoDefault": 15,
       "optionalThreshold": 1
     },
-    "address": ""
+    "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
-    "strategist": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
-    "exchangeRateBot": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
+    "strategist": "0x37773374B444fFD32C830124f62050F3e877d213",
+    "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
-    "address": ""
+    "address": "0x0000000000000000000000000000000000000000"
   },
   "distributorCodeDepositor": {
     "deploy": true,
@@ -58,9 +56,9 @@
   "withdrawQueue": {
     "name": "Example Withdraw Queue",
     "symbol": "EWQ",
-    "feeRecipient": "0x1Ab5a40491925cB445fd59e607330046bEac68E5",
-    "feePercentage": "100",
-    "minimumOrderSize": "10000000",
-    "processorAddress": "0x1Ab5a40491925cB445fd59e607330046bEac68E5"
+    "feeRecipient": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "feePercentage": "0",
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0x71939D540a3D0683ddea87B99981aD41F457cAdb"
   }
 }
