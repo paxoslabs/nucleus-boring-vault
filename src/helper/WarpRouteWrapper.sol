@@ -35,6 +35,7 @@ contract WarpRouteWrapper is Auth, PredicateClient {
     using SafeTransferLib for ERC20;
 
     error InvalidDestination();
+    error UnauthorizedTransaction();
 
     BoringVault public immutable boringVault;
     TellerWithMultiAssetSupport public immutable teller;
@@ -106,7 +107,9 @@ contract WarpRouteWrapper is Auth, PredicateClient {
         if (kytEnabled[depositAsset]) {
             bytes memory encodedSigAndArgs =
                 abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
-            _authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value);
+            if (!_authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value)) {
+                revert UnauthorizedTransaction();
+            }
         }
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
