@@ -23,10 +23,13 @@ contract AssetSpecificFeeModule is IFeeModule, Auth {
     uint256 constant ONE_HUNDRED_PERCENT = 10_000;
 
     error FeePercentageTooHigh(uint256 feePercentage, uint256 maxAllowed);
+    error ZeroAddress();
 
     event FeeDataUpdated(IERC20 indexed depositToken, uint256 feePercentage, uint256 flatFee);
 
-    constructor(address _owner) Auth(_owner, Authority(address(0))) { }
+    constructor(address _owner) Auth(_owner, Authority(address(0))) {
+        if (_owner == address(0)) revert ZeroAddress();
+    }
 
     function setFeeData(IERC20 depositToken, uint256 feePercentage, uint256 flatFee) external requiresAuth {
         if (feePercentage > ONE_HUNDRED_PERCENT) revert FeePercentageTooHigh(feePercentage, ONE_HUNDRED_PERCENT);
