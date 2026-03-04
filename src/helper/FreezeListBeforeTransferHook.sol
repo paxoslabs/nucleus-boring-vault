@@ -37,7 +37,11 @@ contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
     /**
      * @notice beforeBridge hook. Applied in CrossChainTellerBase on beforeBridge. This is because shares are directly
      * burned and are not subject to the usual beforeTransfer hooks when bridging but we may still want to apply the
-     * same or similar rules
+     * same or similar rules.
+     * @dev Only the msgSender is checked and not the "to" address because the address being bridged to may or may not
+     * follow the same freezing rules of this chain. It's not fair to assume that because an address is frozen on this
+     * chain, it must also be frozen on another. Take for example, a maliciously deployed contract on this chain to
+     * match the address of a trusted one on another.
      */
     function beforeBridge(address msgSender, uint256 shareAmount, BridgeData calldata data) external view {
         if (freezeList[msgSender]) revert FrozenAddress(msgSender);
