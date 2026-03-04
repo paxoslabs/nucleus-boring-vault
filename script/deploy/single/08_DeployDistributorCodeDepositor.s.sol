@@ -4,7 +4,8 @@ pragma solidity 0.8.21;
 import { BaseScript } from "./../../Base.s.sol";
 import { ConfigReader } from "../../ConfigReader.s.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { DistributorCodeDepositor } from "../../../src/helper/DistributorCodeDepositor.sol";
+import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
+import { AssetSpecificFeeModule } from "src/helper/AssetSpecificFeeModule.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
@@ -32,7 +33,13 @@ contract DeployDistributorCodeDepositor is BaseScript {
                         config.rolesAuthority,
                         config.distributorCodeDepositorIsNativeDepositSupported,
                         config.distributorCodeDepositorSupplyCap,
-                        config.AssetSpecificFeeModule,
+                        // Included this inline to avoid stack too deep errors
+                        CREATEX.deployCreate3(
+                            keccak256(abi.encodePacked(config.distributorCodeDepositorSalt, "AssetSpecificFeeModule")),
+                            abi.encodePacked(
+                                type(AssetSpecificFeeModule).creationCode, abi.encode(config.protocolAdmin)
+                            )
+                        ),
                         config.protocolAdmin,
                         config.registry,
                         config.policyID,
