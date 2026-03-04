@@ -41,6 +41,7 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
     event Exit(address indexed to, address indexed asset, uint256 amount, address indexed from, uint256 shares);
     event BeforeTransferHookUpdated(address indexed hook);
     event FallbackHookUpdated(address indexed fallbackHook);
+    event NameAndSymbolUpdated(string indexed name, string indexed symbol);
 
     //============================== CONSTRUCTOR ===============================
 
@@ -169,6 +170,7 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
     function setNameAndSymbol(string memory _name, string memory _symbol) external requiresAuth {
         name = _name;
         symbol = _symbol;
+        emit NameAndSymbolUpdated(_name, _symbol);
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
