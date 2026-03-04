@@ -38,7 +38,7 @@ reviews:
 
     - path: "test/**/*.sol"
       instructions: >-
-        Review tests. Tests often suffer from incorrectly copy pated code or incorrect assumptions. 
+        Review tests. Tests often suffer from incorrectly copy pasted code or incorrect assumptions. 
         Look at the test and ensure they make sense what it's asserting. Ensure proper coverage of the src changes.
         If the src opened up a new attack vector, ensure the test covers it.
 
@@ -65,8 +65,6 @@ reviews:
     ast-grep:
       essential_rules: true
     semgrep:
-      enabled: true
-    slither:  # if supported in your plan
       enabled: true
     gitleaks:
       enabled: true
