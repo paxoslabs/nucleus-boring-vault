@@ -53,7 +53,7 @@ contract FreezeListTest is VaultArchitectureSharedSetup {
         // Freeze the frozenUser address
         address[] memory addressesToFreeze = new address[](1);
         addressesToFreeze[0] = frozenUser;
-        freezeHook.setFreezeList(addressesToFreeze, true);
+        freezeHook.setFreezeList(addressesToFreeze, new address[](0));
 
         // Verify the frozen user cannot transfer
         vm.prank(frozenUser);

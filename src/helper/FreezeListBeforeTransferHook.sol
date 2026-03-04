@@ -59,12 +59,28 @@ contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
     /**
      * @notice setFreezeList function to add or remove addresses in bulk from the freeze list
      * @dev Callable by OWNER_ROLE
+     * @dev We update the unfreeze list first so that if an address is in both arrays we prioritize the freeze list.
      */
-    function setFreezeList(address[] calldata addresses, bool isFrozen) external requiresAuth {
-        uint256 length = addresses.length;
+    function setFreezeList(
+        address[] calldata freezeListAddresses,
+        address[] calldata unfreezeListAddresses
+    )
+        external
+        requiresAuth
+    {
+        uint256 length = unfreezeListAddresses.length;
+        for (uint256 i; i < unfreezeListAddresses.length;) {
+            freezeList[unfreezeListAddresses[i]] = false;
+            emit FreezeListUpdated(unfreezeListAddresses[i], false);
+            unchecked {
+                ++i;
+            }
+        }
+
+        length = freezeListAddresses.length;
         for (uint256 i; i < length;) {
-            freezeList[addresses[i]] = isFrozen;
-            emit FreezeListUpdated(addresses[i], isFrozen);
+            freezeList[freezeListAddresses[i]] = true;
+            emit FreezeListUpdated(freezeListAddresses[i], true);
             unchecked {
                 ++i;
             }
