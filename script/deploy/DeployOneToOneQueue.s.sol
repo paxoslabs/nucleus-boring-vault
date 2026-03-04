@@ -21,9 +21,9 @@ contract DeployOneToOneQueue is BaseScript {
     address constant PAUSE_EOA = 0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E;
     address[] PAUSERS = [PAUSE_CONTRACT, PAUSE_EOA];
 
-    bytes32 constant SALT_FEE_MODULE = makeSalt(broadcaster, false, "one to one queue: fee module");
-    bytes32 constant SALT_ONE_TO_ONE_QUEUE = makeSalt(broadcaster, false, "USDG->USDC: one to one queue");
-    bytes32 constant SALT_QUEUE_ACCESS_AUTHORITY = makeSalt(broadcaster, false, "USDG->USDC: queue access authority");
+    bytes32 SALT_FEE_MODULE = makeSalt(broadcaster, false, "one to one queue: fee module");
+    bytes32 SALT_ONE_TO_ONE_QUEUE = makeSalt(broadcaster, false, "USDG->USDC: one to one queue");
+    bytes32 SALT_QUEUE_ACCESS_AUTHORITY = makeSalt(broadcaster, false, "USDG->USDC: queue access authority");
 
     function run() external broadcast {
         // Deploy the Fee Module
