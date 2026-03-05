@@ -14,7 +14,7 @@ contract DeployYieldForwarder is BaseScript {
     string constant NAME = "USDG0ReverseOrchestration";
     string constant SYMBOL = "rORCH0";
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-    address constant STRATEGIST_ADDRESS = 0x000054f89dCC1248716804E7eF5c5E225FE3a000; // Do we need a new address here?
+    address constant STRATEGIST_ADDRESS = 0x36c6388c3094384589557C916B0bbD99Ef627A6a;
     uint8 constant DECIMALS = 6;
 
     bytes32 SALT_ROLES_AUTHORITY = 0x1Ab5a40491925cB445fd59e607330046bEac68E500677821112232323232caff;
