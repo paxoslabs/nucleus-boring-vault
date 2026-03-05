@@ -17,9 +17,10 @@ contract DeployBoringVaultAndManager is BaseScript {
     address constant STRATEGIST_ADDRESS = 0x36c6388c3094384589557C916B0bbD99Ef627A6a;
     uint8 constant DECIMALS = 6;
 
-    bytes32 SALT_ROLES_AUTHORITY = 0x1Ab5a40491925cB445fd59e607330046bEac68E500677821112232323232caff;
-    bytes32 SALT_BORING_VAULT = 0x1Ab5a40491925cB445fd59e607330046bEac68E500cafe5555555552323332ff;
-    bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION = 0x1Ab5a40491925cB445fd59e607330046bEac68E500882838382210232093020f;
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "USDCOrchestration: RolesAuthority");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "USDCOrchestration: Boringvault");
+    bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
+        makeSalt(broadcaster, false, "USDCOrchestration: ManagerWithMerkleVerification");
 
     function run() public broadcast {
         // deploy a roles authority
