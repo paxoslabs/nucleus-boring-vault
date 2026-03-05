@@ -5,6 +5,9 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { BoringVault } from "../base/BoringVault.sol";
 import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetSupport.sol";
+import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
+import { Auth, Authority } from "solmate/auth/Auth.sol";
 
 interface WarpRoute {
 
@@ -27,27 +30,64 @@ interface WarpRoute {
  *
  * @custom:security-contact security@molecularlabs.io
  */
-contract WarpRouteWrapper {
+contract WarpRouteWrapper is Auth, PredicateClient {
 
     using SafeTransferLib for ERC20;
 
+    error ZeroAddress();
     error InvalidDestination();
+    error UnauthorizedTransaction();
 
     BoringVault public immutable boringVault;
     TellerWithMultiAssetSupport public immutable teller;
     WarpRoute public immutable warpRoute;
     uint32 public immutable destination;
 
-    constructor(TellerWithMultiAssetSupport _teller, WarpRoute _warpRoute, uint32 _destination) {
+    mapping(ERC20 => bool) public kytEnabled;
+
+    event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
+
+    constructor(
+        TellerWithMultiAssetSupport _teller,
+        WarpRoute _warpRoute,
+        uint32 _destination,
+        address _registry,
+        string memory _policyID,
+        address _owner
+    )
+        Auth(_owner, Authority(address(0)))
+    {
+        if (_owner == address(0)) revert ZeroAddress();
+        if (address(_teller) == address(0)) revert ZeroAddress();
+        if (address(_warpRoute) == address(0)) revert ZeroAddress();
+        if (address(_registry) == address(0)) revert ZeroAddress();
+
         teller = _teller;
         warpRoute = _warpRoute;
         destination = _destination;
+        _initPredicateClient(_registry, _policyID);
 
         boringVault = _teller.vault();
 
         // Infinite approvals to the warpRoute okay because this contract will
         // never hold any balance aside from donations.
         boringVault.approve(address(warpRoute), type(uint256).max);
+    }
+
+    function setPolicyID(string memory _policyID) external requiresAuth {
+        _setPolicyID(_policyID);
+    }
+
+    function setRegistry(address _registry) external requiresAuth {
+        _setRegistry(_registry);
+    }
+
+    /**
+     * @dev OWNER function to update the KYT status of an asset
+     */
+    function updateKytStatus(ERC20 depositAsset, bool enabled) external requiresAuth {
+        kytEnabled[depositAsset] = enabled;
+        emit KytStatusUpdated(depositAsset, enabled);
     }
 
     /**
@@ -63,12 +103,20 @@ contract WarpRouteWrapper {
         ERC20 depositAsset,
         uint256 depositAmount,
         uint256 minimumMint,
-        bytes32 recipient
+        bytes32 recipient,
+        Attestation calldata _attestation
     )
         external
         payable
         returns (uint256 sharesMinted, bytes32 messageId)
     {
+        if (kytEnabled[depositAsset]) {
+            bytes memory encodedSigAndArgs =
+                abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
+            if (!_authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value)) {
+                revert UnauthorizedTransaction();
+            }
+        }
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
         if (depositAsset.allowance(address(this), address(boringVault)) < depositAmount) {

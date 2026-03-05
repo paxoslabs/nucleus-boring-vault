@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { TellerWithMultiAssetSupport } from "../TellerWithMultiAssetSupport.sol";
+import { TellerWithMultiAssetSupport } from "src/base/Roles/TellerWithMultiAssetSupport.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 
 struct BridgeData {
     uint32 chainSelector;
@@ -81,8 +82,9 @@ abstract contract CrossChainTellerBase is TellerWithMultiAssetSupport {
 
         _beforeBridge(data);
 
-        // Since shares are directly burned, call `beforeTransfer` to enforce before transfer hooks.
-        beforeTransfer(msg.sender);
+        // Since shares are directly burned, call `beforeBridge` to enforce before bridge hooks for this chain.
+        BeforeTransferHook hook = vault.hook();
+        if (address(hook) != address(0)) hook.beforeBridge(msg.sender, shareAmount, data);
 
         // Burn shares from sender
         vault.exit(address(0), ERC20(address(0)), 0, msg.sender, shareAmount);
@@ -124,9 +126,15 @@ abstract contract CrossChainTellerBase is TellerWithMultiAssetSupport {
 
     /**
      * @notice a before receive hook to call some logic before a receive is processed
+     * @param shareAmount share amount to receive
+     * @param destinationChainReceiver destination chain receiver
      */
-    function _beforeReceive() internal virtual {
+    function _beforeReceive(uint256 shareAmount, address destinationChainReceiver) internal virtual {
         if (isPaused) revert TellerWithMultiAssetSupport__Paused();
+        // Since shares are directly minted, call `beforeReceiveBridge` to enforce before receive bridge hooks for this
+        // chain.
+        BeforeTransferHook hook = vault.hook();
+        if (address(hook) != address(0)) hook.beforeReceiveBridge(shareAmount, destinationChainReceiver);
     }
 
     /**

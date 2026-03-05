@@ -5,6 +5,9 @@ import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetS
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Auth, Authority } from "solmate/auth/Auth.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { IFeeModule, IERC20 } from "src/interfaces/IFeeModule.sol";
+import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
 
 interface INativeWrapper {
 
@@ -20,7 +23,7 @@ interface INativeWrapper {
 
 }
 
-contract DistributorCodeDepositor is Auth {
+contract DistributorCodeDepositor is Auth, PredicateClient {
 
     using SafeTransferLib for ERC20;
 
@@ -29,7 +32,9 @@ contract DistributorCodeDepositor is Auth {
     error NativeWrapperAccountantDecimalsMismatch();
     error NativeDepositNotSupported();
     error PermitFailedAndAllowanceTooLow();
+    error FeesExceedOrEqualShares();
 
+    string public constant PREDICATE_DEPOSIT_SIGNATURE = "_deposit(address,uint256,uint256,address,bytes)";
     INativeWrapper public immutable nativeWrapper;
 
     TellerWithMultiAssetSupport public immutable teller;
@@ -37,6 +42,12 @@ contract DistributorCodeDepositor is Auth {
     bool public immutable isNativeDepositSupported;
 
     uint256 public depositNonce;
+
+    uint256 public supplyCap;
+    address public feeRecipient;
+    IFeeModule public feeModule;
+
+    mapping(ERC20 => bool) public kytEnabled;
 
     // more details on the deposit also exists on the Teller event
     event DepositWithDistributorCode(
@@ -49,11 +60,25 @@ contract DistributorCodeDepositor is Auth {
         bytes indexed distributorCode
     );
 
+    event SupplyCapUpdated(uint256 newSupplyCap);
+    event FeeModuleUpdated(IFeeModule indexed newFeeModule);
+    event FeeRecipientUpdated(address indexed newFeeRecipient);
+    event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
+
+    error SupplyCapError(uint256 resultingSupply, uint256 supplyCap);
+    error NoCode(address addressEmptyCode);
+    error UnauthorizedTransaction();
+
     constructor(
         TellerWithMultiAssetSupport _teller,
         INativeWrapper _nativeWrapper,
         Authority _rolesAuthority,
         bool _isNativeDepositSupported,
+        uint256 _supplyCap,
+        IFeeModule _feeModule,
+        address _feeRecipient,
+        address _registry,
+        string memory _policyID,
         address _owner
     )
         Auth(_owner, _rolesAuthority)
@@ -74,13 +99,61 @@ contract DistributorCodeDepositor is Auth {
                 }
             }
         }
+        if (_feeRecipient == address(0)) revert ZeroAddress();
 
         teller = _teller;
         boringVault = address(_teller.vault());
         nativeWrapper = _nativeWrapper;
         isNativeDepositSupported = _isNativeDepositSupported;
+        supplyCap = _supplyCap;
+        feeModule = _feeModule;
+        feeRecipient = _feeRecipient;
+        _initPredicateClient(_registry, _policyID);
 
         if (boringVault == address(0)) revert ZeroAddress();
+    }
+
+    function setPolicyID(string memory _policyID) external requiresAuth {
+        _setPolicyID(_policyID);
+    }
+
+    function setRegistry(address _registry) external requiresAuth {
+        _setRegistry(_registry);
+    }
+
+    /**
+     * @dev OWNER function to update the supply cap. We allow setting the cap to anything. Including values < current
+     * supply and a value = 0
+     */
+    function updateSupplyCap(uint256 newSupplyCap) external requiresAuth {
+        supplyCap = newSupplyCap;
+        emit SupplyCapUpdated(newSupplyCap);
+    }
+
+    /**
+     * @dev OWNER function to update the fee module. We allow setting the fee module to the zero address as we handle
+     * this as no fees.
+     */
+    function updateFeeModule(IFeeModule newFeeModule) external requiresAuth {
+        feeModule = newFeeModule;
+        emit FeeModuleUpdated(newFeeModule);
+    }
+
+    /**
+     * @dev OWNER function to update the fee recipient.
+     */
+    function updateFeeRecipient(address newFeeRecipient) external requiresAuth {
+        if (newFeeRecipient == address(0)) revert ZeroAddress();
+        feeRecipient = newFeeRecipient;
+        emit FeeRecipientUpdated(newFeeRecipient);
+    }
+
+    /**
+     * @dev OWNER function to update the KYT status of an asset
+     */
+    function updateKytStatus(ERC20 depositAsset, bool enabled) external requiresAuth {
+        kytEnabled[depositAsset] = enabled;
+        emit KytStatusUpdated(depositAsset, enabled);
     }
 
     /**
@@ -94,7 +167,8 @@ contract DistributorCodeDepositor is Auth {
         uint256 depositAmount,
         uint256 minimumMint,
         address to,
-        bytes calldata distributorCode
+        bytes calldata distributorCode,
+        Attestation calldata _attestation
     )
         external
         payable
@@ -103,6 +177,7 @@ contract DistributorCodeDepositor is Auth {
     {
         if (!isNativeDepositSupported) revert NativeDepositNotSupported();
         if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
+        _authorizeKyt(_attestation, ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
         nativeWrapper.deposit{ value: msg.value }();
         return _deposit(ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
     }
@@ -120,12 +195,14 @@ contract DistributorCodeDepositor is Auth {
         uint256 depositAmount,
         uint256 minimumMint,
         address to,
-        bytes calldata distributorCode
+        bytes calldata distributorCode,
+        Attestation calldata _attestation
     )
         external
         requiresAuth
         returns (uint256 shares)
     {
+        _authorizeKyt(_attestation, depositAsset, depositAmount, minimumMint, to, distributorCode);
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
         return _deposit(depositAsset, depositAmount, minimumMint, to, distributorCode);
     }
@@ -136,6 +213,7 @@ contract DistributorCodeDepositor is Auth {
         uint256 minimumMint,
         address to,
         bytes calldata distributorCode,
+        Attestation calldata _attestation,
         uint256 deadline,
         uint8 v,
         bytes32 r,
@@ -145,6 +223,7 @@ contract DistributorCodeDepositor is Auth {
         requiresAuth
         returns (uint256 shares)
     {
+        _authorizeKyt(_attestation, depositAsset, depositAmount, minimumMint, to, distributorCode);
         // cannot just wrap the teller.depositWithPermit because
         // we need to use permit to process approval on this contract before making a deposit.
 
@@ -185,13 +264,56 @@ contract DistributorCodeDepositor is Auth {
         depositAsset.safeApprove(boringVault, depositAmount);
 
         shares = teller.deposit(depositAsset, depositAmount, minimumMint);
-        ERC20(boringVault).safeTransfer(to, shares);
+
+        uint256 feeAmount;
+
+        // if fee module is zero, no fees
+        if (address(feeModule) != address(0)) {
+            feeAmount = feeModule.calculateOfferFees(shares, IERC20(address(depositAsset)), IERC20(boringVault), to);
+            if (feeAmount >= shares) revert FeesExceedOrEqualShares();
+
+            // Send the fees to the fee recipient if fees are taken
+            if (feeAmount > 0) {
+                ERC20(boringVault).safeTransfer(feeRecipient, feeAmount);
+            }
+        }
+
+        // Send "to" the shares - fees
+        ERC20(boringVault).safeTransfer(to, shares - feeAmount);
+        uint256 totalSupply = ERC20(boringVault).totalSupply();
+
+        // Enforce the supply cap
+        if (totalSupply > supplyCap) revert SupplyCapError(totalSupply, supplyCap);
+
         // Clear leftover allowance
         _tryClearApproval(depositAsset);
 
         emit DepositWithDistributorCode(
             msg.sender, depositAsset, depositAmount, minimumMint, to, depositHash, distributorCode
         );
+    }
+
+    /**
+     * @dev Helper function to only perform Predicate authorization if the KYT status is enabled for the asset
+     */
+    function _authorizeKyt(
+        Attestation calldata _attestation,
+        ERC20 depositAsset,
+        uint256 depositAmount,
+        uint256 minimumMint,
+        address to,
+        bytes calldata distributorCode
+    )
+        internal
+    {
+        if (kytEnabled[depositAsset]) {
+            bytes memory encodedSigAndArgs = abi.encodeWithSignature(
+                PREDICATE_DEPOSIT_SIGNATURE, depositAsset, depositAmount, minimumMint, to, distributorCode
+            );
+            if (!_authorizeTransaction(_attestation, encodedSigAndArgs, msg.sender, msg.value)) {
+                revert UnauthorizedTransaction();
+            }
+        }
     }
 
     /**

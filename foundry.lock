@@ -25,8 +25,8 @@
   },
   "lib/predicate-contracts": {
     "tag": {
-      "name": "v1.0.12",
-      "rev": "07e43693a69301c8e986dc51ca59dc6c19e7b5f3"
+      "name": "v2.2.2",
+      "rev": "28b3d3222173392d274a0d0e7aef51bcc96c6a38"
     }
   },
   "lib/solmate": {
