@@ -9,7 +9,7 @@ import { stdJson } from "@forge-std/Script.sol";
 import { BaseScript } from "script/Base.s.sol";
 import "src/helper/Constants.sol";
 
-contract DeployYieldForwarder is BaseScript {
+contract DeployBoringVaultAndManager is BaseScript {
 
     string constant NAME = "USDG0ReverseOrchestration";
     string constant SYMBOL = "rORCH0";

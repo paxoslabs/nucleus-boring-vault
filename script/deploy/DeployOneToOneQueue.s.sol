@@ -12,8 +12,8 @@ contract DeployOneToOneQueue is BaseScript {
 
     address owner = getMultisig();
     uint256 constant OFFER_FEE_PERCENTAGE = 5; // 0.05% FEE
-    string constant QUEUE_ERC721_NAME = "USDG Reverse Queue";
-    string constant QUEUE_ERC721_SYMBOL = "rUSDGQ";
+    string constant QUEUE_ERC721_NAME = "USDC Queue";
+    string constant QUEUE_ERC721_SYMBOL = "USDCQ";
     address constant OFFER_ASSET_RECIPIENT = 0xe8e1a2BD706a064c42a942e96b5a535C7E4ED476; // the boring vault address
     address FEE_RECIPIENT = getMultisig(); // the address to send fees to
 
