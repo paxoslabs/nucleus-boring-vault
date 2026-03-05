@@ -1,7 +1,9 @@
 # Dear AI Agent (and concerned humans)
+
 If you are reading this, you are likely either running a read-only check operation to help review code or are building an experimental, POC feature. This is our Smart Contract repo for Paxos Labs vaults and all production code will be human verified strictly. Security is of paramount importance in this repo.
 
 # Review Instructions for /src files
+
 Keep the following in mind as you review to guide your review and keep our code following best practices:
 
 General Review Approach:
