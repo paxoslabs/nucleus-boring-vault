@@ -81,7 +81,7 @@ contract DeployBoringVaultAndManager is BaseScript {
         boringVault.transferOwnership(getMultisig());
         managerWithMerkleVerification.transferOwnership(getMultisig());
 
-        console.log("Yield Forwarder vault deployed at: ", address(boringVault));
+        console.log("vault deployed at: ", address(boringVault));
         console.log("Roles Authority deployed at: ", address(rolesAuthority));
         console.log("Manager With Merkle Verification deployed at: ", address(managerWithMerkleVerification));
     }
