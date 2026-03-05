@@ -11,8 +11,8 @@ import "src/helper/Constants.sol";
 
 contract DeployBoringVaultAndManager is BaseScript {
 
-    string constant NAME = "USDG0ReverseOrchestration";
-    string constant SYMBOL = "rORCH0";
+    string constant NAME = "USDCOrchestration";
+    string constant SYMBOL = "ORCHC";
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address constant STRATEGIST_ADDRESS = 0x36c6388c3094384589557C916B0bbD99Ef627A6a;
     uint8 constant DECIMALS = 6;
