@@ -18,7 +18,7 @@ contract DeployBoringVaultAndManager is BaseScript {
     uint8 constant DECIMALS = 6;
 
     bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "USDCOrchestration: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "USDCOrchestration: Boringvault");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "USDCOrchestration: BoringVault");
     bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
         makeSalt(broadcaster, false, "USDCOrchestration: ManagerWithMerkleVerification");
 
