@@ -86,14 +86,27 @@ contract WarpRouteWrapper {
     {
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
-        if (depositAsset.allowance(address(this), address(dcd)) < depositAmount) {
-            depositAsset.approve(address(dcd), type(uint256).max);
-        }
+        _tryClearApproval(depositAsset);
+        depositAsset.safeApprove(address(dcd), depositAmount);
 
         sharesMinted =
             dcd.deposit(depositAsset, depositAmount, minimumMint, address(this), distributorCode, _attestation);
 
         messageId = warpRoute.transferRemote{ value: msg.value }(destination, recipient, sharesMinted);
+
+        // Clear any leftover allowance
+        _tryClearApproval(depositAsset);
+    }
+
+    /**
+     * @notice Helper function to clear allowance. Helps with weird ERC20s that require a 0 approval before a new one.
+     * And also this does not revert on failure in order to also handle ERC20s that revert on a zero approval.
+     * @dev In the case of a token that reverts on a zero approval AND requires approval set to 0 before a new approval
+     * this will of course fail. But we would consider this a critical flaw of the token itself.
+     */
+    function _tryClearApproval(ERC20 depositAsset) private {
+        // solhint-disable-next-line avoid-low-level-calls
+        address(depositAsset).call(abi.encodeWithSelector(depositAsset.approve.selector, address(dcd), 0));
     }
 
 }
