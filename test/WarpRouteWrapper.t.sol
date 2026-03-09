@@ -193,7 +193,7 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         returns (Attestation memory)
     {
         bytes memory encodedSigAndArgs = abi.encodeWithSignature(
-            "_deposit(address,uint256,uint256,address,bytes)",
+            "deposit(address,uint256,uint256,address,bytes)",
             depositAsset,
             depositAmount,
             minimumMint,

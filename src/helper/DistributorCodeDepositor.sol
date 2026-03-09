@@ -34,7 +34,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     error PermitFailedAndAllowanceTooLow();
     error FeesExceedOrEqualShares();
 
-    string public constant PREDICATE_DEPOSIT_SIGNATURE = "_deposit(address,uint256,uint256,address,bytes)";
+    string public constant PREDICATE_DEPOSIT_SIGNATURE = "deposit(address,uint256,uint256,address,bytes)";
     INativeWrapper public immutable nativeWrapper;
 
     TellerWithMultiAssetSupport public immutable teller;
