@@ -8,6 +8,8 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { WarpRouteWrapper, WarpRoute } from "src/helper/WarpRouteWrapper.sol";
+import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Statement, Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 
 bytes32 constant MAGIC_VALUE_TRANFER_REMOTE = keccak256("MAGIC_VALUE_TRANFER_REMOTE");
@@ -55,6 +57,7 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
 
     WarpRouteWrapper public warpRouteWrapper;
     MockWarpRoute public mockWarpRoute;
+    DistributorCodeDepositor public dcd;
 
     address public owner = makeAddr("owner");
 
@@ -77,11 +80,24 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         (boringVault, teller, accountant) =
             _deployVaultArchitecture("Stablecoin Earn", "earnUSDC", 6, address(USDC), assets, 1e6);
 
+        dcd = new DistributorCodeDepositor(
+            teller,
+            INativeWrapper(address(0)),
+            rolesAuthority,
+            false,
+            type(uint256).max,
+            IFeeModule(address(0)),
+            owner,
+            address(predicateRegistry),
+            policyOne,
+            owner
+        );
+
+        rolesAuthority.setPublicCapability(address(dcd), dcd.deposit.selector, true);
+
         mockWarpRoute = new MockWarpRoute();
 
-        warpRouteWrapper = new WarpRouteWrapper(
-            teller, WarpRoute(address(mockWarpRoute)), DESTINATION_DOMAIN, address(predicateRegistry), policyOne, owner
-        );
+        warpRouteWrapper = new WarpRouteWrapper(dcd, WarpRoute(address(mockWarpRoute)), DESTINATION_DOMAIN, owner);
     }
 
     // Verifies that depositAndBridge deposits the asset into the vault and
@@ -90,11 +106,12 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
     // The test should pass when the kyt is enabled for this asset
     function test_depositAndBridge_emitsSentTransferRemote_predicateEnabled() external {
         vm.prank(owner);
-        warpRouteWrapper.updateKytStatus(ERC20(address(USDC)), true);
+        dcd.updateKytStatus(ERC20(address(USDC)), true);
 
         uint256 depositAmount = 100e6;
         uint256 minimumMint = 100e6;
         bytes32 recipient = bytes32(uint256(uint160(address(this))));
+        bytes memory distributorCode = new bytes(0);
 
         uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
@@ -102,15 +119,25 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         deal(address(USDC), address(this), depositAmount);
         USDC.approve(address(warpRouteWrapper), depositAmount);
 
+        // Attestation targets the DCD with msg.sender = warpRouteWrapper (WRW calls dcd.deposit).
+        // The `to` parameter is address(warpRouteWrapper) since WRW passes address(this) to DCD.
         Attestation memory attestation = _createAttestationForDepositAndBridge(
-            "test-uuid", address(this), address(warpRouteWrapper), address(USDC), depositAmount, minimumMint
+            "test-uuid",
+            address(warpRouteWrapper),
+            address(dcd),
+            address(USDC),
+            depositAmount,
+            minimumMint,
+            address(warpRouteWrapper),
+            distributorCode
         );
 
         vm.expectEmit(address(mockWarpRoute));
         emit SentTransferRemote(DESTINATION_DOMAIN, recipient, expectedShares);
 
-        (uint256 sharesMinted, bytes32 messageId) =
-            warpRouteWrapper.depositAndBridge(ERC20(address(USDC)), depositAmount, minimumMint, recipient, attestation);
+        (uint256 sharesMinted, bytes32 messageId) = warpRouteWrapper.depositAndBridge(
+            ERC20(address(USDC)), depositAmount, minimumMint, recipient, distributorCode, attestation
+        );
 
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
         assertTrue(messageId == MAGIC_VALUE_TRANFER_REMOTE, "messageId must be the magic value");
@@ -122,6 +149,7 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         uint256 depositAmount = 100e6;
         uint256 minimumMint = 100e6;
         bytes32 recipient = bytes32(uint256(uint160(address(this))));
+        bytes memory distributorCode = new bytes(0);
 
         uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
@@ -134,8 +162,9 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
         vm.expectEmit(address(mockWarpRoute));
         emit SentTransferRemote(DESTINATION_DOMAIN, recipient, expectedShares);
 
-        (uint256 sharesMinted, bytes32 messageId) =
-            warpRouteWrapper.depositAndBridge(ERC20(address(USDC)), depositAmount, minimumMint, recipient, attestation);
+        (uint256 sharesMinted, bytes32 messageId) = warpRouteWrapper.depositAndBridge(
+            ERC20(address(USDC)), depositAmount, minimumMint, recipient, distributorCode, attestation
+        );
 
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
         assertTrue(messageId == MAGIC_VALUE_TRANFER_REMOTE, "messageId must be the magic value");
@@ -146,23 +175,31 @@ contract WarpRouteWrapperTest is VaultArchitectureSharedSetup {
     // Helpers
     // ---------------------------------------------------------------------------
 
-    // Creates an Attestation matching the encodedSigAndArgs that WarpRouteWrapper
-    // passes to _authorizeTransaction, which encodes the `deposit` selector together
-    // with (depositAsset, depositAmount, minimumMint).
+    // Creates an Attestation matching the encodedSigAndArgs that the DCD's _authorizeKyt
+    // expects. Since WarpRouteWrapper calls dcd.deposit(), the Statement's msgSender is
+    // the WarpRouteWrapper address and the target is the DCD address.
     function _createAttestationForDepositAndBridge(
         string memory uuid,
         address msgSender,
         address target,
         address depositAsset,
         uint256 depositAmount,
-        uint256 minimumMint
+        uint256 minimumMint,
+        address to,
+        bytes memory distributorCode
     )
         internal
         view
         returns (Attestation memory)
     {
-        bytes memory encodedSigAndArgs =
-            abi.encodeWithSignature("deposit(address,uint256,uint256)", depositAsset, depositAmount, minimumMint);
+        bytes memory encodedSigAndArgs = abi.encodeWithSignature(
+            "_deposit(address,uint256,uint256,address,bytes)",
+            depositAsset,
+            depositAmount,
+            minimumMint,
+            to,
+            distributorCode
+        );
         return _createAttestation(uuid, msgSender, target, 0, encodedSigAndArgs);
     }
 
