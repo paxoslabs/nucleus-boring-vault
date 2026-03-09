@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
+import { BridgeData } from "src/interfaces/ICrossChainTypes.sol";
 
 interface BeforeTransferHook {
 
