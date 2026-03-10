@@ -33,6 +33,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     error NativeDepositNotSupported();
     error PermitFailedAndAllowanceTooLow();
     error FeesExceedOrEqualShares();
+    error InsufficientSharesAfterFees(uint256 actual, uint256 minimum);
 
     string public constant PREDICATE_DEPOSIT_SIGNATURE = "deposit(address,uint256,uint256,address,bytes)";
     INativeWrapper public immutable nativeWrapper;
@@ -278,8 +279,12 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
             }
         }
 
+        uint256 amountAfterFees = shares - feeAmount;
+        // Enforce slippage on the post-fee amount the user actually receives (M-01)
+        if (amountAfterFees < minimumMint) revert InsufficientSharesAfterFees(amountAfterFees, minimumMint);
+
         // Send "to" the shares - fees
-        ERC20(boringVault).safeTransfer(to, shares - feeAmount);
+        ERC20(boringVault).safeTransfer(to, amountAfterFees);
         uint256 totalSupply = ERC20(boringVault).totalSupply();
 
         // Enforce the supply cap
