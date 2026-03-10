@@ -121,7 +121,9 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
     event MinimumOrderSizeUpdated(uint256 oldMinimum, uint256 newMinimum);
     event FeeRecipientUpdated(address indexed oldFeeRecipient, address indexed newFeeRecipient);
     event RecoveryAddressUpdated(address indexed oldRecoveryAddress, address indexed newRecoveryAddress);
-    event OrderRefundFailed(uint256 orderIndex, address indexed refundReceiver, address indexed recoveryAddress);
+    event OrderRefundFailed(
+        uint256 indexed orderIndex, address indexed refundReceiver, address indexed recoveryAddress
+    );
     event OrderSubmitted(
         uint256 indexed orderIndex,
         Order order,
@@ -141,6 +143,7 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
     event OrderRefunded(uint256 indexed orderIndex, Order order);
     event TellerUpdated(TellerWithMultiAssetSupport indexed oldTeller, TellerWithMultiAssetSupport indexed newTeller);
     event OrderMarkedForRefund(uint256 indexed orderIndex, bool indexed isMarkedByUser);
+    event FeesExceededOrderAmount(uint256 indexed orderIndex, uint256 amountOffer, uint256 feeAmount);
 
     error ZeroAddress();
     error ZeroAmount();
@@ -504,6 +507,18 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
             _burn(orderIndex);
 
             uint256 feeAmount = feeModule.calculateOfferFees(order.amountOffer, offerAsset, order.wantAsset, receiver);
+
+            // Fees cannot equal or exceed the offer amount — refund rather than underflow
+            if (feeAmount >= order.amountOffer) {
+                orderAtQueueIndex[orderIndex].orderType = OrderType.REFUND;
+                _refundOrder(order, orderIndex);
+                emit FeesExceededOrderAmount(orderIndex, order.amountOffer, feeAmount);
+                unchecked {
+                    ++lastProcessedOrder;
+                    ++i;
+                }
+                continue;
+            }
 
             BoringVault vault = BoringVault(payable(address(offerAsset)));
             // The following line will revert if the accountant is paused. Meaning a paused accountant will not result
