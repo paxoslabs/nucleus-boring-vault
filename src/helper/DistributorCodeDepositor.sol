@@ -177,8 +177,8 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         returns (uint256 shares)
     {
         if (!isNativeDepositSupported) revert NativeDepositNotSupported();
-        if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
         _authorizeKyt(_attestation, ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
+        if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
         nativeWrapper.deposit{ value: msg.value }();
         return _deposit(ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
     }
