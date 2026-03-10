@@ -198,11 +198,13 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
      * modify the vault state.
      * This introduces a sort of pseudo-upgradeability pattern where the vault can be upgraded with simple getters
      * without fear of breaking existing functionality
+     * @dev payable so that calls with both calldata and msg.value are supported. Any ETH sent is forwarded to the
+     * fallbackHook and its handling is the responsibility of the fallbackHook implementation.
      */
-    fallback(bytes calldata data) external returns (bytes memory result) {
+    fallback(bytes calldata data) external payable returns (bytes memory result) {
         // If no fallbackHook is set, we revert with no data as it would without the fallback at all
         if (address(fallbackHook) == address(0)) revert();
-        result = fallbackHook.onFallback(msg.sender, data);
+        result = fallbackHook.onFallback{ value: msg.value }(msg.sender, data);
     }
 
 }
