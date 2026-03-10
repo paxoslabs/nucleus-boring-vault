@@ -2,12 +2,14 @@
 pragma solidity 0.8.21;
 
 import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetSupport.sol";
+import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Auth, Authority } from "solmate/auth/Auth.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IFeeModule, IERC20 } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
+import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 
 interface INativeWrapper {
 
@@ -25,6 +27,7 @@ interface INativeWrapper {
 
 contract DistributorCodeDepositor is Auth, PredicateClient {
 
+    using FixedPointMathLib for uint256;
     using SafeTransferLib for ERC20;
 
     error ZeroAddress();
@@ -66,7 +69,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     event FeeRecipientUpdated(address indexed newFeeRecipient);
     event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
 
-    error SupplyCapError(uint256 resultingSupply, uint256 supplyCap);
+    error SupplyCapError(uint256 resultingValue, uint256 supplyCap);
     error NoCode(address addressEmptyCode);
     error UnauthorizedTransaction();
 
@@ -123,8 +126,9 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     }
 
     /**
-     * @dev OWNER function to update the supply cap. We allow setting the cap to anything. Including values < current
-     * supply and a value = 0
+     * @dev OWNER function to update the supply cap. The cap is denominated in base asset units,
+     * not in share count. We allow setting the cap to anything. Including values < current
+     * value and a value = 0.
      */
     function updateSupplyCap(uint256 newSupplyCap) external requiresAuth {
         supplyCap = newSupplyCap;
@@ -285,10 +289,13 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
 
         // Send "to" the shares - fees
         ERC20(boringVault).safeTransfer(to, amountAfterFees);
-        uint256 totalSupply = ERC20(boringVault).totalSupply();
 
-        // Enforce the supply cap
-        if (totalSupply > supplyCap) revert SupplyCapError(totalSupply, supplyCap);
+        // Enforce the value-based supply cap: convert total shares to base asset value using the
+        // accountant's exchange rate
+        AccountantWithRateProviders accountant = teller.accountant();
+        uint256 totalValue =
+            (ERC20(boringVault).totalSupply()).mulDivDown(accountant.getRate(), 10 ** accountant.decimals());
+        if (totalValue > supplyCap) revert SupplyCapError(totalValue, supplyCap);
 
         // Clear leftover allowance
         _tryClearApproval(depositAsset);
