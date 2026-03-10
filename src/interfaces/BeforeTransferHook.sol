@@ -6,6 +6,7 @@ import { BridgeData } from "src/interfaces/ICrossChainTypes.sol";
 interface BeforeTransferHook {
 
     function beforeTransfer(address from, address to, address msgSender, uint256 amount) external view;
+    function beforeWithdraw(address from, address to, address msgSender, uint256 amount) external view;
     function beforeBridge(address msgSender, uint256 shareAmount, BridgeData calldata data) external view;
     function beforeReceiveBridge(uint256 shareAmount, address destinationChainReceiver) external view;
 
