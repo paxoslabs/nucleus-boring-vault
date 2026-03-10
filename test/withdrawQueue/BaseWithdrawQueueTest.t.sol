@@ -73,6 +73,7 @@ contract BaseWithdrawQueueTest is Test {
     address user2 = makeAddr("user2");
     address payout_address = makeAddr("payout_address");
     address feeRecipient = makeAddr("fee recipient");
+    address recoveryAddress = makeAddr("recovery");
     address alice;
     uint256 alicePk;
     address bob;
@@ -113,7 +114,8 @@ contract BaseWithdrawQueueTest is Test {
         rolesAuthority = new RolesAuthority(owner, Authority(address(0)));
 
         feeModule = new SimpleFeeModule(TEST_OFFER_FEE_PERCENTAGE);
-        withdrawQueue = new WithdrawQueue("Withdraw Queue", "WQ", feeRecipient, teller, feeModule, 0, owner);
+        withdrawQueue =
+            new WithdrawQueue("Withdraw Queue", "WQ", feeRecipient, teller, feeModule, 0, owner, recoveryAddress);
 
         // Set Role Authorities, user roles and Capabilities
         boringVault.setAuthority(rolesAuthority);
@@ -215,7 +217,8 @@ contract BaseWithdrawQueueTest is Test {
             wantAsset: wantAsset,
             refundReceiver: receiver,
             orderType: WithdrawQueue.OrderType.DEFAULT,
-            didOrderFailTransfer: false
+            didOrderFailTransfer: false,
+            didOrderFailRefund: false
         });
         vm.expectEmit(true, true, true, true);
         emit WithdrawQueue.OrderSubmitted(
@@ -238,7 +241,8 @@ contract BaseWithdrawQueueTest is Test {
             wantAsset: wantAsset,
             refundReceiver: receiver,
             orderType: orderType,
-            didOrderFailTransfer: false
+            didOrderFailTransfer: false,
+            didOrderFailRefund: false
         });
         uint256 feeAmount = feeModule.calculateOfferFees(amountOffer, wantAsset, IERC20(receiver), receiver);
         uint256 expectedAssetsOut = teller.accountant().getRateInQuoteSafe(ERC20(address(wantAsset)))
@@ -260,7 +264,8 @@ contract BaseWithdrawQueueTest is Test {
             wantAsset: wantAsset,
             refundReceiver: receiver,
             orderType: WithdrawQueue.OrderType.REFUND,
-            didOrderFailTransfer: false
+            didOrderFailTransfer: false,
+            didOrderFailRefund: false
         });
         vm.expectEmit(true, true, true, true);
         emit WithdrawQueue.OrderRefunded(orderIndex, order);

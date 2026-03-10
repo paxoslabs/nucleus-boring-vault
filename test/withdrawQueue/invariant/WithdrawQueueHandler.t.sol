@@ -292,7 +292,8 @@ contract WithdrawQueueHandler is Test {
             IERC20 wantAsset,
             address refundReceiver,
             WithdrawQueue.OrderType orderType,
-            bool didOrderFailTransfer
+            bool didOrderFailTransfer,
+            bool didOrderFailRefund
         ) = withdrawQueue.orderAtQueueIndex(orderIndex);
 
         order = WithdrawQueue.Order({
@@ -300,7 +301,8 @@ contract WithdrawQueueHandler is Test {
             wantAsset: wantAsset,
             refundReceiver: refundReceiver,
             orderType: orderType,
-            didOrderFailTransfer: didOrderFailTransfer
+            didOrderFailTransfer: didOrderFailTransfer,
+            didOrderFailRefund: didOrderFailRefund
         });
     }
 
