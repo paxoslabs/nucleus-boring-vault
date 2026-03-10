@@ -34,20 +34,23 @@ contract WarpRouteWrapper {
     using SafeTransferLib for ERC20;
 
     error ZeroAddress();
+    error ETHForwardFailed(uint256 amount);
 
     DistributorCodeDepositor public immutable dcd;
     BoringVault public immutable boringVault;
     WarpRoute public immutable warpRoute;
     uint32 public immutable destination;
+    address public immutable gasRefundReceiver;
 
-    constructor(DistributorCodeDepositor _dcd, WarpRoute _warpRoute, uint32 _destination, address _owner) {
-        if (_owner == address(0)) revert ZeroAddress();
+    constructor(DistributorCodeDepositor _dcd, WarpRoute _warpRoute, uint32 _destination, address _gasRefundReceiver) {
+        if (_gasRefundReceiver == address(0)) revert ZeroAddress();
         if (address(_dcd) == address(0)) revert ZeroAddress();
         if (address(_warpRoute) == address(0)) revert ZeroAddress();
 
         dcd = _dcd;
         warpRoute = _warpRoute;
         destination = _destination;
+        gasRefundReceiver = _gasRefundReceiver;
 
         boringVault = _dcd.teller().vault();
 
@@ -96,6 +99,14 @@ contract WarpRouteWrapper {
 
         // Clear any leftover allowance
         _tryClearApproval(depositAsset);
+    }
+
+    /**
+     * @notice Receives ETH refunded by the warp route after a bridge call and forwards it to the gas refund receiver.
+     */
+    receive() external payable {
+        (bool success,) = gasRefundReceiver.call{ value: msg.value }("");
+        if (!success) revert ETHForwardFailed(msg.value);
     }
 
     /**
