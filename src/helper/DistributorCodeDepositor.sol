@@ -284,7 +284,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         }
 
         uint256 amountAfterFees = shares - feeAmount;
-        // Enforce slippage on the post-fee amount the user actually receives (M-01)
+        // Enforce slippage on the post-fee amount the user actually receives
         if (amountAfterFees < minimumMint) revert InsufficientSharesAfterFees(amountAfterFees, minimumMint);
 
         // Send "to" the shares - fees
