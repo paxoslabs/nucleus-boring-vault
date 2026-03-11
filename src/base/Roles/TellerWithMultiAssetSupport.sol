@@ -324,7 +324,7 @@ contract TellerWithMultiAssetSupport is Auth, ReentrancyGuard {
         if (!isWithdrawSupported[withdrawAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
 
         BeforeTransferHook hook = vault.hook();
-        if (address(hook) != address(0)) hook.beforeWithdraw(msg.sender, address(0), msg.sender, shareAmount);
+        if (address(hook) != address(0)) hook.beforeWithdraw(msg.sender, to, msg.sender, shareAmount);
 
         if (shareAmount == 0) revert TellerWithMultiAssetSupport__ZeroShares();
         assetsOut = shareAmount.mulDivDown(accountant.getRateInQuoteSafe(withdrawAsset), ONE_SHARE);
