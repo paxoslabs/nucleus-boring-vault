@@ -47,7 +47,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
 
     uint256 public depositNonce;
 
-    uint256 public supplyCap;
+    uint256 public supplyCapInBase;
     address public feeRecipient;
     IFeeModule public feeModule;
 
@@ -64,12 +64,12 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         bytes indexed distributorCode
     );
 
-    event SupplyCapUpdated(uint256 newSupplyCap);
+    event SupplyCapInBaseUpdated(uint256 newSupplyCapInBase);
     event FeeModuleUpdated(IFeeModule indexed newFeeModule);
     event FeeRecipientUpdated(address indexed newFeeRecipient);
     event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
 
-    error SupplyCapError(uint256 resultingValue, uint256 supplyCap);
+    error SupplyCapInBaseError(uint256 resultingValue, uint256 supplyCapInBase);
     error NoCode(address addressEmptyCode);
     error UnauthorizedTransaction();
 
@@ -109,7 +109,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         boringVault = address(_teller.vault());
         nativeWrapper = _nativeWrapper;
         isNativeDepositSupported = _isNativeDepositSupported;
-        supplyCap = _supplyCap;
+        supplyCapInBase = _supplyCap;
         feeModule = _feeModule;
         feeRecipient = _feeRecipient;
         _initPredicateClient(_registry, _policyID);
@@ -130,9 +130,9 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
      * not in share count. We allow setting the cap to anything. Including values < current
      * value and a value = 0.
      */
-    function updateSupplyCap(uint256 newSupplyCap) external requiresAuth {
-        supplyCap = newSupplyCap;
-        emit SupplyCapUpdated(newSupplyCap);
+    function updateSupplyCapInBase(uint256 newSupplyCapInBase) external requiresAuth {
+        supplyCapInBase = newSupplyCapInBase;
+        emit SupplyCapInBaseUpdated(newSupplyCapInBase);
     }
 
     /**
@@ -295,7 +295,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         AccountantWithRateProviders accountant = teller.accountant();
         uint256 totalValue =
             (ERC20(boringVault).totalSupply()).mulDivDown(accountant.getRate(), 10 ** accountant.decimals());
-        if (totalValue > supplyCap) revert SupplyCapError(totalValue, supplyCap);
+        if (totalValue > supplyCapInBase) revert SupplyCapInBaseError(totalValue, supplyCapInBase);
 
         // Clear leftover allowance
         _tryClearApproval(depositAsset);
