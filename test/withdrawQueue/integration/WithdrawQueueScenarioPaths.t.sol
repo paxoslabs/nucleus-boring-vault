@@ -10,11 +10,10 @@ contract WithdrawQueueScenarioPathsTest is WithdrawQueueIntegrationBaseTest {
     function testScenario_ExchangeRateToZero() external {
         // Scenario: Accountant exchange rate is 0
         // Users cannot deposit - revert - so we deal them some shares to mimic having deposited earlier
-        // Users cannot withdraw via submitAndProcess
-        // User can submit
-        // User cannot process
-        // User can cancel
-        // User can process
+        // At rate=0, expectedAssetsOut=0, so fees >= assetsOut → auto-refund via FeesExceededOrderAmount
+        // submitOrderAndProcessAll: order is auto-refunded (not reverted)
+        // submitOrder + processOrders: order is auto-refunded (not reverted)
+        // cancelOrder + processOrders: shares returned via cancel refund
 
         vm.startPrank(owner);
         accountant.updateLower(0);
@@ -30,17 +29,22 @@ contract WithdrawQueueScenarioPathsTest is WithdrawQueueIntegrationBaseTest {
         deal(address(boringVault), user, 1e6);
         boringVault.approve(address(withdrawQueue), 1e6);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.InvalidAssetsOut.selector));
+        // At rate=0, expectedAssetsOut=0 and fees >= 0 → order auto-refunded, no revert
         withdrawQueue.submitOrderAndProcessAll(
             _createSubmitOrderParams(USDC, 1e6, user, user, user, defaultSignatureParams)
         );
+        assertEq(boringVault.balanceOf(user), 1e6, "user should have 1e6 shares back after auto-refund");
 
+        // Submit and process separately — same auto-refund result
+        boringVault.approve(address(withdrawQueue), 1e6);
         withdrawQueue.submitOrder(_createSubmitOrderParams(USDC, 1e6, user, user, user, defaultSignatureParams));
-
-        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.InvalidAssetsOut.selector));
         withdrawQueue.processOrders(1);
+        assertEq(boringVault.balanceOf(user), 1e6, "user should have 1e6 shares back after process auto-refund");
 
-        withdrawQueue.cancelOrder(1);
+        // Cancel + process also works
+        boringVault.approve(address(withdrawQueue), 1e6);
+        withdrawQueue.submitOrder(_createSubmitOrderParams(USDC, 1e6, user, user, user, defaultSignatureParams));
+        withdrawQueue.cancelOrder(withdrawQueue.latestOrder());
         withdrawQueue.processOrders(1);
         assertEq(boringVault.balanceOf(user), 1e6, "user should have 1e6 shares back");
         vm.stopPrank();

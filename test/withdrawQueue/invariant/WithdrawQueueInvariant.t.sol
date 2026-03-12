@@ -47,14 +47,14 @@ contract WithdrawQueueInvariantTest is BaseWithdrawQueueTest {
 
     /**
      * @notice The primary invariant: shares accounting must balance
-     * @dev Total submitted = processed + refunded + pending + fees
+     * @dev Total submitted = processed + refunded + pending
+     *      (No share-based fees — fees are taken in withdraw asset in Change B)
      */
     function invariant_shareAccountingBalance() public view {
         uint256 pendingShares = handler.getPendingShares();
 
         uint256 leftSide = handler.ghost_sumSharesSubmitted();
-        uint256 rightSide = handler.ghost_sumSharesProcessed() + handler.ghost_sumSharesRefunded()
-            + handler.ghost_sumSharesFees() + pendingShares;
+        uint256 rightSide = handler.ghost_sumSharesProcessed() + handler.ghost_sumSharesRefunded() + pendingShares;
 
         assertEq(leftSide, rightSide, "Share accounting must balance");
     }
@@ -86,16 +86,19 @@ contract WithdrawQueueInvariantTest is BaseWithdrawQueueTest {
 
     /**
      * @notice Fee recipient accumulation: fees should accumulate correctly
-     * @dev Fee recipient should have received all fees as shares (transferred, not burned)
+     * @dev Fee recipient should have received all fees in withdraw asset (USDC), not shares
      */
     function invariant_feeAccumulation() public view {
-        uint256 feeRecipientBalance = boringVault.balanceOf(feeRecipient);
-        uint256 totalFees = handler.ghost_sumSharesFees();
+        uint256 feeRecipientUSDCBalance = USDC.balanceOf(feeRecipient);
+        uint256 totalUSDCFees = handler.ghost_sumUSDCFees();
 
-        // Fee recipient should have exactly the tracked fees
-        assertEq(feeRecipientBalance, totalFees, "Fee recipient should accumulate fees");
-        console.log("feeRecipientBalance", feeRecipientBalance);
-        console.log("totalFees", totalFees);
+        // Fee recipient should have exactly the tracked fees in USDC
+        assertEq(feeRecipientUSDCBalance, totalUSDCFees, "Fee recipient should accumulate USDC fees");
+        console.log("feeRecipientUSDCBalance", feeRecipientUSDCBalance);
+        console.log("totalUSDCFees", totalUSDCFees);
+
+        // Fee recipient should NOT have accumulated any shares
+        assertEq(boringVault.balanceOf(feeRecipient), 0, "Fee recipient should not have shares");
     }
 
     /**
@@ -146,7 +149,7 @@ contract WithdrawQueueInvariantTest is BaseWithdrawQueueTest {
         console.log("Total shares submitted:", handler.ghost_sumSharesSubmitted());
         console.log("Total shares processed:", handler.ghost_sumSharesProcessed());
         console.log("Total shares refunded (incl cancelled):", handler.ghost_sumSharesRefunded());
-        console.log("Total shares taken as fees:", handler.ghost_sumSharesFees());
+        console.log("Total USDC taken as fees:", handler.ghost_sumUSDCFees());
         console.log("Pending shares:", handler.getPendingShares());
         console.log("==============================");
     }

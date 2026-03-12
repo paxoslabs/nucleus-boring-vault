@@ -506,27 +506,28 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
             // Burn the order after noting the receiver, but before the withdraw.
             _burn(orderIndex);
 
-            uint256 feeAmount = feeModule.calculateOfferFees(order.amountOffer, offerAsset, order.wantAsset, receiver);
-
-            // Fees cannot equal or exceed the offer amount — refund rather than underflow
-            if (feeAmount >= order.amountOffer) {
-                orderAtQueueIndex[orderIndex].orderType = OrderType.REFUND;
-                _refundOrder(order, orderIndex);
-                emit FeesExceededOrderAmount(orderIndex, order.amountOffer, feeAmount);
-                unchecked {
-                    ++lastProcessedOrder;
-                    ++i;
-                }
-                continue;
-            }
-
             BoringVault vault = BoringVault(payable(address(offerAsset)));
             // The following line will revert if the accountant is paused. Meaning a paused accountant will not result
             // in refunded orders. It is technically possible the accountant pause between this call and a bulkWithdraw.
             // But this is not feasible in any normal operation
             uint256 expectedAssetsOut = tellerWithMultiAssetSupport.accountant()
                 .getRateInQuoteSafe(ERC20(address(order.wantAsset)))
-                .mulDivDown((order.amountOffer - feeAmount), 10 ** vault.decimals());
+                .mulDivDown(order.amountOffer, 10 ** vault.decimals());
+
+            // Calculate fees on the expected withdraw-asset output
+            uint256 feeAmount = feeModule.calculateOfferFees(expectedAssetsOut, offerAsset, order.wantAsset, receiver);
+
+            // Fees cannot equal or exceed the assets out — refund shares rather than underflow
+            if (feeAmount >= expectedAssetsOut) {
+                orderAtQueueIndex[orderIndex].orderType = OrderType.REFUND;
+                _refundOrder(order, orderIndex);
+                emit FeesExceededOrderAmount(orderIndex, expectedAssetsOut, feeAmount);
+                unchecked {
+                    ++lastProcessedOrder;
+                    ++i;
+                }
+                continue;
+            }
 
             uint256 vaultBalanceOfWantAsset = order.wantAsset.balanceOf(address(vault));
             if (vaultBalanceOfWantAsset < expectedAssetsOut) {
@@ -538,8 +539,11 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
                 ++i;
             }
 
+            uint256 netAssetsOut = expectedAssetsOut - feeAmount;
+
+            // Burn ALL shares and receive the full withdraw asset into the queue
             try tellerWithMultiAssetSupport.bulkWithdraw(
-                ERC20(address(order.wantAsset)), order.amountOffer - feeAmount, 0, receiver
+                ERC20(address(order.wantAsset)), order.amountOffer, 0, address(this)
             ) returns (
                 uint256 assetsOut
             ) {
@@ -548,9 +552,18 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
                 }
                 assert(assetsOut == expectedAssetsOut);
 
-                // After the withdraw succeeds, transfer the fees to the fee recipient if fees > 0
+                // Transfer net assets to receiver using low-level call for safety
+                bool success = _callOptionalReturnBool(order.wantAsset, receiver, netAssetsOut);
+                if (!success) {
+                    orderAtQueueIndex[orderIndex].didOrderFailTransfer = true;
+                    order = orderAtQueueIndex[orderIndex];
+                    order.wantAsset.safeTransfer(recoveryAddress, netAssetsOut);
+                    emit OrderRefundFailed(orderIndex, receiver, recoveryAddress);
+                }
+
+                // Transfer fees in withdraw asset to fee recipient
                 if (feeAmount > 0) {
-                    offerAsset.safeTransfer(feeRecipient, feeAmount);
+                    order.wantAsset.safeTransfer(feeRecipient, feeAmount);
                 }
             } catch {
                 orderAtQueueIndex[orderIndex].didOrderFailTransfer = true;
@@ -559,7 +572,7 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
                 _refundOrder(order, orderIndex);
             }
 
-            emit OrderProcessed(orderIndex, order, receiver, false, feeAmount, expectedAssetsOut);
+            emit OrderProcessed(orderIndex, order, receiver, false, feeAmount, netAssetsOut);
         }
 
         emit OrdersProcessedInRange(startIndex, endIndex);
@@ -638,14 +651,22 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         address receiver = ownerOf(orderIndex);
         _burn(orderIndex);
 
-        uint256 feeAmount = feeModule.calculateOfferFees(order.amountOffer, offerAsset, order.wantAsset, receiver);
+        // Burn ALL shares and receive the full withdraw asset into the queue
         uint256 assetsOut = tellerWithMultiAssetSupport.bulkWithdraw(
-            ERC20(address(order.wantAsset)), order.amountOffer - feeAmount, 0, receiver
+            ERC20(address(order.wantAsset)), order.amountOffer, 0, address(this)
         );
 
-        offerAsset.safeTransfer(feeRecipient, feeAmount);
+        // Calculate fees on the withdraw-asset output
+        uint256 feeAmount = feeModule.calculateOfferFees(assetsOut, offerAsset, order.wantAsset, receiver);
+        uint256 netAssetsOut = assetsOut - feeAmount;
 
-        emit OrderProcessed(orderIndex, orderAtQueueIndex[orderIndex], receiver, true, feeAmount, assetsOut);
+        // Transfer net assets to receiver and fees to fee recipient (both in withdraw asset)
+        order.wantAsset.safeTransfer(receiver, netAssetsOut);
+        if (feeAmount > 0) {
+            order.wantAsset.safeTransfer(feeRecipient, feeAmount);
+        }
+
+        emit OrderProcessed(orderIndex, orderAtQueueIndex[orderIndex], receiver, true, feeAmount, netAssetsOut);
     }
 
     /// @return order after checking index is a real order and is DEFAULT status

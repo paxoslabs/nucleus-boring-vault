@@ -8,7 +8,8 @@ import { TellerWithMultiAssetSupport } from "src/base/Roles/TellerWithMultiAsset
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
 import { WithdrawQueue } from "src/base/Roles/WithdrawQueue.sol";
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { SimpleFeeModule, IFeeModule } from "src/helper/SimpleFeeModule.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
+import { WithdrawQueueAssetSpecificFeeModule } from "src/helper/WithdrawQueueAssetSpecificFeeModule.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
@@ -64,7 +65,7 @@ contract BaseWithdrawQueueTest is Test {
 
     WithdrawQueue withdrawQueue;
     RolesAuthority rolesAuthority;
-    SimpleFeeModule feeModule;
+    WithdrawQueueAssetSpecificFeeModule feeModule;
 
     IERC20 public USDC;
 
@@ -83,6 +84,7 @@ contract BaseWithdrawQueueTest is Test {
     uint8 public constant BURNER_ROLE = 2;
     uint8 public constant QUEUE_ROLE = 8;
     uint256 public constant TEST_OFFER_FEE_PERCENTAGE = 10; // 0.1% fee
+    uint256 public constant TEST_FLAT_FEE = 10_000; // $0.01 flat fee in USDC (6 decimals)
 
     // A simple params struct used in most tests
     WithdrawQueue.SignatureParams defaultSignatureParams = WithdrawQueue.SignatureParams({
@@ -113,7 +115,8 @@ contract BaseWithdrawQueueTest is Test {
 
         rolesAuthority = new RolesAuthority(owner, Authority(address(0)));
 
-        feeModule = new SimpleFeeModule(TEST_OFFER_FEE_PERCENTAGE);
+        feeModule = new WithdrawQueueAssetSpecificFeeModule(owner);
+        feeModule.setFeeData(USDC, TEST_OFFER_FEE_PERCENTAGE, TEST_FLAT_FEE);
         withdrawQueue =
             new WithdrawQueue("Withdraw Queue", "WQ", feeRecipient, teller, feeModule, 0, owner, recoveryAddress);
 
@@ -153,12 +156,23 @@ contract BaseWithdrawQueueTest is Test {
         vm.stopPrank();
     }
 
-    function _getFees(uint256 amount) internal view returns (uint256) {
-        return (amount.mulDivUp(feeModule.offerFeePercentage(), 10_000));
+    /// @dev Returns the gross withdraw-asset output for a given share amount at the current rate
+    function _getGrossAssetsOut(uint256 sharesAmount) internal view returns (uint256) {
+        return sharesAmount.mulDivDown(
+            teller.accountant().getRateInQuoteSafe(ERC20(address(USDC))), 10 ** boringVault.decimals()
+        );
     }
 
-    function _getAmountAfterFees(uint256 amount) internal view returns (uint256) {
-        return amount - _getFees(amount);
+    /// @dev Returns the fee (in withdraw asset) for a given share amount at the current rate
+    function _getFees(uint256 sharesAmount) internal view returns (uint256) {
+        uint256 grossAssetsOut = _getGrossAssetsOut(sharesAmount);
+        return feeModule.calculateOfferFees(grossAssetsOut, IERC20(address(boringVault)), USDC, address(0));
+    }
+
+    /// @dev Returns the net withdraw-asset output (after fees) for a given share amount at the current rate
+    function _getAmountAfterFees(uint256 sharesAmount) internal view returns (uint256) {
+        uint256 grossAssetsOut = _getGrossAssetsOut(sharesAmount);
+        return grossAssetsOut - _getFees(sharesAmount);
     }
 
     function _submitAnOrder() internal {
@@ -244,11 +258,14 @@ contract BaseWithdrawQueueTest is Test {
             didOrderFailTransfer: false,
             didOrderFailRefund: false
         });
-        uint256 feeAmount = feeModule.calculateOfferFees(amountOffer, wantAsset, IERC20(receiver), receiver);
-        uint256 expectedAssetsOut = teller.accountant().getRateInQuoteSafe(ERC20(address(wantAsset)))
-            .mulDivDown((amountOffer - feeAmount), 10 ** boringVault.decimals());
+        // Fees are calculated on the gross withdraw-asset output, not on shares
+        uint256 grossAssetsOut = teller.accountant().getRateInQuoteSafe(ERC20(address(wantAsset)))
+            .mulDivDown(amountOffer, 10 ** boringVault.decimals());
+        uint256 feeAmount =
+            feeModule.calculateOfferFees(grossAssetsOut, IERC20(address(boringVault)), wantAsset, receiver);
+        uint256 netAssetsOut = grossAssetsOut - feeAmount;
         vm.expectEmit(true, true, true, true);
-        emit WithdrawQueue.OrderProcessed(orderIndex, order, receiver, isForceProcessed, feeAmount, expectedAssetsOut);
+        emit WithdrawQueue.OrderProcessed(orderIndex, order, receiver, isForceProcessed, feeAmount, netAssetsOut);
     }
 
     function _expectOrderRefundedEvent(

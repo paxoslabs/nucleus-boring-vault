@@ -39,7 +39,7 @@ contract WithdrawQueueIntegrationBaseTest is BaseWithdrawQueueTest {
         _updateExchangeRate(r1);
         deal(address(USDC), address(boringVault), _convertSharesToUSDC(expectedShares));
 
-        uint256 expectedValOfSharesAfterFees = _convertSharesToUSDC(_getAmountAfterFees(expectedShares));
+        uint256 expectedValOfSharesAfterFees = _getAmountAfterFees(expectedShares);
 
         vm.startPrank(owner);
         withdrawQueue.forceProcess(withdrawQueue.latestOrder());
@@ -91,7 +91,7 @@ contract WithdrawQueueIntegrationBaseTest is BaseWithdrawQueueTest {
 
     function _happySubmitAndProcessAllPath(uint256 depositAmount, uint96 r0) internal {
         uint256 shareBalanceOfQueueStart = boringVault.balanceOf(address(withdrawQueue));
-        uint256 feeRecipientShareBalanceStart = boringVault.balanceOf(feeRecipient);
+        uint256 feeRecipientUSDCBalanceStart = USDC.balanceOf(feeRecipient);
         uint256 vaultUSDCBalanceStart = USDC.balanceOf(address(boringVault));
         uint256 userShareBalanceStart = boringVault.balanceOf(user);
         uint256 totalSupplyStart = withdrawQueue.totalSupply();
@@ -127,23 +127,22 @@ contract WithdrawQueueIntegrationBaseTest is BaseWithdrawQueueTest {
         vm.stopPrank();
         assertEq(boringVault.balanceOf(user) - userShareBalanceStart, 0, "user should have no shares");
 
-        uint256 userSharesAfterFees = _getAmountAfterFees(expectedShares);
-        uint256 expectedValOfSharesAfterFees = _convertSharesToUSDC(userSharesAfterFees);
+        uint256 expectedValOfSharesAfterFees = _getAmountAfterFees(expectedShares);
 
         // If the value change is so drastic that the user withdraw amount is 0, expect InvalidAssetsOut error
         console.log("expectedValOfSharesAfterFees", expectedValOfSharesAfterFees);
         assertEq(USDC.balanceOf(user), expectedValOfSharesAfterFees, "User should have USDC - fees");
         assertEq(
-            boringVault.balanceOf(feeRecipient) - feeRecipientShareBalanceStart,
+            USDC.balanceOf(feeRecipient) - feeRecipientUSDCBalanceStart,
             _getFees(expectedShares),
-            "fee recipient should have fees"
+            "fee recipient should have fees in USDC"
         );
         assertEq(withdrawQueue.totalSupply(), 0, "total supply should be 0");
     }
 
     function _happyPath(uint256 depositAmount, uint96 r0, uint96 r2) internal {
         uint256 shareBalanceOfQueueStart = boringVault.balanceOf(address(withdrawQueue));
-        uint256 feeRecipientShareBalanceStart = boringVault.balanceOf(feeRecipient);
+        uint256 feeRecipientUSDCBalanceStart = USDC.balanceOf(feeRecipient);
         uint256 vaultUSDCBalanceStart = USDC.balanceOf(address(boringVault));
         uint256 userShareBalanceStart = boringVault.balanceOf(user);
         uint256 totalSupplyStart = withdrawQueue.totalSupply();
@@ -188,8 +187,7 @@ contract WithdrawQueueIntegrationBaseTest is BaseWithdrawQueueTest {
         // Reset the boring vault balance to reflect the new rate
         deal(address(USDC), address(boringVault), _convertSharesToUSDC(expectedShares));
 
-        uint256 userSharesAfterFees = _getAmountAfterFees(expectedShares);
-        uint256 expectedValOfSharesAfterFees = _convertSharesToUSDC(userSharesAfterFees);
+        uint256 expectedValOfSharesAfterFees = _getAmountAfterFees(expectedShares);
 
         // If the value change is so drastic that the user withdraw amount is 0, expect InvalidAssetsOut error
         console.log("expectedValOfSharesAfterFees", expectedValOfSharesAfterFees);
@@ -201,9 +199,9 @@ contract WithdrawQueueIntegrationBaseTest is BaseWithdrawQueueTest {
             withdrawQueue.processOrders(ordersCount);
             assertEq(USDC.balanceOf(user), expectedValOfSharesAfterFees, "User should have USDC - fees");
             assertEq(
-                boringVault.balanceOf(feeRecipient) - feeRecipientShareBalanceStart,
+                USDC.balanceOf(feeRecipient) - feeRecipientUSDCBalanceStart,
                 _getFees(expectedShares),
-                "fee recipient should have fees"
+                "fee recipient should have fees in USDC"
             );
             assertEq(withdrawQueue.totalSupply(), 0, "total supply should be 0");
         }

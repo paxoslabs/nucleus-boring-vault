@@ -5,6 +5,7 @@ import { Test } from "@forge-std/Test.sol";
 import { WithdrawQueue } from "src/base/Roles/WithdrawQueue.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
@@ -31,9 +32,9 @@ contract WithdrawQueueHandler is Test {
 
     // Ghost variables for tracking cumulative state
     uint256 public ghost_sumSharesSubmitted;
-    uint256 public ghost_sumSharesProcessed;
+    uint256 public ghost_sumSharesProcessed; // All shares burned during processing (fees are in USDC, not shares)
     uint256 public ghost_sumSharesRefunded; // Includes both cancelled and refunded orders
-    uint256 public ghost_sumSharesFees; // Shares taken as fees
+    uint256 public ghost_sumUSDCFees; // USDC taken as fees (fees are in withdraw asset, not shares)
 
     // Call tracking
     uint256 public ghost_submitCalls;
@@ -310,26 +311,28 @@ contract WithdrawQueueHandler is Test {
         return shares.mulDivDown(accountant.getRateInQuoteSafe(USDC), 10 ** boringVault.decimals());
     }
 
-    function _calculateFees(uint256 shares) internal pure returns (uint256) {
-        // Fee is 0.1% (10 basis points out of 10000)
-        return shares.mulDivUp(10, 10_000);
+    function _calculateFees(uint256 shares) internal view returns (uint256) {
+        // In Change B, fees are calculated on the gross withdraw-asset output
+        uint256 grossAssetsOut = _convertSharesToUSDC(shares);
+        return IFeeModule(address(withdrawQueue.feeModule()))
+            .calculateOfferFees(grossAssetsOut, IERC20(address(boringVault)), IERC20(address(USDC)), address(0));
     }
 
     /**
      * @notice Track accounting for a processed order
-     * @dev Handles ghost variable updates for all order types
+     * @dev Handles ghost variable updates for all order types.
+     *      In Change B, ALL shares are burned for DEFAULT orders (fees are in withdraw asset).
      */
     function _trackProcessedOrder(WithdrawQueue.Order memory order) internal {
         // Track based on order type
         if (order.orderType == WithdrawQueue.OrderType.DEFAULT) {
-            // Only count fees if the transfer didn't fail
             if (!order.didOrderFailTransfer) {
-                uint256 fees = _calculateFees(order.amountOffer);
-                uint256 sharesAfterFees = order.amountOffer - fees;
-                ghost_sumSharesProcessed += sharesAfterFees;
-                ghost_sumSharesFees += fees;
+                // All shares are burned in the new flow (fees are in withdraw asset, not shares)
+                ghost_sumSharesProcessed += order.amountOffer;
+                // Track USDC fees separately
+                ghost_sumUSDCFees += _calculateFees(order.amountOffer);
             } else {
-                // Failed transfers are accounted in tests like a refund (no fees taken)
+                // Failed transfers: shares were refunded via catch block
                 ghost_sumSharesRefunded += order.amountOffer;
                 ghost_failedTransferCount++;
             }

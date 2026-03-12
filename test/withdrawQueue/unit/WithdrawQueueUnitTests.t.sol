@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import {
     BaseWithdrawQueueTest,
-    SimpleFeeModule,
+    WithdrawQueueAssetSpecificFeeModule,
     WithdrawQueue,
     BoringVault,
     TellerWithMultiAssetSupport,
@@ -22,14 +22,16 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
         // processed NOTE: we don't enforce that a new fee module is != old fee module
 
         assertEq(address(withdrawQueue.feeModule()), address(feeModule));
-        SimpleFeeModule newFeeModule = new SimpleFeeModule(TEST_OFFER_FEE_PERCENTAGE);
+        WithdrawQueueAssetSpecificFeeModule newFeeModule = new WithdrawQueueAssetSpecificFeeModule(owner);
+        vm.prank(owner);
+        newFeeModule.setFeeData(USDC, TEST_OFFER_FEE_PERCENTAGE, TEST_FLAT_FEE);
 
         vm.expectRevert("UNAUTHORIZED");
         withdrawQueue.setFeeModule(newFeeModule);
 
         vm.startPrank(owner);
         vm.expectRevert(WithdrawQueue.ZeroAddress.selector, address(withdrawQueue));
-        withdrawQueue.setFeeModule(SimpleFeeModule(address(0)));
+        withdrawQueue.setFeeModule(WithdrawQueueAssetSpecificFeeModule(address(0)));
 
         vm.expectEmit(true, true, true, true);
         emit WithdrawQueue.FeeModuleUpdated(feeModule, newFeeModule);
@@ -228,9 +230,9 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
             USDC.balanceOf(user), _getAmountAfterFees(1e6), "after force process, user should have 1e6 USDC - fees"
         );
         assertEq(
-            boringVault.balanceOf(address(withdrawQueue.feeRecipient())),
+            USDC.balanceOf(address(withdrawQueue.feeRecipient())),
             _getFees(1e6),
-            "after force process, fee recipient should have fees in shares"
+            "after force process, fee recipient should have fees in USDC"
         );
 
         // Try to force process an already force processed order
@@ -253,12 +255,14 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
         withdrawQueue.processOrders(3);
 
         assertEq(
-            USDC.balanceOf(user), _getAmountAfterFees(2e6), "after force process, user should have 1e6 USDC - fees"
+            USDC.balanceOf(user),
+            2 * _getAmountAfterFees(1e6),
+            "after force process, user should have 2x (1e6 USDC - fees)"
         );
         assertEq(
-            boringVault.balanceOf(address(withdrawQueue.feeRecipient())),
-            _getFees(2e6),
-            "after force process, fee recipient should have fees in shares"
+            USDC.balanceOf(address(withdrawQueue.feeRecipient())),
+            2 * _getFees(1e6),
+            "after force process, fee recipient should have fees in USDC"
         );
         assertEq(withdrawQueue.lastProcessedOrder(), 3, "post-process: last processed order should be 3");
         assertEq(
@@ -493,18 +497,17 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
 
         assertEq(USDC.balanceOf(address(boringVault)), 0, "vault should have 0 balance");
         vm.expectRevert(
-            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getAmountAfterFees(1e6), 0)
+            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getGrossAssetsOut(1e6), 0)
         );
         withdrawQueue.submitOrderAndProcess(params, 1);
 
         // same test with just not enough balance for 2 orders
-        // NOTE: We deal 1e6 - fees since the vault only transfers out the amount - fees on process. The fees are kept
-        // in shares. To make testing easy for the event, we have a round amount where only 0 is left by the second
-        // process
-        deal(address(USDC), address(boringVault), _getAmountAfterFees(1e6));
+        // NOTE: We deal the gross assets for exactly 1 order. After the first order is processed
+        // the vault will have 0 balance, causing the second order to revert.
+        deal(address(USDC), address(boringVault), _getGrossAssetsOut(1e6));
 
         vm.expectRevert(
-            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getAmountAfterFees(1e6), 0)
+            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getGrossAssetsOut(1e6), 0)
         );
         withdrawQueue.submitOrderAndProcess(params, 2);
 
@@ -582,7 +585,7 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
 
         assertEq(USDC.balanceOf(address(boringVault)), 0, "vault should have 0 balance");
         vm.expectRevert(
-            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getAmountAfterFees(1e6), 0)
+            abi.encodeWithSelector(WithdrawQueue.VaultInsufficientBalance.selector, USDC, _getGrossAssetsOut(1e6), 0)
         );
         withdrawQueue.submitOrderAndProcessAll(params);
 
@@ -945,8 +948,8 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
 
         assertEq(
             userUSDCBalance2 - userUSDCBalance1,
-            _getAmountAfterFees(2e6),
-            "after first process, user should have 2e6 USDC - fees"
+            2 * _getAmountAfterFees(1e6),
+            "after first process, user should have 2x (1e6 USDC - fees)"
         );
         assertEq(
             userShareBalance2 - userShareBalance1,
