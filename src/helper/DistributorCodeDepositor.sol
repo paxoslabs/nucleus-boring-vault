@@ -35,7 +35,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     error NativeWrapperAccountantDecimalsMismatch();
     error NativeDepositNotSupported();
     error PermitFailedAndAllowanceTooLow();
-    error FeesExceedOrEqualShares();
+    error FeesExceedOrEqualAmount();
     error InsufficientSharesAfterFees(uint256 actual, uint256 minimum);
 
     string public constant PREDICATE_DEPOSIT_SIGNATURE = "deposit(address,uint256,uint256,address,bytes)";
@@ -264,31 +264,31 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
             depositHash = keccak256(abi.encodePacked(address(this), ++depositNonce, block.chainid));
         }
 
-        // Clear leftover allowance for non-standard ERC20
-        _tryClearApproval(depositAsset);
-        depositAsset.safeApprove(boringVault, depositAmount);
-
-        shares = teller.deposit(depositAsset, depositAmount, minimumMint);
-
         uint256 feeAmount;
 
         // if fee module is zero, no fees
         if (address(feeModule) != address(0)) {
-            feeAmount = feeModule.calculateOfferFees(shares, IERC20(address(depositAsset)), IERC20(boringVault), to);
-            if (feeAmount >= shares) revert FeesExceedOrEqualShares();
+            feeAmount =
+                feeModule.calculateOfferFees(depositAmount, IERC20(address(depositAsset)), IERC20(boringVault), to);
+            if (feeAmount >= depositAmount) revert FeesExceedOrEqualAmount();
 
             // Send the fees to the fee recipient if fees are taken
             if (feeAmount > 0) {
-                ERC20(boringVault).safeTransfer(feeRecipient, feeAmount);
+                depositAsset.safeTransfer(feeRecipient, feeAmount);
             }
         }
 
-        uint256 amountAfterFees = shares - feeAmount;
-        // Enforce slippage on the post-fee amount the user actually receives
-        if (amountAfterFees < minimumMint) revert InsufficientSharesAfterFees(amountAfterFees, minimumMint);
+        uint256 depositAmountAfterFees = depositAmount - feeAmount;
 
-        // Send "to" the shares - fees
-        ERC20(boringVault).safeTransfer(to, amountAfterFees);
+        // Clear leftover allowance for non-standard ERC20
+        _tryClearApproval(depositAsset);
+        depositAsset.safeApprove(boringVault, depositAmountAfterFees);
+
+        // Enforce slippage on the post-fee amount the user actually receives
+        shares = teller.deposit(depositAsset, depositAmountAfterFees, minimumMint);
+
+        // Send "to" the shares
+        ERC20(boringVault).safeTransfer(to, shares);
 
         // Enforce the value-based supply cap: convert total shares to base asset value using the
         // accountant's exchange rate

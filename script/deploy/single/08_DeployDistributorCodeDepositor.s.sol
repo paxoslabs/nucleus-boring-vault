@@ -5,7 +5,7 @@ import { BaseScript } from "./../../Base.s.sol";
 import { ConfigReader } from "../../ConfigReader.s.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
-import { AssetSpecificFeeModule } from "src/helper/AssetSpecificFeeModule.sol";
+import { DCDAssetSpecificFeeModule } from "src/helper/DCDAssetSpecificFeeModule.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
@@ -35,10 +35,12 @@ contract DeployDistributorCodeDepositor is BaseScript {
                         config.distributorCodeDepositorSupplyCap,
                         // Included this inline to avoid stack too deep errors
                         CREATEX.deployCreate3(
-                            keccak256(abi.encodePacked(config.distributorCodeDepositorSalt, "AssetSpecificFeeModule")),
+                            keccak256(
+                                abi.encodePacked(config.distributorCodeDepositorSalt, "DCDAssetSpecificFeeModule")
+                            ),
                             abi.encodePacked(
-                                type(AssetSpecificFeeModule).creationCode, abi.encode(config.protocolAdmin)
-                            )
+                                    type(DCDAssetSpecificFeeModule).creationCode, abi.encode(config.protocolAdmin)
+                                )
                         ),
                         config.protocolAdmin,
                         config.registry,
