@@ -14,9 +14,11 @@ contract DeployManagerWithMerkleVerification is BaseScript {
         manager = deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
-        require(config.managerSalt != bytes32(0), "manager salt must not be zero");
+        bytes32 managerSalt = makeSalt(
+            broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":ManagerWithMerkleVerification"))
+        );
         require(config.boringVault != address(0), "boring vault address must not be zero");
         require(address(config.boringVault).code.length != 0, "boring vault must have code");
         require(
@@ -28,7 +30,7 @@ contract DeployManagerWithMerkleVerification is BaseScript {
         bytes memory creationCode = type(ManagerWithMerkleVerification).creationCode;
         ManagerWithMerkleVerification manager = ManagerWithMerkleVerification(
             CREATEX.deployCreate3(
-                config.managerSalt,
+                managerSalt,
                 abi.encodePacked(
                     creationCode,
                     abi.encode(

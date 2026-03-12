@@ -2,15 +2,17 @@
 pragma solidity 0.8.21;
 
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { ManagerWithMerkleVerification } from "./../../../src/base/Roles/ManagerWithMerkleVerification.sol";
-import { BoringVault } from "./../../../src/base/BoringVault.sol";
-import { TellerWithMultiAssetSupport } from "./../../../src/base/Roles/TellerWithMultiAssetSupport.sol";
-import { AccountantWithRateProviders } from "./../../../src/base/Roles/AccountantWithRateProviders.sol";
-import { BaseScript } from "../../Base.s.sol";
-import { ConfigReader } from "../../ConfigReader.s.sol";
-import { CrossChainTellerBase } from "../../../src/base/Roles/CrossChain/CrossChainTellerBase.sol";
+import { ManagerWithMerkleVerification } from "src/base/Roles/ManagerWithMerkleVerification.sol";
+import { BoringVault } from "src/base/BoringVault.sol";
+import { TellerWithMultiAssetSupport } from "src/base/Roles/TellerWithMultiAssetSupport.sol";
+import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
+import { BaseScript } from "script/Base.s.sol";
+import { ConfigReader } from "script/ConfigReader.s.sol";
+import { CrossChainTellerBase } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
-import "./../../../src/helper/Constants.sol";
+
+import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
+import "src/helper/Constants.sol";
 
 /**
  * NOTE Deploys with `Authority` set to zero bytes.
@@ -58,7 +60,7 @@ contract DeployRolesAuthority is BaseScript {
     // TELLER_ROLE -> TELLER (contract)
     // UPDATE_EXCHANGE_RATE_ROLE -> EXCHANGE_RATE_BOT (EOA) & OWNER (multisig)
     // PAUSER_ROLE -> PAUSER (EOA) & OWNER (multisig)
-    function deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         // Require config Values
         require(config.boringVault.code.length != 0, "boringVault must have code");
         require(config.manager.code.length != 0, "manager must have code");
@@ -70,11 +72,14 @@ contract DeployRolesAuthority is BaseScript {
         require(config.accountant != address(0), "accountant");
         require(config.strategist != address(0), "strategist");
 
+        bytes32 rolesAuthoritySalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":RolesAuthority")));
+
         // Create Contract
         bytes memory creationCode = type(RolesAuthority).creationCode;
         RolesAuthority rolesAuthority = RolesAuthority(
             CREATEX.deployCreate3(
-                config.rolesAuthoritySalt,
+                rolesAuthoritySalt,
                 abi.encodePacked(
                     creationCode,
                     abi.encode(
@@ -125,9 +130,21 @@ contract DeployRolesAuthority is BaseScript {
         );
 
         // --- Set Public Capabilities ---
-        rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
         rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.bridge.selector, true);
-        rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.depositAndBridge.selector, true);
+
+        // With the DCD gating deposits, we do not make depositAndBridge public capability. This must be manually
+        // configured If the DCD is deployed we set the role capability for the DEPOSITOR_ROLE and grant it to the DCD
+        // once deployed
+        if (config.distributorCodeDepositorDeploy) {
+            rolesAuthority.setRoleCapability(
+                DEPOSITOR_ROLE, config.teller, TellerWithMultiAssetSupport.deposit.selector, true
+            );
+        } else {
+            rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
+            rolesAuthority.setPublicCapability(
+                config.distributorCodeDepositor, DistributorCodeDepositor.deposit.selector, true
+            );
+        }
 
         // --- Assign roles to users ---
 
@@ -140,10 +157,6 @@ contract DeployRolesAuthority is BaseScript {
         rolesAuthority.setUserRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE, true);
         if (config.exchangeRateBot != address(0)) {
             rolesAuthority.setUserRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE, true);
-        }
-
-        if (config.solver != address(0)) {
-            rolesAuthority.setUserRole(config.solver, SOLVER_ROLE, true);
         }
 
         rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);
@@ -223,7 +236,8 @@ contract DeployRolesAuthority is BaseScript {
             "protocolAdmin should be able to call accountant.updateExchangeRate"
         );
         require(
-            rolesAuthority.canCall(address(1), config.teller, TellerWithMultiAssetSupport.deposit.selector),
+            config.distributorCodeDepositorDeploy
+                || rolesAuthority.canCall(address(1), config.teller, TellerWithMultiAssetSupport.deposit.selector),
             "anyone should be able to call teller.deposit"
         );
 

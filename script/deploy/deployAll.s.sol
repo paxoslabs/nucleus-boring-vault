@@ -18,7 +18,8 @@ import { DeployMultiChainHyperlaneTeller } from "./single/05c_DeployMultiChainHy
 import { DeployRolesAuthority } from "./single/06_DeployRolesAuthority.s.sol";
 import { TellerSetup } from "./single/07_TellerSetup.s.sol";
 import { DeployDistributorCodeDepositor } from "./single/08_DeployDistributorCodeDepositor.s.sol";
-import { SetAuthorityAndTransferOwnerships } from "./single/09_SetAuthorityAndTransferOwnerships.s.sol";
+import { DeployWithdrawQueueAndFeeModule } from "./single/09_DeployWithdrawQueueAndFeeModule.s.sol";
+import { SetAuthorityAndTransferOwnerships } from "./single/10_SetAuthorityAndTransferOwnerships.s.sol";
 
 import { ConfigReader, IAuthority } from "../ConfigReader.s.sol";
 import { console } from "forge-std/console.sol";
@@ -71,7 +72,7 @@ contract DeployAll is BaseScript {
         }
     }
 
-    function deploy(ConfigReader.Config memory config) public override returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override returns (address) {
         address boringVault = new DeployIonBoringVaultScript().deploy(config);
         config.boringVault = boringVault;
         console.log("Boring Vault: ", boringVault);
@@ -103,6 +104,9 @@ contract DeployAll is BaseScript {
         } else {
             console.log("Distributor Code Depositor Not Deployed");
         }
+
+        config.withdrawQueue = new DeployWithdrawQueueAndFeeModule().deploy(config);
+        console.log("Withdraw Queue: ", config.withdrawQueue);
 
         new SetAuthorityAndTransferOwnerships().deploy(config);
         console.log("Set Authority And Transfer Ownerships Complete");

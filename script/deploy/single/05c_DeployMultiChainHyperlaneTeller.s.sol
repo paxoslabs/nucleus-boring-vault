@@ -19,11 +19,15 @@ contract DeployMultiChainHyperlaneTeller is BaseScript {
         return deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
         require(config.boringVault.code.length != 0, "boringVault must have code");
         require(config.accountant.code.length != 0, "accountant must have code");
-        require(config.tellerSalt != bytes32(0), "tellerSalt");
+        bytes32 tellerSalt = makeSalt(
+            broadcaster,
+            false,
+            string(abi.encodePacked(config.nameEntropy, ":MultiChainHyperlaneTellerWithMultiAssetSupport"))
+        );
         require(config.boringVault != address(0), "boringVault");
         require(config.accountant != address(0), "accountant");
 
@@ -31,7 +35,7 @@ contract DeployMultiChainHyperlaneTeller is BaseScript {
         bytes memory creationCode = type(MultiChainHyperlaneTellerWithMultiAssetSupport).creationCode;
         MultiChainHyperlaneTellerWithMultiAssetSupport teller = MultiChainHyperlaneTellerWithMultiAssetSupport(
             CREATEX.deployCreate3(
-                config.tellerSalt,
+                tellerSalt,
                 abi.encodePacked(
                     creationCode, abi.encode(broadcaster, config.boringVault, config.accountant, config.mailbox)
                 )

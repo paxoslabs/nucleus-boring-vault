@@ -1,0 +1,13 @@
+{
+    "name": "Base Sepolia",
+    "balancerVault": "0x0000000000000000000000000000000000000000",
+    "lzEndpoint": "0x6EDCE65403992e310A62460808c4b910D972f10f",
+    "mailbox": "0x0000000000000000000000000000000000000000",
+    "nativeWrapper": "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc",
+    "assetToRateProviderAndPriceFeed": {
+      "0x036cbd53842c5426634e7929541ec2318f3dcf7e": {
+        "isPegged": true,
+        "rateProvider": "0x0000000000000000000000000000000000000000"
+      }
+    }
+  }
