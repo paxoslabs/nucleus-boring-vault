@@ -9,7 +9,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
 /**
  * @title WithdrawQueueAssetSpecificFeeModule
- * @notice A fee module for withdrawals allowing per-asset percentage and flat fees.
+ * @notice A fee module for the WithdrawQueue allowing per-asset percentage and flat fees.
  * @dev This module is scoped to a single accountant (and therefore a single vault). The accountant's exchange rate
  * for the withdraw asset is used to convert flat fees from withdraw-asset denomination to share denomination at
  * calculation time so that flat fees remain stable in withdraw-asset terms regardless of vault appreciation.
@@ -35,6 +35,7 @@ contract WithdrawQueueAssetSpecificFeeModule is IFeeModule, Auth {
     error FeePercentageTooHigh(uint256 feePercentage, uint256 maxAllowed);
     error ZeroAddress();
     error VaultMismatch();
+    error RateInQuoteZero();
 
     event FeeDataUpdated(IERC20 indexed withdrawToken, uint256 feePercentage, uint256 flatFee);
 
@@ -46,9 +47,12 @@ contract WithdrawQueueAssetSpecificFeeModule is IFeeModule, Auth {
 
     /**
      * @notice Set fee data for a specific withdraw token.
-     * @dev flatFee is denominated in the withdraw token (e.g., 2e6 = $2 for USDC, 1e15 = 0.001 ETH for WETH).
-     * At fee calculation time, the flat fee is converted to share denomination using the accountant's exchange rate
+     * @dev flatFee is denominated in the withdraw token. At fee calculation time, the flat fee is converted to share
+     * denomination using the accountant's exchange rate
      * for that withdraw token.
+     * @param withdrawToken to configure fees for
+     * @param feePercentage in bps (10_000)
+     * @param flatFee IMPORTANT must be in terms of asset decimals and not the base asset/vault
      */
     function setFeeData(IERC20 withdrawToken, uint256 feePercentage, uint256 flatFee) external requiresAuth {
         if (feePercentage > ONE_HUNDRED_PERCENT) revert FeePercentageTooHigh(feePercentage, ONE_HUNDRED_PERCENT);
@@ -67,14 +71,23 @@ contract WithdrawQueueAssetSpecificFeeModule is IFeeModule, Auth {
         override
         returns (uint256 feeAmount)
     {
+        // As this is used for withdrawals, the offerAsset MUST equal the boring vault assigned to our accountant
         if (address(offerAsset) != address(accountant.vault())) revert VaultMismatch();
 
+        // Fee data is mapped to wantAssets (what the user is withdrawing)
         FeeData memory feeData = withdrawTokenFeeData[wantAsset];
+        // mulDivUp, round in protocols favor
         uint256 percentageFee = amount.mulDivUp(feeData.feePercentage, ONE_HUNDRED_PERCENT);
-        uint256 flatFeeInShares = feeData.flatFee > 0
-            ? feeData.flatFee
-                .mulDivUp(10 ** accountant.decimals(), accountant.getRateInQuoteSafe(ERC20(address(wantAsset))))
-            : 0;
+
+        uint256 rateInQuote = accountant.getRateInQuoteSafe(ERC20(address(wantAsset)));
+
+        if (rateInQuote == 0) revert RateInQuoteZero();
+
+        // DECIMALS MATH:
+        // QUOTE_ASSET * BASE_ASSET / QUOTE_ASSET = Flat Fee In Quote Assets
+        // NOTE: This is why it's important that flat fees are provided per asset and in terms of that asset's decimals.
+        uint256 flatFeeInShares =
+            feeData.flatFee > 0 ? feeData.flatFee.mulDivUp(10 ** accountant.decimals(), rateInQuote) : 0;
 
         feeAmount = percentageFee + flatFeeInShares;
     }
