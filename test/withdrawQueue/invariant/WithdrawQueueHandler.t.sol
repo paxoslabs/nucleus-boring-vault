@@ -310,9 +310,9 @@ contract WithdrawQueueHandler is Test {
         return shares.mulDivDown(accountant.getRateInQuoteSafe(USDC), 10 ** boringVault.decimals());
     }
 
-    function _calculateFees(uint256 shares) internal pure returns (uint256) {
-        // Fee is 0.1% (10 basis points out of 10000)
-        return shares.mulDivUp(10, 10_000);
+    function _calculateFees(uint256 shares) internal view returns (uint256) {
+        return withdrawQueue.feeModule()
+            .calculateOfferFees(shares, IERC20(address(boringVault)), IERC20(address(USDC)), address(0));
     }
 
     /**

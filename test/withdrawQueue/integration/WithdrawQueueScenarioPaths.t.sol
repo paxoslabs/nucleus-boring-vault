@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { WithdrawQueue } from "src/base/Roles/WithdrawQueue.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { WithdrawQueueIntegrationBaseTest } from "./WithdrawQueueIntegrationBaseTest.t.sol";
+import { WithdrawQueueAssetSpecificFeeModule } from "src/helper/WithdrawQueueAssetSpecificFeeModule.sol";
 
 contract WithdrawQueueScenarioPathsTest is WithdrawQueueIntegrationBaseTest {
 
@@ -30,14 +31,19 @@ contract WithdrawQueueScenarioPathsTest is WithdrawQueueIntegrationBaseTest {
         deal(address(boringVault), user, 1e6);
         boringVault.approve(address(withdrawQueue), 1e6);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.InvalidAssetsOut.selector));
+        // With a non-zero flat fee and rate = 0, fee calculation reverts (division by zero in mulDivUp)
+        vm.expectRevert(
+            WithdrawQueueAssetSpecificFeeModule.RateInQuoteZero.selector, address(withdrawQueue.feeModule())
+        );
         withdrawQueue.submitOrderAndProcessAll(
             _createSubmitOrderParams(USDC, 1e6, user, user, user, defaultSignatureParams)
         );
 
         withdrawQueue.submitOrder(_createSubmitOrderParams(USDC, 1e6, user, user, user, defaultSignatureParams));
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.InvalidAssetsOut.selector));
+        vm.expectRevert(
+            WithdrawQueueAssetSpecificFeeModule.RateInQuoteZero.selector, address(withdrawQueue.feeModule())
+        );
         withdrawQueue.processOrders(1);
 
         withdrawQueue.cancelOrder(1);

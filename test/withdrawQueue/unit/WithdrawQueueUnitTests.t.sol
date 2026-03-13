@@ -3,11 +3,12 @@ pragma solidity 0.8.21;
 
 import {
     BaseWithdrawQueueTest,
-    SimpleFeeModule,
+    WithdrawQueueAssetSpecificFeeModule,
     WithdrawQueue,
     BoringVault,
     TellerWithMultiAssetSupport,
     IERC20,
+    IFeeModule,
     tERC20
 } from "../BaseWithdrawQueueTest.t.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
@@ -22,14 +23,17 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
         // processed NOTE: we don't enforce that a new fee module is != old fee module
 
         assertEq(address(withdrawQueue.feeModule()), address(feeModule));
-        SimpleFeeModule newFeeModule = new SimpleFeeModule(TEST_OFFER_FEE_PERCENTAGE);
+        WithdrawQueueAssetSpecificFeeModule newFeeModule =
+            new WithdrawQueueAssetSpecificFeeModule(owner, address(accountant));
+        vm.prank(owner);
+        newFeeModule.setFeeData(USDC, TEST_OFFER_FEE_PERCENTAGE, TEST_FLAT_FEE);
 
         vm.expectRevert("UNAUTHORIZED");
         withdrawQueue.setFeeModule(newFeeModule);
 
         vm.startPrank(owner);
         vm.expectRevert(WithdrawQueue.ZeroAddress.selector, address(withdrawQueue));
-        withdrawQueue.setFeeModule(SimpleFeeModule(address(0)));
+        withdrawQueue.setFeeModule(IFeeModule(address(0)));
 
         vm.expectEmit(true, true, true, true);
         emit WithdrawQueue.FeeModuleUpdated(feeModule, newFeeModule);
@@ -253,11 +257,13 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
         withdrawQueue.processOrders(3);
 
         assertEq(
-            USDC.balanceOf(user), _getAmountAfterFees(2e6), "after force process, user should have 1e6 USDC - fees"
+            USDC.balanceOf(user),
+            2 * _getAmountAfterFees(1e6),
+            "after force process, user should have 2x(1e6 - fees) USDC"
         );
         assertEq(
             boringVault.balanceOf(address(withdrawQueue.feeRecipient())),
-            _getFees(2e6),
+            2 * _getFees(1e6),
             "after force process, fee recipient should have fees in shares"
         );
         assertEq(withdrawQueue.lastProcessedOrder(), 3, "post-process: last processed order should be 3");
@@ -945,8 +951,8 @@ contract WithdrawQueueUnitTests is BaseWithdrawQueueTest {
 
         assertEq(
             userUSDCBalance2 - userUSDCBalance1,
-            _getAmountAfterFees(2e6),
-            "after first process, user should have 2e6 USDC - fees"
+            2 * _getAmountAfterFees(1e6),
+            "after first process, user should have 2x(1e6 - fees) USDC"
         );
         assertEq(
             userShareBalance2 - userShareBalance1,
