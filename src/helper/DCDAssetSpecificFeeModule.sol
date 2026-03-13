@@ -6,10 +6,10 @@ import { FixedPointMathLib } from "solmate/utils/FixedPointMathLib.sol";
 import { Auth, Authority } from "solmate/auth/Auth.sol";
 
 /**
- * @title AssetSpecificFeeModule
- * @notice A fee module allowing fees per asset
+ * @title DCDAssetSpecificFeeModule
+ * @notice A fee module for deposits allowing fees per asset
  */
-contract AssetSpecificFeeModule is IFeeModule, Auth {
+contract DCDAssetSpecificFeeModule is IFeeModule, Auth {
 
     using FixedPointMathLib for uint256;
 

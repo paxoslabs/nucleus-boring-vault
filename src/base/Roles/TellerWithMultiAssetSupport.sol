@@ -5,6 +5,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { WETH } from "@solmate/tokens/WETH.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
+import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Auth, Authority } from "@solmate/auth/Auth.sol";
@@ -321,6 +322,9 @@ contract TellerWithMultiAssetSupport is Auth, ReentrancyGuard {
     {
         if (isPaused) revert TellerWithMultiAssetSupport__Paused();
         if (!isWithdrawSupported[withdrawAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
+
+        BeforeTransferHook hook = vault.hook();
+        if (address(hook) != address(0)) hook.beforeWithdraw(msg.sender, to, msg.sender, shareAmount);
 
         if (shareAmount == 0) revert TellerWithMultiAssetSupport__ZeroShares();
         assetsOut = shareAmount.mulDivDown(accountant.getRateInQuoteSafe(withdrawAsset), ONE_SHARE);
