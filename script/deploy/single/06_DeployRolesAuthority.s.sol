@@ -70,7 +70,6 @@ contract DeployRolesAuthority is BaseScript {
         require(config.manager != address(0), "manager");
         require(config.teller != address(0), "teller");
         require(config.accountant != address(0), "accountant");
-        require(config.strategist != address(0), "strategist");
 
         bytes32 rolesAuthoritySalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":RolesAuthority")));
@@ -148,8 +147,6 @@ contract DeployRolesAuthority is BaseScript {
 
         // --- Assign roles to users ---
 
-        rolesAuthority.setUserRole(config.strategist, STRATEGIST_ROLE, true);
-
         rolesAuthority.setUserRole(config.manager, MANAGER_ROLE, true);
 
         rolesAuthority.setUserRole(config.teller, TELLER_ROLE, true);
@@ -165,11 +162,6 @@ contract DeployRolesAuthority is BaseScript {
         }
 
         // Post Deploy Checks
-        require(
-            rolesAuthority.doesUserHaveRole(config.strategist, STRATEGIST_ROLE),
-            "strategist should have STRATEGIST_ROLE"
-        );
-
         require(rolesAuthority.doesUserHaveRole(config.manager, MANAGER_ROLE), "manager should have MANAGER_ROLE");
 
         require(rolesAuthority.doesUserHaveRole(config.teller, TELLER_ROLE), "teller should have TELLER_ROLE");
@@ -193,14 +185,6 @@ contract DeployRolesAuthority is BaseScript {
             require(rolesAuthority.doesUserHaveRole(config.pauser, PAUSER_ROLE), "pauser should have PAUSER_ROLE");
         }
 
-        require(
-            rolesAuthority.canCall(
-                config.strategist,
-                config.manager,
-                ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector
-            ),
-            "strategist should be able to call manageVaultWithMerkleVerification"
-        );
         require(
             rolesAuthority.canCall(
                 config.manager, config.boringVault, bytes4(keccak256(abi.encodePacked("manage(address,bytes,uint256)")))

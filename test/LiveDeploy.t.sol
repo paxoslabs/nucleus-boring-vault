@@ -357,7 +357,9 @@ contract LiveDeploy is ForkTest, DeployAll {
     }
 
     function testAssetsAreAllNormalERC20(uint256 mintAmount, uint256 transferAmount) public {
-        mintAmount = bound(mintAmount, 1, type(uint256).max);
+        // Add a large but reasonable bound to the amount. If allowed to hit max, some proxy implementations of assets
+        // cause storage errors when attempting to use deal. USDC on Base in particular sparked this change.
+        mintAmount = bound(mintAmount, 1, 10 ** 25);
         transferAmount = bound(transferAmount, 1, mintAmount);
         address user1 = makeAddr("user1");
         address user2 = makeAddr("user2");

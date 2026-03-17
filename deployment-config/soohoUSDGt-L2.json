@@ -1,7 +1,7 @@
 {
   "nameEntropy": "soohoUSDGt",
-  "base": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
-  "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+  "base": "0x25bB581e8f56fD1F1ED29C48324727aD1b3A4c68",
+  "protocolAdmin": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
   "boringVaultAndBaseDecimals": "6",
   "boringVault": {
     "boringVaultName": "Sooho USDG Treasury",
@@ -12,7 +12,7 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "accountant": {
-    "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "payoutAddress": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
     "allowedExchangeRateChangeUpper": "10003",
     "allowedExchangeRateChangeLower": "9998",
     "minimumUpdateDelayInSeconds": "3600",
@@ -23,19 +23,21 @@
   "teller": {
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
-    "peerEid": 30184,
+    "peerEid": 30101,
     "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
     "withdrawAssets": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     ],
     "depositAssets": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     ],
     "dvnIfNoDefault": {
       "required": [
-        "0x589dedbd617e0cbcb916a9223f4d1300c294236b"
+        "0x9e059a54699a285714207b43b055483e78faac25"
       ],
       "optional": [
-        "0xa59ba433ac34d2927232918ef5b2eaafcf130ba5",
-        "0x8fafae7dd957044088b3d0f67359c327c6200d18"
+        "0xcd37ca043f8479064e10635020c65ffc005d36f6",
+        "0xcdf31d62140204c08853b547e64707110fbc6680"
       ],
       "blockConfirmationsRequiredIfNoDefault": 15,
       "optionalThreshold": 1
@@ -54,7 +56,7 @@
   "withdrawQueue": {
     "name": "Sooho USDG Treasury Withdraw Queue",
     "symbol": "soohoUSDGtQ",
-    "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "feeRecipient": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
     "feePercentage": "0",
     "minimumOrderSize": "5000000",
     "processorAddress": "0xf1F0E8a2885f828CD1abf715BE43A48a04275937"

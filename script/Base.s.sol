@@ -123,8 +123,10 @@ abstract contract BaseScript is Script {
             return 0x6d0C5a20ac08ED00256aD224F74Ca53afF3D011d;
         } else if (block.chainid == 11_155_111) {
             return 0xC48f1361f309C62D9070f7D45E2Ad27dB2Eb3b2E;
+        } else if (block.chainid == 8453) {
+            return 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E;
         } else {
-            revert("bad chain id");
+            revert("Base Script getMultisig: bad chain id");
         }
     }
 
