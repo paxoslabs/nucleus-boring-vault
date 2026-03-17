@@ -139,11 +139,11 @@ contract DeployRolesAuthority is BaseScript {
             rolesAuthority.setRoleCapability(
                 DEPOSITOR_ROLE, config.teller, TellerWithMultiAssetSupport.deposit.selector, true
             );
-        } else {
-            rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
             rolesAuthority.setPublicCapability(
                 config.distributorCodeDepositor, DistributorCodeDepositor.deposit.selector, true
             );
+        } else {
+            rolesAuthority.setPublicCapability(config.teller, TellerWithMultiAssetSupport.deposit.selector, true);
         }
 
         // --- Assign roles to users ---
