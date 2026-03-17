@@ -291,7 +291,10 @@ contract LiveDeploy is ForkTest, DeployAll {
             );
 
             // mint extra assets for vault to give out
-            uint256 expectedAssetsBack = ((depositAmount) * rateChange / 10_000);
+            uint256 expectedBaseValueBack = ((depositAmount) * rateChange / 10_000);
+            uint256 expectedAssetsBack = expectedBaseValueBack.mulDivDown(
+                accountant.getRateInQuoteSafe(depositAsset), accountant.getRateInQuoteSafe(withdrawAsset)
+            );
             // We deal extra in order for any failures in accounting to show up in our more verbose testing rather than
             // the ERC20 error
             deal(address(withdrawAsset), mainConfig.boringVault, expectedAssetsBack * (1e18 + DELTA) / 1e18);
