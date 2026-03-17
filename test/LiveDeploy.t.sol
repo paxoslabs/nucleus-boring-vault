@@ -24,7 +24,7 @@ import {
 import { console2 } from "forge-std/console2.sol";
 
 string constant DEFAULT_RPC_URL = "L1_RPC_URL";
-uint256 constant DELTA = 10_500;
+uint256 constant DELTA = 1000;
 
 // We use this so that we can use the inheritance linearization to start the fork before other constructors
 abstract contract ForkTest is Test {
@@ -254,6 +254,10 @@ contract LiveDeploy is ForkTest, DeployAll {
 
         uint256 depositAssetsLength = mainConfig.depositAssets.length;
         uint256 withdrawAssetsLength = mainConfig.withdrawAssets.length;
+
+        if (depositAssetsLength == 0 || withdrawAssetsLength == 0) return; // skip test if there's no assets to deposit
+        // or withdraw
+
         uint256 largestAssetArray =
             withdrawAssetsLength > depositAssetsLength ? withdrawAssetsLength : depositAssetsLength;
 
@@ -290,17 +294,17 @@ contract LiveDeploy is ForkTest, DeployAll {
             uint256 expectedAssetsBack = ((depositAmount) * rateChange / 10_000);
             // We deal extra in order for any failures in accounting to show up in our more verbose testing rather than
             // the ERC20 error
-            deal(address(withdrawAsset), mainConfig.boringVault, expectedAssetsBack + DELTA);
+            deal(address(withdrawAsset), mainConfig.boringVault, expectedAssetsBack * (1e18 + DELTA) / 1e18);
 
             uint256 assetsOut = expectedShares.mulDivDown(accountant.getRateInQuoteSafe(ERC20(depositAsset)), ONE_SHARE);
 
             // Delta must be set very high to pass
-            assertApproxEqAbs(assetsOut, expectedAssetsBack, DELTA, "assets out not equal to expected assets back");
+            assertApproxEqRel(assetsOut, expectedAssetsBack, DELTA, "assets out not equal to expected assets back");
 
             TellerWithMultiAssetSupport(mainConfig.teller)
                 .bulkWithdraw(ERC20(withdrawAsset), expectedShares, expectedAssetsBack * 99 / 100, address(this));
 
-            assertApproxEqAbs(
+            assertApproxEqRel(
                 ERC20(withdrawAsset).balanceOf(address(this)),
                 expectedAssetsBack,
                 DELTA,
@@ -311,6 +315,7 @@ contract LiveDeploy is ForkTest, DeployAll {
 
     function testDepositASupportedAsset(uint256 depositAmount, uint256 indexOfSupported) public {
         uint256 depositAssetsCount = mainConfig.depositAssets.length;
+
         indexOfSupported = bound(indexOfSupported, 0, depositAssetsCount);
         depositAmount = bound(depositAmount, 1, 10_000e18);
 
