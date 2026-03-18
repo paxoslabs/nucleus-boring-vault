@@ -13,11 +13,11 @@
   },
   "accountant": {
     "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "allowedExchangeRateChangeUpper": "10003",
-    "allowedExchangeRateChangeLower": "9998",
+    "allowedExchangeRateChangeUpper": "10000",
+    "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
-    "performanceFee": "10000",
+    "performanceFee": "0",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "teller": {
