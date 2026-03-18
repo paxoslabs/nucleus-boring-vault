@@ -45,6 +45,7 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
+    "strategist": "0xD58EF3c6FEFFE90a0e2760C3dd3693310DD15786",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
     "address": "0x0000000000000000000000000000000000000000"
@@ -59,6 +60,6 @@
     "feeRecipient": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
     "feePercentage": "0",
     "minimumOrderSize": "5000000",
-    "processorAddress": "0xf1F0E8a2885f828CD1abf715BE43A48a04275937"
+    "processorAddress": "0xaa77cD1Ca296a537FE6b4847e5CfBF4a0A44c7b1"
   }
 }
