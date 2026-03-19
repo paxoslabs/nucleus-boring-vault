@@ -13,8 +13,8 @@
   },
   "accountant": {
     "payoutAddress": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
-    "allowedExchangeRateChangeUpper": "10003",
-    "allowedExchangeRateChangeLower": "9998",
+    "allowedExchangeRateChangeUpper": "10004",
+    "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
     "performanceFee": "2000",
