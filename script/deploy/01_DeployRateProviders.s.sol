@@ -118,7 +118,7 @@ contract DeployRateProviders is BaseScript {
         }
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) { }
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) { }
 
     function _deployGenericRateProvider(
         address target,

@@ -5,6 +5,7 @@ import { BaseScript } from "./../../Base.s.sol";
 import { ConfigReader } from "../../ConfigReader.s.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { DistributorCodeDepositor } from "../../../src/helper/DistributorCodeDepositor.sol";
+import "src/helper/Constants.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
@@ -15,18 +16,21 @@ contract DeployDistributorCodeDepositor is BaseScript {
         deploy(getConfig());
     }
 
-    function deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
+    function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
         require(config.distributorCodeDepositorDeploy, "Distributor Code Depositor must be set true to be deployed");
 
         address nativeWrapper =
             config.distributorCodeDepositorIsNativeDepositSupported ? config.nativeWrapper : address(0);
 
+        bytes32 distributorCodeDepositorSalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":DistributorCodeDepositor")));
+
         // Create Contract
         bytes memory creationCode = type(DistributorCodeDepositor).creationCode;
         DistributorCodeDepositor distributorCodeDepositor = DistributorCodeDepositor(
             CREATEX.deployCreate3(
-                config.distributorCodeDepositorSalt,
+                distributorCodeDepositorSalt,
                 abi.encodePacked(
                     creationCode,
                     abi.encode(
@@ -52,6 +56,9 @@ contract DeployDistributorCodeDepositor is BaseScript {
                     address(distributorCodeDepositor), distributorCodeDepositor.depositNative.selector, true
                 );
         }
+
+        // Grant the DEPOSITOR ROLE to the distributor code depositor
+        RolesAuthority(config.rolesAuthority).setUserRole(address(distributorCodeDepositor), DEPOSITOR_ROLE, true);
 
         return address(distributorCodeDepositor);
     }
