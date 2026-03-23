@@ -1,10 +1,15 @@
 {
-    "name": "Base Tenderly",
+    "name": "Base",
     "balancerVault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
     "opMessenger": "0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1",
     "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+    "nativeWrapper": "0x4200000000000000000000000000000000000006",
     "assetToRateProviderAndPriceFeed": {
       "NOTE_THESE_KEYS_MUST_NOT_BE_CHECKSUMMED": 0,
+      "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {
+        "isPegged": true,
+        "rateProvider": "0x0000000000000000000000000000000000000000"        
+      },
       "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee": {
         "priceFeed": "0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22",
         "rateProvider": "0x51a9319B45F41c405eFA1EcbCcE530607A694862",

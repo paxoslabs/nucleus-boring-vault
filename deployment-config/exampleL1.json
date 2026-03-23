@@ -1,19 +1,17 @@
 {
+  "nameEntropy": "exampleL1",
   "base": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
   "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
   "boringVaultAndBaseDecimals": "18",
   "boringVault": {
-    "boringVaultSalt": "0x88ebd3298c1ad6afea488ed29af3b9cc4ed8b20e6b729e465705221d472587ca",
     "boringVaultName": "Nucleus Vault",
     "boringVaultSymbol": "NV",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
   "manager": {
-    "managerSalt": "0xae6187a622d9193caa52172f133562cdb86ec3f29cf01000f3d4e0369ca1b11c",
     "address": "0x0000000000fAd6Db23abdC1a85621B97bd1Dc82f"
   },
   "accountant": {
-    "accountantSalt": "0x491975ba445d886bff330e1f5274d66a09b9eff95c05694e68b99c3c8674ce9e",
     "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
     "allowedExchangeRateChangeUpper": "10003",
     "allowedExchangeRateChangeLower": "9998",
@@ -23,12 +21,22 @@
     "address": "0x00000000004F96C07B83e86600D86F9479bB43fa"
   },
   "teller": {
-    "tellerSalt": "0xcdef4c14f34dd7f1f574eeebebb30e482a3e8239ad81fd8a837d74f412ad02df",
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
     "peerEid": 30280,
     "tellerContractName": "TellerWithMultiAssetSupport",
-    "assets": [
+    "withdrawAssets": [
+      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
+      "0xbf5495efe5db9ce00f80364c8b423567e58d2110",
+      "0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7",
+      "0xFAe103DC9cf190eD75350761e95403b7b8aFa6c0",
+      "0xD9A442856C234a39a81a089C06451EBAa4306a72",
+      "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "0x9Ba021B0a9b958B5E75cE9f6dff97C7eE52cb3E6"
+    ],
+    "depositAssets": [
+      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
       "0xbf5495efe5db9ce00f80364c8b423567e58d2110",
       "0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7",
@@ -53,15 +61,9 @@
     "address": "0x00000000004F96C07B83e86600D86F0000000000"
   },
   "rolesAuthority": {
-    "rolesAuthoritySalt": "0x7598c70512b3444455ffe66016c7f5115daf8de620d34311c8834fab14c689b7",
-    "strategist": "0x00000000004F96C07B83e86600D86F0000000000",
+    "strategist": "0x0000000000417626Ef34D62C4DC189b021603f2F",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
-    "solver": "0x54563d1DdB55b029D6D7AcD89C633af746823092",
     "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
-    "address": "0x00000000004F96C07B83e86600D86F0000000000"
-  },
-  "decoder": {
-    "decoderSalt": "0x48b53893da2e0b0248268c00000000000000000000000000000000000000001c",
     "address": "0x00000000004F96C07B83e86600D86F0000000000"
   },
   "distributorCodeDepositor": {
@@ -70,6 +72,15 @@
     "nativeSupported": true,
     "supplyCap": "1000000000000000000000000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
-    "policyID": "policyOne"
+    "policyID": "policyOne",
+    "nativeSupported": true
+  },
+  "withdrawQueue": {
+    "name": "Example Withdraw Queue",
+    "symbol": "EWQ",
+    "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "feePercentage": "100",
+    "minimumOrderSize": "1000000000000000000",
+    "processorAddress": "0x00000000004F96C07B83e86600D86F0000000000"
   }
 }

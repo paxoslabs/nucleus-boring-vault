@@ -9,6 +9,8 @@ import { Script, stdJson } from "@forge-std/Script.sol";
 
 import { ConfigReader, IAuthority } from "./ConfigReader.s.sol";
 
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+
 abstract contract BaseScript is Script {
 
     using stdJson for string;
@@ -72,7 +74,16 @@ abstract contract BaseScript is Script {
         vm.stopBroadcast();
     }
 
-    function deploy(ConfigReader.Config memory config) public virtual returns (address) {
+    function deploy(ConfigReader.Config memory config) public returns (address) {
+        require(getMultisig() == config.protocolAdmin, "BASE PRE-DEPLOY CHECK: Multisig does not match protocol admin");
+        require(
+            config.boringVaultAndBaseDecimals == ERC20(config.base).decimals(),
+            "BASE PRE-DEPLOY CHECK: Boring vault and base decimals do not match"
+        );
+        return _deploy(config);
+    }
+
+    function _deploy(ConfigReader.Config memory config) public virtual returns (address) {
         revert("deploy() Not Implemented");
     }
 
@@ -112,8 +123,10 @@ abstract contract BaseScript is Script {
             return 0x6d0C5a20ac08ED00256aD224F74Ca53afF3D011d;
         } else if (block.chainid == 11_155_111) {
             return 0xC48f1361f309C62D9070f7D45E2Ad27dB2Eb3b2E;
+        } else if (block.chainid == 8453) {
+            return 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E;
         } else {
-            revert("bad chain id");
+            revert("Base Script getMultisig: bad chain id");
         }
     }
 

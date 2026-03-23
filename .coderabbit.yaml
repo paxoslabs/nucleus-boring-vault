@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "You are an expert Solidity security auditor. Be precise about vulnerability classifications."
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  commit_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: true
+  abort_on_close: true
+
+  path_filters:
+    - "!lib/**"
+    - "!out/**"
+    - "!cache/**"
+    - "!broadcast/**"
+
+  path_instructions:
+    - path: "src/**/*.sol"
+      instructions: >-
+        Review this Solidity contract with a focus on security and correctness.
+        Apply the security checklist defined in CLAUDE.md. Flag any issues from
+        the General, ERC20, DeFi/Finance, and Access Control categories.
+
+    - path: "test/**/*.sol"
+      instructions: >-
+        Review tests. Tests often suffer from incorrectly copy pasted code or incorrect assumptions. 
+        Look at the test and ensure they make sense what it's asserting. Ensure proper coverage of the src changes.
+        If the src opened up a new attack vector, ensure the test covers it.
+
+    - path: "script/**/*.sol"
+      instructions: >-
+        Review deployment and upgrade scripts. Check for: hardcoded addresses
+        that should be configurable, missing ownership/role validation steps,
+        missing verification steps post-upgrade, and proper use of
+        vm.startBroadcast/vm.stopBroadcast in Foundry scripts.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches: []
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  tools:
+    ast-grep:
+      essential_rules: true
+    semgrep:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"
+      - "**/.cursorrules"
+  learnings:
+    scope: "auto"
+  pull_requests:
+    scope: "auto"
+
+chat:
+  auto_reply: true

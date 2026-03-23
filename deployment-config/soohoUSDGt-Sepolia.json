@@ -1,0 +1,64 @@
+{
+  "nameEntropy": "soohoUSDGt-Sepolia",
+  "base": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "protocolAdmin": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+  "boringVaultAndBaseDecimals": "6",
+  "boringVault": {
+    "boringVaultName": "Sooho USDG Treasury",
+    "boringVaultSymbol": "soohoUSDGt",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "manager": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "accountant": {
+    "payoutAddress": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "allowedExchangeRateChangeUpper": "10003",
+    "allowedExchangeRateChangeLower": "9998",
+    "minimumUpdateDelayInSeconds": "3600",
+    "managementFee": "0",
+    "performanceFee": "2000",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "teller": {
+    "maxGasForPeer": 100000,
+    "minGasForPeer": 0,
+    "peerEid": 40245,
+    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "withdrawAssets": [
+    ],
+    "depositAssets": [
+    ],
+    "dvnIfNoDefault": {
+      "required": [
+        "0x8eebf8b423b73bfca51a1db4b7354aa0bfca9193"
+      ],
+      "optional": [
+        "0x68802e01d6321d5159208478f297d7007a7516ed",
+        "0xdd7b5e1db4aafd5c8ec3b764efb8ed265aa5445b",
+        "0x9efba56c8598853e5b40fd9a66b54a6c163742d7"
+      ],
+      "blockConfirmationsRequiredIfNoDefault": 15,
+      "optionalThreshold": 1
+    },
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "rolesAuthority": {
+    "strategist": "0x37773374B444fFD32C830124f62050F3e877d213",
+    "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
+    "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "distributorCodeDepositor": {
+    "deploy": true,
+    "nativeSupported": false
+  },
+  "withdrawQueue": {
+    "name": "Example Withdraw Queue",
+    "symbol": "EWQ",
+    "feeRecipient": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "feePercentage": "0",
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0x71939D540a3D0683ddea87B99981aD41F457cAdb"
+  }
+}

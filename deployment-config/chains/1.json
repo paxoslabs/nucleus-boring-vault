@@ -9,6 +9,10 @@
     "NOTE_0_CHAINLINK_1_REDSTONE_2_GENERIC": 0,
     "NOTE_THESE_KEYS_MUST_NOT_BE_CHECKSUMMED": 0,
     "maxTimeFromLastUpdate": "86400",
+    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    },
     "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
       "isPegged": false,
       "denomination": "stETH/wstETH",
