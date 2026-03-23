@@ -180,7 +180,7 @@ abstract contract VaultArchitectureSharedSetup is Test, MainnetAddresses {
         returns (Attestation memory attestation)
     {
         bytes memory encodedSigAndArgs = abi.encodeWithSignature(
-            "_deposit(address,uint256,uint256,address,bytes)",
+            "deposit(address,uint256,uint256,address,bytes)",
             depositAsset,
             depositAmount,
             minimumMint,

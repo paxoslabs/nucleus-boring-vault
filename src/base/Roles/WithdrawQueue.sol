@@ -39,7 +39,8 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         COMPLETE_PRE_FILLED,
         PENDING_REFUND,
         COMPLETE_REFUNDED,
-        FAILED_TRANSFER_REFUNDED // In the event an order fails to transfer to it's receiver, we refund it
+        FAILED_TRANSFER_REFUNDED, // In the event an order fails to transfer to it's receiver, we refund it
+        FAILED_REFUND // Refund failed, order was refunded to the recovery address
     }
 
     /// @notice Approval method for submitting an order
@@ -77,6 +78,8 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         OrderType orderType; // Current type of the order, indicates how the order is processed
         bool didOrderFailTransfer; // Whether the order failed to transfer on process. In this event the shares are
         // refunded
+        bool didOrderFailRefund; // Whether the order failed to refund. If so it will have been refunded to the recovery
+        // address
     }
 
     bytes32 public constant CANCEL_ORDER_TYPEHASH =
@@ -98,6 +101,9 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
     /// @notice recipient of queue fees
     address public feeRecipient;
 
+    /// @notice Address to receive shares when a refund transfer fails (e.g. frozen receiver)
+    address public recoveryAddress;
+
     /// @notice Teller this contract is queueing withdraws for
     TellerWithMultiAssetSupport public tellerWithMultiAssetSupport;
 
@@ -114,6 +120,10 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
     event FeeModuleUpdated(IFeeModule indexed oldFeeModule, IFeeModule indexed newFeeModule);
     event MinimumOrderSizeUpdated(uint256 oldMinimum, uint256 newMinimum);
     event FeeRecipientUpdated(address indexed oldFeeRecipient, address indexed newFeeRecipient);
+    event RecoveryAddressUpdated(address indexed oldRecoveryAddress, address indexed newRecoveryAddress);
+    event OrderRefundFailed(
+        uint256 indexed orderIndex, address indexed refundReceiver, address indexed recoveryAddress
+    );
     event OrderSubmitted(
         uint256 indexed orderIndex,
         Order order,
@@ -133,6 +143,7 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
     event OrderRefunded(uint256 indexed orderIndex, Order order);
     event TellerUpdated(TellerWithMultiAssetSupport indexed oldTeller, TellerWithMultiAssetSupport indexed newTeller);
     event OrderMarkedForRefund(uint256 indexed orderIndex, bool indexed isMarkedByUser);
+    event FeesExceededOrderAmount(uint256 indexed orderIndex, uint256 amountOffer, uint256 feeAmount);
 
     error ZeroAddress();
     error ZeroAmount();
@@ -172,7 +183,8 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         TellerWithMultiAssetSupport _tellerWithMultiAssetSupport,
         IFeeModule _feeModule,
         uint256 _minimumOrderSize,
-        address _owner
+        address _owner,
+        address _recoveryAddress
     )
         ERC721(_name, _symbol)
         Auth(_owner, Authority(address(0)))
@@ -180,12 +192,14 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         // no zero check on owner in Auth Contract
         if (_owner == address(0)) revert ZeroAddress();
         if (_feeRecipient == address(0)) revert ZeroAddress();
+        if (_recoveryAddress == address(0)) revert ZeroAddress();
         if (address(_tellerWithMultiAssetSupport) == address(0)) revert ZeroAddress();
         IERC20 _offerAsset = IERC20(address(_tellerWithMultiAssetSupport.vault()));
         if (address(_offerAsset) == address(0)) revert ZeroAddress();
         if (address(_feeModule) == address(0)) revert ZeroAddress();
 
         feeRecipient = _feeRecipient;
+        recoveryAddress = _recoveryAddress;
         tellerWithMultiAssetSupport = _tellerWithMultiAssetSupport;
         offerAsset = _offerAsset;
         feeModule = _feeModule;
@@ -216,6 +230,17 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
         address oldFeeRecipient = feeRecipient;
         feeRecipient = _feeRecipient;
         emit FeeRecipientUpdated(oldFeeRecipient, _feeRecipient);
+    }
+
+    /**
+     * @notice Set the recovery address for failed refund transfers
+     * @param _recoveryAddress Address to receive shares when a refund transfer fails
+     */
+    function setRecoveryAddress(address _recoveryAddress) external requiresAuth {
+        if (_recoveryAddress == address(0)) revert ZeroAddress();
+        address oldRecoveryAddress = recoveryAddress;
+        recoveryAddress = _recoveryAddress;
+        emit RecoveryAddressUpdated(oldRecoveryAddress, _recoveryAddress);
     }
 
     /**
@@ -377,6 +402,10 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
             return OrderStatus.COMPLETE_PRE_FILLED;
         }
 
+        if (order.didOrderFailRefund) {
+            return OrderStatus.FAILED_REFUND;
+        }
+
         if (order.didOrderFailTransfer) {
             return OrderStatus.FAILED_TRANSFER_REFUNDED;
         }
@@ -415,7 +444,8 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
             wantAsset: params.wantAsset,
             refundReceiver: params.refundReceiver,
             orderType: OrderType.DEFAULT,
-            didOrderFailTransfer: false
+            didOrderFailTransfer: false,
+            didOrderFailRefund: false
         });
         orderAtQueueIndex[orderIndex] = order;
 
@@ -477,6 +507,18 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
             _burn(orderIndex);
 
             uint256 feeAmount = feeModule.calculateOfferFees(order.amountOffer, offerAsset, order.wantAsset, receiver);
+
+            // Fees cannot equal or exceed the offer amount — refund rather than underflow
+            if (feeAmount >= order.amountOffer) {
+                orderAtQueueIndex[orderIndex].orderType = OrderType.REFUND;
+                _refundOrder(order, orderIndex);
+                emit FeesExceededOrderAmount(orderIndex, order.amountOffer, feeAmount);
+                unchecked {
+                    ++lastProcessedOrder;
+                    ++i;
+                }
+                continue;
+            }
 
             BoringVault vault = BoringVault(payable(address(offerAsset)));
             // The following line will revert if the accountant is paused. Meaning a paused accountant will not result
@@ -621,12 +663,37 @@ contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
 
     /**
      * @notice Helper function to refund an order
-     * @dev We do not check for failed transfers here. As in the case of the share token, we have built this token and
-     * know it does not revert due to blacklists or ERC777 hooks. So we do not need special handling here
+     * @dev Uses a low-level call so that a frozen or blacklisted refundReceiver does not revert the
+     * entire processOrders loop. If the transfer to refundReceiver fails, shares are sent to
+     * recoveryAddress for off-chain resolution.
      */
     function _refundOrder(Order memory order, uint256 orderIndex) internal {
-        offerAsset.safeTransfer(order.refundReceiver, order.amountOffer);
-        emit OrderRefunded(orderIndex, order);
+        bool success = _callOptionalReturnBool(offerAsset, order.refundReceiver, order.amountOffer);
+        if (!success) {
+            order.didOrderFailRefund = true;
+            orderAtQueueIndex[orderIndex].didOrderFailRefund = true;
+            offerAsset.safeTransfer(recoveryAddress, order.amountOffer);
+            emit OrderRefundFailed(orderIndex, order.refundReceiver, recoveryAddress);
+        } else {
+            emit OrderRefunded(orderIndex, order);
+        }
+    }
+
+    /**
+     * @dev From SafeERC20 library: _callOptionalReturnBool(): Do a safe transfer and return a bool
+     * instead of reverting. This is a function in SafeERC20 but is private so we need to replicate it here.
+     */
+    function _callOptionalReturnBool(IERC20 token, address receiver, uint256 amount) internal returns (bool success) {
+        bytes memory data = abi.encodeWithSelector(token.transfer.selector, receiver, amount);
+
+        uint256 returnSize;
+        uint256 returnValue;
+        assembly ("memory-safe") {
+            success := call(gas(), token, 0, add(data, 0x20), mload(data), 0, 0x20)
+            returnSize := returndatasize()
+            returnValue := mload(0)
+        }
+        success = success && (returnSize == 0 ? address(token).code.length > 0 : returnValue == 1);
     }
 
 }

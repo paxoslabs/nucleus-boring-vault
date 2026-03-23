@@ -35,6 +35,22 @@ contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
     }
 
     /**
+     * @notice beforeWithdraw hook. Applied in TellerWithMultiAssetSupport on bulkWithdraw. This is because shares
+     * are directly burned and are not subject to the usual beforeTransfer hooks when withdrawing but we may still want
+     * to apply the same or similar rules.
+     * @param from address the share tokens are taken from
+     * @param withdrawReceiver NOT the "to" address of the transfer as this is always 0 address, but the receiver of the
+     * withdraw assets
+     * @param msgSender the msgSender of the transaction. Will always be "from" in bulkWithdraw. But if this is used in
+     * future withdraw implementations, may be unique
+     */
+    function beforeWithdraw(address from, address withdrawReceiver, address msgSender, uint256 amount) external view {
+        if (freezeList[from]) revert FrozenAddress(from);
+        if (freezeList[withdrawReceiver]) revert FrozenAddress(withdrawReceiver);
+        if (freezeList[msgSender]) revert FrozenAddress(msgSender);
+    }
+
+    /**
      * @notice beforeBridge hook. Applied in CrossChainTellerBase on beforeBridge. This is because shares are directly
      * burned and are not subject to the usual beforeTransfer hooks when bridging but we may still want to apply the
      * same or similar rules.

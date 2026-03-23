@@ -2,12 +2,14 @@
 pragma solidity 0.8.21;
 
 import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetSupport.sol";
+import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Auth, Authority } from "solmate/auth/Auth.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { IFeeModule, IERC20 } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { PredicateClient } from "@predicate/mixins/PredicateClient.sol";
+import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 
 interface INativeWrapper {
 
@@ -25,6 +27,7 @@ interface INativeWrapper {
 
 contract DistributorCodeDepositor is Auth, PredicateClient {
 
+    using FixedPointMathLib for uint256;
     using SafeTransferLib for ERC20;
 
     error ZeroAddress();
@@ -32,9 +35,10 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     error NativeWrapperAccountantDecimalsMismatch();
     error NativeDepositNotSupported();
     error PermitFailedAndAllowanceTooLow();
-    error FeesExceedOrEqualShares();
+    error FeesExceedOrEqualAmount();
+    error InsufficientSharesAfterFees(uint256 actual, uint256 minimum);
 
-    string public constant PREDICATE_DEPOSIT_SIGNATURE = "_deposit(address,uint256,uint256,address,bytes)";
+    string public constant PREDICATE_DEPOSIT_SIGNATURE = "deposit(address,uint256,uint256,address,bytes)";
     INativeWrapper public immutable nativeWrapper;
 
     TellerWithMultiAssetSupport public immutable teller;
@@ -43,7 +47,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
 
     uint256 public depositNonce;
 
-    uint256 public supplyCap;
+    uint256 public supplyCapInBase;
     address public feeRecipient;
     IFeeModule public feeModule;
 
@@ -60,12 +64,12 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         bytes indexed distributorCode
     );
 
-    event SupplyCapUpdated(uint256 newSupplyCap);
+    event SupplyCapInBaseUpdated(uint256 newSupplyCapInBase);
     event FeeModuleUpdated(IFeeModule indexed newFeeModule);
     event FeeRecipientUpdated(address indexed newFeeRecipient);
     event KytStatusUpdated(ERC20 indexed depositAsset, bool indexed enabled);
 
-    error SupplyCapError(uint256 resultingSupply, uint256 supplyCap);
+    error SupplyCapInBaseError(uint256 resultingValue, uint256 supplyCapInBase);
     error NoCode(address addressEmptyCode);
     error UnauthorizedTransaction();
 
@@ -105,7 +109,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         boringVault = address(_teller.vault());
         nativeWrapper = _nativeWrapper;
         isNativeDepositSupported = _isNativeDepositSupported;
-        supplyCap = _supplyCap;
+        supplyCapInBase = _supplyCap;
         feeModule = _feeModule;
         feeRecipient = _feeRecipient;
         _initPredicateClient(_registry, _policyID);
@@ -122,12 +126,13 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
     }
 
     /**
-     * @dev OWNER function to update the supply cap. We allow setting the cap to anything. Including values < current
-     * supply and a value = 0
+     * @dev OWNER function to update the supply cap. The cap is denominated in base asset units,
+     * not in share count. We allow setting the cap to anything. Including values < current
+     * value and a value = 0.
      */
-    function updateSupplyCap(uint256 newSupplyCap) external requiresAuth {
-        supplyCap = newSupplyCap;
-        emit SupplyCapUpdated(newSupplyCap);
+    function updateSupplyCapInBase(uint256 newSupplyCapInBase) external requiresAuth {
+        supplyCapInBase = newSupplyCapInBase;
+        emit SupplyCapInBaseUpdated(newSupplyCapInBase);
     }
 
     /**
@@ -176,8 +181,8 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         returns (uint256 shares)
     {
         if (!isNativeDepositSupported) revert NativeDepositNotSupported();
-        if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
         _authorizeKyt(_attestation, ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
+        if (msg.value != depositAmount) revert IncorrectNativeDepositAmount();
         nativeWrapper.deposit{ value: msg.value }();
         return _deposit(ERC20(address(nativeWrapper)), depositAmount, minimumMint, to, distributorCode);
     }
@@ -259,31 +264,38 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
             depositHash = keccak256(abi.encodePacked(address(this), ++depositNonce, block.chainid));
         }
 
-        // Clear leftover allowance for non-standard ERC20
-        _tryClearApproval(depositAsset);
-        depositAsset.safeApprove(boringVault, depositAmount);
-
-        shares = teller.deposit(depositAsset, depositAmount, minimumMint);
-
         uint256 feeAmount;
 
         // if fee module is zero, no fees
         if (address(feeModule) != address(0)) {
-            feeAmount = feeModule.calculateOfferFees(shares, IERC20(address(depositAsset)), IERC20(boringVault), to);
-            if (feeAmount >= shares) revert FeesExceedOrEqualShares();
+            feeAmount =
+                feeModule.calculateOfferFees(depositAmount, IERC20(address(depositAsset)), IERC20(boringVault), to);
+            if (feeAmount >= depositAmount) revert FeesExceedOrEqualAmount();
 
             // Send the fees to the fee recipient if fees are taken
             if (feeAmount > 0) {
-                ERC20(boringVault).safeTransfer(feeRecipient, feeAmount);
+                depositAsset.safeTransfer(feeRecipient, feeAmount);
             }
         }
 
-        // Send "to" the shares - fees
-        ERC20(boringVault).safeTransfer(to, shares - feeAmount);
-        uint256 totalSupply = ERC20(boringVault).totalSupply();
+        uint256 depositAmountAfterFees = depositAmount - feeAmount;
 
-        // Enforce the supply cap
-        if (totalSupply > supplyCap) revert SupplyCapError(totalSupply, supplyCap);
+        // Clear leftover allowance for non-standard ERC20
+        _tryClearApproval(depositAsset);
+        depositAsset.safeApprove(boringVault, depositAmountAfterFees);
+
+        // Enforce slippage on the post-fee amount the user actually receives
+        shares = teller.deposit(depositAsset, depositAmountAfterFees, minimumMint);
+
+        // Send "to" the shares
+        ERC20(boringVault).safeTransfer(to, shares);
+
+        // Enforce the value-based supply cap: convert total shares to base asset value using the
+        // accountant's exchange rate
+        AccountantWithRateProviders accountant = teller.accountant();
+        uint256 totalValue =
+            (ERC20(boringVault).totalSupply()).mulDivDown(accountant.getRate(), 10 ** accountant.decimals());
+        if (totalValue > supplyCapInBase) revert SupplyCapInBaseError(totalValue, supplyCapInBase);
 
         // Clear leftover allowance
         _tryClearApproval(depositAsset);

@@ -14,7 +14,7 @@ contract MockFallbackHook is IFallbackHook {
         uint256 b;
     }
 
-    function onFallback(address sender, bytes calldata data) external returns (bytes memory) {
+    function onFallback(address sender, bytes calldata data) external payable returns (bytes memory) {
         if (bytes4(data[0:4]) == this.foo.selector) return abi.encode(foo());
     }
 
@@ -92,6 +92,25 @@ contract FreezeListTest is VaultArchitectureSharedSetup {
         MockFallbackHook.MyStruct memory s = abi.decode(result, (MockFallbackHook.MyStruct));
         assertEq(s.a, 4);
         assertEq(s.b, 2);
+    }
+
+    function testFallbackHookReceivesValue() public {
+        MockFallbackHook fallbackHook = new MockFallbackHook();
+
+        vm.prank(boringVault.owner());
+        boringVault.setFallbackHook(address(fallbackHook));
+
+        uint256 sendAmount = 1 ether;
+        vm.deal(normalUser, sendAmount);
+
+        uint256 vaultBalanceBefore = address(boringVault).balance;
+
+        vm.prank(normalUser);
+        (bool success,) = address(boringVault).call{ value: sendAmount }(abi.encodeWithSignature("foo()"));
+        assertTrue(success);
+        // ETH is forwarded to the hook — hook gained sendAmount, vault balance unchanged
+        assertEq(address(fallbackHook).balance, sendAmount);
+        assertEq(address(boringVault).balance, vaultBalanceBefore);
     }
 
 }

@@ -2,14 +2,7 @@
 pragma solidity 0.8.21;
 
 import { CrossChainTellerBase, BridgeData } from "./CrossChainTellerBase.sol";
-
-struct Chain {
-    bool allowMessagesFrom;
-    bool allowMessagesTo;
-    address targetTeller;
-    uint64 messageGasLimit;
-    uint64 minimumMessageGas;
-}
+import { Chain } from "src/interfaces/ICrossChainTypes.sol";
 
 error MultiChainTellerBase_MessagesNotAllowedFrom(uint32 chainSelector);
 error MultiChainTellerBase_MessagesNotAllowedFromSender(uint256 chainSelector, address sender);
