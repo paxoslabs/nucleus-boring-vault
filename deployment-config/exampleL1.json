@@ -8,6 +8,9 @@
     "boringVaultSymbol": "NV",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
+  "freezeListBeforeTransferHook": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
   "manager": {
     "address": "0x0000000000fAd6Db23abdC1a85621B97bd1Dc82f"
   },

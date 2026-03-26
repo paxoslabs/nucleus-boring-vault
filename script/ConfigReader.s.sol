@@ -142,6 +142,9 @@ library ConfigReader {
         config.withdrawQueueMinimumOrderSize = uint256(_config.readUint(".withdrawQueue.minimumOrderSize"));
         config.withdrawQueueProcessorAddress = _config.readAddress(".withdrawQueue.processorAddress");
 
+        // Reading from the 'freezeListBeforeTransferHook' section
+        config.freezeListBeforeTransferHook = _config.readAddress(".freezeListBeforeTransferHook.address");
+
         // Reading from the 'chainConfig' section
         config.balancerVault = _chainConfig.readAddress(".balancerVault");
         config.nativeWrapper = _chainConfig.readAddress(".nativeWrapper");

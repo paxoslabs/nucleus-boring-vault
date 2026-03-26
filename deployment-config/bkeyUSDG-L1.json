@@ -8,6 +8,9 @@
     "boringVaultSymbol": "bkeyUSDGt",
     "address": "0x0000000000000000000000000000000000000000"
   },
+  "freezeListBeforeTransferHook": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
   "manager": {
     "address": "0x0000000000000000000000000000000000000000"
   },
