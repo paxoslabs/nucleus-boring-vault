@@ -1,5 +1,5 @@
 {
-  "nameEntropy": "soohoUSDGt",
+  "nameEntropy": "soohoUSDGt2",
   "base": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
   "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
   "boringVaultAndBaseDecimals": "6",
@@ -50,6 +50,9 @@
   },
   "distributorCodeDepositor": {
     "deploy": true,
+    "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "policyID": "",
     "nativeSupported": false
   },
   "withdrawQueue": {

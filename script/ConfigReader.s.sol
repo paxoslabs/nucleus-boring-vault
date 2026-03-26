@@ -68,6 +68,7 @@ library ConfigReader {
         uint256 withdrawQueueMinimumOrderSize;
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
+        address freezeListBeforeTransferHook;
     }
 
     function toConfig(string memory _config, string memory _chainConfig) internal pure returns (Config memory config) {
