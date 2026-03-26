@@ -8,6 +8,7 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
+import { IFallbackHook } from "src/interfaces/IFallbackHook.sol";
 import { Auth, Authority } from "@solmate/auth/Auth.sol";
 
 /**
@@ -27,10 +28,20 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
      */
     BeforeTransferHook public hook;
 
+    /**
+     * @notice Fallback hook contract, if implemented it may add extra functionality without internal access to or
+     * modifying boring
+     * vault state
+     */
+    IFallbackHook public fallbackHook;
+
     //============================== EVENTS ===============================
 
     event Enter(address indexed from, address indexed asset, uint256 amount, address indexed to, uint256 shares);
     event Exit(address indexed to, address indexed asset, uint256 amount, address indexed from, uint256 shares);
+    event BeforeTransferHookUpdated(address indexed hook);
+    event FallbackHookUpdated(address indexed fallbackHook);
+    event NameAndSymbolUpdated(string indexed name, string indexed symbol);
 
     //============================== CONSTRUCTOR ===============================
 
@@ -142,32 +153,58 @@ contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
      */
     function setBeforeTransferHook(address _hook) external requiresAuth {
         hook = BeforeTransferHook(_hook);
+        emit BeforeTransferHookUpdated(_hook);
     }
 
     /**
-     * @notice Check if from addresses shares are locked, reverting if so.
+     * @notice Sets the fallback hook
+     * @notice If set to zero address, the fallback function will revert with no data as it would without the fallback
+     * at all
+     * @dev callable by OWNER_ROLE
      */
-    function _callBeforeTransfer(address from) internal view {
-        if (address(hook) != address(0)) hook.beforeTransfer(from);
-    }
-
-    function transfer(address to, uint256 amount) public override returns (bool) {
-        _callBeforeTransfer(msg.sender);
-        return super.transfer(to, amount);
-    }
-
-    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
-        _callBeforeTransfer(from);
-        return super.transferFrom(from, to, amount);
+    function setFallbackHook(address _fallbackHook) external requiresAuth {
+        fallbackHook = IFallbackHook(_fallbackHook);
+        emit FallbackHookUpdated(_fallbackHook);
     }
 
     function setNameAndSymbol(string memory _name, string memory _symbol) external requiresAuth {
         name = _name;
         symbol = _symbol;
+        emit NameAndSymbolUpdated(_name, _symbol);
     }
 
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        _callBeforeTransfer(msg.sender, to, amount);
+        return super.transfer(to, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        _callBeforeTransfer(from, to, amount);
+        return super.transferFrom(from, to, amount);
+    }
+
+    /**
+     * @notice Check if from addresses shares are locked, reverting if so.
+     */
+    function _callBeforeTransfer(address from, address to, uint256 amount) internal view {
+        if (address(hook) != address(0)) hook.beforeTransfer(from, to, msg.sender, amount);
+    }
     //============================== RECEIVE ===============================
 
     receive() external payable { }
+
+    /**
+     * @dev If ether is not passed, call the fallback. Optionally a hook can be set to add on functionality that cannot
+     * modify the vault state.
+     * This introduces a sort of pseudo-upgradeability pattern where the vault can be upgraded with simple getters
+     * without fear of breaking existing functionality
+     * @dev payable so that calls with both calldata and msg.value are supported. Any ETH sent is forwarded to the
+     * fallbackHook and its handling is the responsibility of the fallbackHook implementation.
+     */
+    fallback(bytes calldata data) external payable returns (bytes memory result) {
+        // If no fallbackHook is set, we revert with no data as it would without the fallback at all
+        if (address(fallbackHook) == address(0)) revert();
+        result = fallbackHook.onFallback{ value: msg.value }(msg.sender, data);
+    }
 
 }

@@ -7,5 +7,5 @@ ds-test/=lib/forge-std/lib/ds-test/src/
 @ion-protocol/=lib/ion-protocol/src/
 @aave/core-v3/=lib/aave-v3-core/
 @layerzerolabs/=node_modules/@layerzerolabs/
-@predicate/=lib/predicate-contracts/
+@predicate/=lib/predicate-contracts/src/
 @uniswap/v3-core/=lib/v3-core/

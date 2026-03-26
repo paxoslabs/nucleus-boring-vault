@@ -5,7 +5,6 @@ import { BaseDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/BaseDeco
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
-import { PredicateMessage } from "@predicate/src/interfaces/IPredicateClient.sol";
 
 abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
@@ -35,7 +34,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         uint256 minimumMint,
         address recipient,
         address teller,
-        PredicateMessage calldata predicateMessage
+        DecoderCustomTypes.PredicateMessage calldata predicateMessage
     )
         external
         pure

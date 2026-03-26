@@ -440,37 +440,6 @@ contract TellerWithMultiAssetSupportTest is Test, MainnetAddresses {
             )
         );
         teller.setShareLockPeriod(3 days + 1);
-
-        teller.setShareLockPeriod(3 days);
-        boringVault.setBeforeTransferHook(address(teller));
-
-        // Have user deposit
-        address user = vm.addr(333);
-        vm.startPrank(user);
-        uint256 wETH_amount = 1e18;
-        deal(address(WETH), user, wETH_amount);
-        WETH.safeApprove(address(boringVault), wETH_amount);
-
-        teller.deposit(WETH, wETH_amount, 0);
-
-        // Trying to transfer shares should revert.
-        vm.expectRevert(
-            abi.encodeWithSelector(TellerWithMultiAssetSupport.TellerWithMultiAssetSupport__SharesAreLocked.selector)
-        );
-        boringVault.transfer(address(this), 1);
-
-        vm.stopPrank();
-        // Calling transferFrom should also revert.
-        vm.expectRevert(
-            abi.encodeWithSelector(TellerWithMultiAssetSupport.TellerWithMultiAssetSupport__SharesAreLocked.selector)
-        );
-        boringVault.transferFrom(user, address(this), 1);
-
-        // But if user waits 3 days.
-        skip(3 days + 1);
-        // They can now transfer.
-        vm.prank(user);
-        boringVault.transfer(address(this), 1);
     }
 
     // ========================================= HELPER FUNCTIONS =========================================

@@ -3,8 +3,9 @@ pragma solidity 0.8.21;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { BoringVault } from "../base/BoringVault.sol";
-import { TellerWithMultiAssetSupport } from "../base/Roles/TellerWithMultiAssetSupport.sol";
+import { BoringVault } from "src/base/BoringVault.sol";
+import { DistributorCodeDepositor } from "./DistributorCodeDepositor.sol";
+import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 
 interface WarpRoute {
 
@@ -20,10 +21,11 @@ interface WarpRoute {
 }
 
 /**
- * @notice A simple wrapper to call both `deposit` on a Teller and
- * `transferRemote` on a WarpRoute in one transaction. This contract can only be
- * used with a defined Teller. If a new Teller is deployed, a new Wrapper must
- * be deployed.
+ * @notice A simple wrapper to call `deposit` on a DistributorCodeDepositor(DCD) and
+ * `transferRemote` on a WarpRoute in one transaction.
+ *
+ * This contract can only be used with a defined DCD. If a new DCD is deployed,
+ * a new Wrapper must be deployed.
  *
  * @custom:security-contact security@molecularlabs.io
  */
@@ -31,19 +33,26 @@ contract WarpRouteWrapper {
 
     using SafeTransferLib for ERC20;
 
-    error InvalidDestination();
+    error ZeroAddress();
+    error ETHForwardFailed(uint256 amount);
 
+    DistributorCodeDepositor public immutable dcd;
     BoringVault public immutable boringVault;
-    TellerWithMultiAssetSupport public immutable teller;
     WarpRoute public immutable warpRoute;
     uint32 public immutable destination;
+    address public immutable gasRefundReceiver;
 
-    constructor(TellerWithMultiAssetSupport _teller, WarpRoute _warpRoute, uint32 _destination) {
-        teller = _teller;
+    constructor(DistributorCodeDepositor _dcd, WarpRoute _warpRoute, uint32 _destination, address _gasRefundReceiver) {
+        if (_gasRefundReceiver == address(0)) revert ZeroAddress();
+        if (address(_dcd) == address(0)) revert ZeroAddress();
+        if (address(_warpRoute) == address(0)) revert ZeroAddress();
+
+        dcd = _dcd;
         warpRoute = _warpRoute;
         destination = _destination;
+        gasRefundReceiver = _gasRefundReceiver;
 
-        boringVault = _teller.vault();
+        boringVault = _dcd.teller().vault();
 
         // Infinite approvals to the warpRoute okay because this contract will
         // never hold any balance aside from donations.
@@ -51,19 +60,28 @@ contract WarpRouteWrapper {
     }
 
     /**
-     * @dev There's two sets of approvals this contract needs to grant. It needs
-     * to approve the BoringVault to take its `depositAsset`, and it needs to
-     * approve the WarpRoute to take the BoringVault shares. The latter is done
-     * in the constructor.
+     * @notice Calls `deposit` on the DCD and `transferRemote` on the WarpRoute
+     * in one transaction.
      *
-     * NOTE that the `depositAsset` can vary as the Teller can add new supported
-     * assets.
+     * @dev Two approvals are required: the caller must approve this contract for
+     * `depositAsset`, and this contract approves the DCD for `depositAsset` on
+     * each call. The warpRoute approval for boringVault shares is set once in
+     * the constructor.
+     *
+     * @param depositAsset The ERC20 token to deposit
+     * @param depositAmount The amount to deposit
+     * @param minimumMint Minimum amount of shares (post-fee) to mint. Reverts otherwise.
+     * @param recipient The bridge recipient on the destination chain (as bytes32)
+     * @param distributorCode Indicator for which operator the token gets staked to
+     * @param _attestation Predicate KYT attestation forwarded to the DCD
      */
     function depositAndBridge(
         ERC20 depositAsset,
         uint256 depositAmount,
         uint256 minimumMint,
-        bytes32 recipient
+        bytes32 recipient,
+        bytes calldata distributorCode,
+        Attestation calldata _attestation
     )
         external
         payable
@@ -71,13 +89,35 @@ contract WarpRouteWrapper {
     {
         depositAsset.safeTransferFrom(msg.sender, address(this), depositAmount);
 
-        if (depositAsset.allowance(address(this), address(boringVault)) < depositAmount) {
-            depositAsset.approve(address(boringVault), type(uint256).max);
-        }
+        _tryClearApproval(depositAsset);
+        depositAsset.safeApprove(address(dcd), depositAmount);
 
-        sharesMinted = teller.deposit(depositAsset, depositAmount, minimumMint);
+        sharesMinted =
+            dcd.deposit(depositAsset, depositAmount, minimumMint, address(this), distributorCode, _attestation);
 
         messageId = warpRoute.transferRemote{ value: msg.value }(destination, recipient, sharesMinted);
+
+        // Clear any leftover allowance
+        _tryClearApproval(depositAsset);
+    }
+
+    /**
+     * @notice Receives ETH refunded by the warp route after a bridge call and forwards it to the gas refund receiver.
+     */
+    receive() external payable {
+        (bool success,) = gasRefundReceiver.call{ value: msg.value }("");
+        if (!success) revert ETHForwardFailed(msg.value);
+    }
+
+    /**
+     * @notice Helper function to clear allowance. Helps with weird ERC20s that require a 0 approval before a new one.
+     * And also this does not revert on failure in order to also handle ERC20s that revert on a zero approval.
+     * @dev In the case of a token that reverts on a zero approval AND requires approval set to 0 before a new approval
+     * this will of course fail. But we would consider this a critical flaw of the token itself.
+     */
+    function _tryClearApproval(ERC20 depositAsset) private {
+        // solhint-disable-next-line avoid-low-level-calls
+        address(depositAsset).call(abi.encodeWithSelector(depositAsset.approve.selector, address(dcd), 0));
     }
 
 }

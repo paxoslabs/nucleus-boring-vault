@@ -9,10 +9,12 @@ import { IRateProvider } from "src/interfaces/IRateProvider.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { VaultArchitectureSharedSetup } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
+import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
 import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
+import { IFeeModule } from "src/interfaces/IFeeModule.sol";
+import { Statement, Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 
 interface IERC2612 {
 
@@ -23,6 +25,8 @@ interface IERC2612 {
     function nonces(address owner) external view returns (uint256);
 
 }
+
+uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
 
 contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup {
 
@@ -37,11 +41,19 @@ contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup 
         // Setup forked environment
         string memory rpcKey = "MAINNET_RPC_URL";
         // block at 10/21/2025
-        uint256 blockNumber = 23_628_127;
+        uint256 blockNumber = FORK_BLOCK_NUMBER;
         _startFork(rpcKey, blockNumber);
 
         address WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
         INativeWrapper nativeWrapper = INativeWrapper(WETH);
+
+        // Initialize predicate-related state from parent contract
+        (attesterOne, attesterOnePk) = makeAddrAndKey("attesterOne");
+        policyOne = "policyOne";
+
+        predicateRegistry = IPredicateRegistry(0xe15a8Ca5BD8464283818088c1760d8f23B6a216E);
+        vm.prank(predicateRegistry.owner());
+        predicateRegistry.registerAttester(attesterOne);
 
         // Set up default depositable assets
         address[] memory assets = new address[](1);
@@ -53,7 +65,18 @@ contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup 
         (boringVault, teller, accountant) =
             _deployVaultArchitecture("Ethereum Earn", "earnETH", 18, address(WETH), assets, startingExchangeRate);
         // deploy distributor code depositor
-        distributorCodeDepositor = new DistributorCodeDepositor(teller, nativeWrapper, rolesAuthority, true, owner);
+        distributorCodeDepositor = new DistributorCodeDepositor(
+            teller,
+            nativeWrapper,
+            rolesAuthority,
+            true,
+            type(uint256).max,
+            IFeeModule(address(0)),
+            owner,
+            address(predicateRegistry),
+            policyOne,
+            owner
+        );
 
         vm.startPrank(rolesAuthority.owner());
         rolesAuthority.setPublicCapability(
@@ -82,8 +105,20 @@ contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup 
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
 
         vm.deal(address(this), depositAmount);
+
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid",
+            address(this),
+            address(distributorCodeDepositor),
+            address(WETH),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
         uint256 sharesMinted = distributorCodeDepositor.depositNative{ value: depositAmount }(
-            depositAmount, minimumMint, recipient, "test code"
+            depositAmount, minimumMint, recipient, "test code", attestation
         );
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
         assertEq(
@@ -108,8 +143,20 @@ contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup 
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
 
         vm.deal(address(this), depositAmount);
+
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-sender-recipient",
+            address(this),
+            address(distributorCodeDepositor),
+            address(WETH),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
         uint256 sharesMinted = distributorCodeDepositor.depositNative{ value: depositAmount }(
-            depositAmount, minimumMint, recipient, "test code"
+            depositAmount, minimumMint, recipient, "test code", attestation
         );
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
         assertEq(
@@ -126,9 +173,21 @@ contract DistributorCodeDepositorWithNativeTest is VaultArchitectureSharedSetup 
         address recipient = address(this);
 
         vm.deal(address(this), depositAmount);
+
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-fail",
+            address(this),
+            address(distributorCodeDepositor),
+            address(WETH),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
         vm.expectRevert(DistributorCodeDepositor.IncorrectNativeDepositAmount.selector);
         uint256 sharesMinted =
-            distributorCodeDepositor.depositNative(depositAmount, minimumMint, recipient, "test code");
+            distributorCodeDepositor.depositNative(depositAmount, minimumMint, recipient, "test code", attestation);
     }
 
 }
@@ -149,8 +208,16 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
         // Setup forked environment
         string memory rpcKey = "MAINNET_RPC_URL";
         // block at 10/21/2025
-        uint256 blockNumber = 23_628_127;
+        uint256 blockNumber = FORK_BLOCK_NUMBER;
         _startFork(rpcKey, blockNumber);
+
+        // Initialize predicate-related state from parent contract
+        (attesterOne, attesterOnePk) = makeAddrAndKey("attesterOne");
+        policyOne = "policyOne";
+
+        predicateRegistry = IPredicateRegistry(0xe15a8Ca5BD8464283818088c1760d8f23B6a216E);
+        vm.prank(predicateRegistry.owner());
+        predicateRegistry.registerAttester(attesterOne);
 
         // Set up default depositable assets
         address[] memory assets = new address[](1);
@@ -166,8 +233,18 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
         INativeWrapper nativeWrapper = INativeWrapper(WETH);
 
         // deploy distributor code depositor
-        distributorCodeDepositor =
-            new DistributorCodeDepositor(teller, INativeWrapper(address(0)), rolesAuthority, false, owner);
+        distributorCodeDepositor = new DistributorCodeDepositor(
+            teller,
+            INativeWrapper(address(0)),
+            rolesAuthority,
+            false,
+            type(uint256).max,
+            IFeeModule(address(0)),
+            owner,
+            address(predicateRegistry),
+            policyOne,
+            owner
+        );
 
         vm.startPrank(rolesAuthority.owner());
         rolesAuthority.setPublicCapability(
@@ -188,9 +265,22 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
         address recipient = address(this);
 
         vm.deal(address(this), depositAmount);
+
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-native-fail",
+            address(this),
+            address(distributorCodeDepositor),
+            address(USDC),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
         vm.expectRevert(DistributorCodeDepositor.NativeDepositNotSupported.selector);
-        uint256 sharesMinted =
-            distributorCodeDepositor.depositNative(depositAmount, minimumMint, recipient, "test code");
+        uint256 sharesMinted = distributorCodeDepositor.depositNative{ value: depositAmount }(
+            depositAmount, minimumMint, recipient, "test code", attestation
+        );
     }
 
     function test_depositWithSenderAsRecipient() external {
@@ -211,8 +301,20 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
         USDC.approve(address(distributorCodeDepositor), depositAmount);
 
-        uint256 sharesMinted =
-            distributorCodeDepositor.deposit(ERC20(address(USDC)), depositAmount, minimumMint, recipient, "test code");
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-deposit-sender",
+            address(this),
+            address(distributorCodeDepositor),
+            address(USDC),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
+        uint256 sharesMinted = distributorCodeDepositor.deposit(
+            ERC20(address(USDC)), depositAmount, minimumMint, recipient, "test code", attestation
+        );
 
         assertEq(USDC.balanceOf(owner), 0, "owner must have no deposit asset balance");
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
@@ -235,8 +337,20 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
         USDC.approve(address(distributorCodeDepositor), depositAmount);
 
-        uint256 sharesMinted =
-            distributorCodeDepositor.deposit(ERC20(address(USDC)), depositAmount, minimumMint, recipient, "test code");
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-deposit-custom",
+            address(this),
+            address(distributorCodeDepositor),
+            address(USDC),
+            depositAmount,
+            minimumMint,
+            recipient,
+            "test code"
+        );
+
+        uint256 sharesMinted = distributorCodeDepositor.deposit(
+            ERC20(address(USDC)), depositAmount, minimumMint, recipient, "test code", attestation
+        );
 
         assertEq(USDC.balanceOf(owner), 0, "owner must have no deposit asset balance");
         assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
@@ -248,11 +362,6 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
     function test_depositWithPermitWithSenderAsRecipient() external {
         uint256 depositAmount = 123e6;
-        uint256 minimumMint = 123e6;
-
-        uint256 deadline = block.timestamp + 1000;
-
-        address spender = address(distributorCodeDepositor);
 
         uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC))); // quote / share
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
@@ -263,18 +372,46 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
         _setERC20Balance(address(USDC), owner, depositAmount);
 
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signPermit(IERC2612(address(USDC)), owner, ownerSk, spender, depositAmount, deadline);
+        {
+            (uint8 v, bytes32 r, bytes32 s) = _signPermit(
+                IERC2612(address(USDC)),
+                owner,
+                ownerSk,
+                address(distributorCodeDepositor),
+                depositAmount,
+                block.timestamp + 1000
+            );
 
-        // deposit without approval
-        vm.startPrank(owner);
-        uint256 sharesMinted = distributorCodeDepositor.depositWithPermit(
-            ERC20(address(USDC)), depositAmount, minimumMint, owner, "test code", deadline, v, r, s
-        );
-        vm.stopPrank();
+            Attestation memory attestation = _createAttestationForDeposit(
+                "test-uuid-permit-sender",
+                owner,
+                address(distributorCodeDepositor),
+                address(USDC),
+                depositAmount,
+                depositAmount,
+                owner,
+                "test code"
+            );
 
-        assertEq(USDC.balanceOf(owner), 0, "owner must have no deposit asset balance");
-        assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
+            // deposit without approval
+            vm.startPrank(owner);
+            uint256 sharesMinted = distributorCodeDepositor.depositWithPermit(
+                ERC20(address(USDC)),
+                depositAmount,
+                depositAmount,
+                owner,
+                "test code",
+                attestation,
+                block.timestamp + 1000,
+                v,
+                r,
+                s
+            );
+            vm.stopPrank();
+            assertEq(USDC.balanceOf(owner), 0, "owner must have no deposit asset balance");
+            assertEq(sharesMinted, expectedShares, "shares minted must equal expected shares");
+        }
+
         assertEq(ERC20(address(boringVault)).balanceOf(owner), expectedShares, "recipient must have expected shares");
         assertEq(USDC.balanceOf(address(boringVault)), depositAmount, "boring vault must have deposit asset custody");
     }
@@ -282,10 +419,6 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
     function test_depositWithPermitWithCustomRecipient() external {
         uint256 depositAmount = 123e6;
         uint256 deadline = block.timestamp + 1000;
-
-        address spender = address(distributorCodeDepositor);
-
-        uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC))); // quote / share
 
         // owner is the depositor aka msg.sender to the depositor contract
         uint256 ownerSk = uint256(bytes32("owner_private_key"));
@@ -295,16 +428,38 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
         _setERC20Balance(address(USDC), owner, depositAmount);
 
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signPermit(IERC2612(address(USDC)), owner, ownerSk, spender, depositAmount, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(
+            IERC2612(address(USDC)), owner, ownerSk, address(distributorCodeDepositor), depositAmount, deadline
+        );
+
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-permit-custom",
+            owner,
+            address(distributorCodeDepositor),
+            address(USDC),
+            depositAmount,
+            depositAmount,
+            customRecipient,
+            "test code"
+        );
 
         // deposit without approval
         vm.startPrank(owner);
         uint256 sharesMinted = distributorCodeDepositor.depositWithPermit(
-            ERC20(address(USDC)), depositAmount, depositAmount, customRecipient, "test code", deadline, v, r, s
+            ERC20(address(USDC)),
+            depositAmount,
+            depositAmount,
+            customRecipient,
+            "test code",
+            attestation,
+            deadline,
+            v,
+            r,
+            s
         );
         vm.stopPrank();
 
+        uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC))); // quote / share
         uint256 expectedShares = depositAmount.mulDivDown(ONE_SHARE, quoteRate);
 
         assertEq(USDC.balanceOf(owner), 0, "owner must have no deposit asset balance");
@@ -317,16 +472,13 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
 
     function test_depositWithPermitWithIncorrectSignature() external {
         uint256 depositAmount = 123e6;
-        uint256 minimumMint = 123e6;
         uint256 deadline = block.timestamp + 1000;
         address spender = address(distributorCodeDepositor);
 
         // owner is the depositor aka msg.sender to the depositor contract
-        uint256 ownerSk = uint256(bytes32("owner_private_key"));
-        address owner = vm.addr(ownerSk);
+        address owner = vm.addr(uint256(bytes32("owner_private_key")));
 
         uint256 incorrectSk = uint256(bytes32("incorrect_private_key"));
-        address incorrectOwner = vm.addr(incorrectSk);
 
         _setERC20Balance(address(USDC), owner, depositAmount);
 
@@ -339,11 +491,22 @@ contract DistributorCodeDepositorWithoutNativeTest is VaultArchitectureSharedSet
             deadline
         );
 
+        Attestation memory attestation = _createAttestationForDeposit(
+            "test-uuid-permit-fail",
+            owner,
+            address(distributorCodeDepositor),
+            address(USDC),
+            depositAmount,
+            depositAmount,
+            owner,
+            "test code"
+        );
+
         // deposit without approval
         vm.startPrank(owner);
         vm.expectRevert(abi.encodeWithSelector(DistributorCodeDepositor.PermitFailedAndAllowanceTooLow.selector));
         uint256 sharesMinted = distributorCodeDepositor.depositWithPermit(
-            ERC20(address(USDC)), depositAmount, minimumMint, owner, "test code", deadline, v, r, s
+            ERC20(address(USDC)), depositAmount, depositAmount, owner, "test code", attestation, deadline, v, r, s
         );
         vm.stopPrank();
     }

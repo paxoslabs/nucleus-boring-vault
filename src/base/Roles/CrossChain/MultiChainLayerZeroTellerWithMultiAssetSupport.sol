@@ -63,14 +63,14 @@ contract MultiChainLayerZeroTellerWithMultiAssetSupport is MultiChainTellerBase,
         internal
         override
     {
-        _beforeReceive();
-
         if (!selectorToChains[_origin.srcEid].allowMessagesFrom) {
             revert MultiChainTellerBase_MessagesNotAllowedFrom(_origin.srcEid);
         }
 
         // Decode the payload to get the message
         (uint256 shareAmount, address receiver) = abi.decode(payload, (uint256, address));
+        _beforeReceive(shareAmount, receiver);
+
         vault.enter(address(0), ERC20(address(0)), 0, receiver, shareAmount);
 
         _afterReceive(shareAmount, receiver, _guid);

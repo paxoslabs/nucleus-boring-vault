@@ -58,6 +58,9 @@ library ConfigReader {
         bool distributorCodeDepositorIsNativeDepositSupported;
         address distributorCodeDepositor;
         address nativeWrapper;
+        uint256 distributorCodeDepositorSupplyCap;
+        address registry;
+        string policyID;
         uint256 withdrawQueueFeePercentage;
         string withdrawQueueName;
         string withdrawQueueSymbol;
@@ -126,6 +129,9 @@ library ConfigReader {
         config.distributorCodeDepositorDeploy = _config.readBool(".distributorCodeDepositor.deploy");
         config.distributorCodeDepositorIsNativeDepositSupported =
             _config.readBool(".distributorCodeDepositor.nativeSupported");
+        config.distributorCodeDepositorSupplyCap = _config.readUint(".distributorCodeDepositor.supplyCap");
+        config.registry = _config.readAddress(".distributorCodeDepositor.registry");
+        config.policyID = _config.readString(".distributorCodeDepositor.policyID");
 
         // Reading from the 'withdrawQueue' section
         config.withdrawQueueFeePercentage = uint256(_config.readUint(".withdrawQueue.feePercentage"));

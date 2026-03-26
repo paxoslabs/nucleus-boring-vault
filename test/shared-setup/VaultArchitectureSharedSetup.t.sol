@@ -10,10 +10,19 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { TELLER_ROLE } from "src/helper/Constants.sol";
+import { Statement, Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 
 import { Test, stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 
 import { console } from "forge-std/console.sol";
+
+interface IPredicateRegistry {
+
+    function owner() external view returns (address);
+    function registerAttester(address _attester) external;
+    function hashStatementWithExpiry(Statement memory statement) external view returns (bytes32);
+
+}
 
 abstract contract VaultArchitectureSharedSetup is Test, MainnetAddresses {
 
@@ -34,6 +43,12 @@ abstract contract VaultArchitectureSharedSetup is Test, MainnetAddresses {
     ERC20 internal constant NATIVE_ERC20 = ERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
 
     uint256 internal ONE_SHARE;
+
+    // Predicate-related state variables
+    IPredicateRegistry internal predicateRegistry;
+    address internal attesterOne;
+    uint256 internal attesterOnePk;
+    string internal policyOne;
 
     /**
      * @notice Start a forked environment for testing.}
@@ -117,6 +132,63 @@ abstract contract VaultArchitectureSharedSetup is Test, MainnetAddresses {
                 accountant.setRateProviderData(ERC20(assets[i]), true, address(0));
             }
         }
+    }
+
+    function _createAttestation(
+        string memory uuid,
+        address msgSender,
+        address target,
+        uint256 msgValue,
+        bytes memory encodedSigAndArgs
+    )
+        internal
+        view
+        returns (Attestation memory attestation)
+    {
+        uint256 expireTime = block.timestamp + 1000;
+
+        bytes32 messageHash = predicateRegistry.hashStatementWithExpiry(
+            Statement({
+                uuid: uuid,
+                msgSender: msgSender,
+                target: target,
+                msgValue: msgValue,
+                encodedSigAndArgs: encodedSigAndArgs,
+                policy: policyOne,
+                expiration: expireTime
+            })
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterOnePk, messageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        attestation = Attestation({ uuid: uuid, expiration: expireTime, attester: attesterOne, signature: signature });
+    }
+
+    function _createAttestationForDeposit(
+        string memory uuid,
+        address msgSender,
+        address target,
+        address depositAsset,
+        uint256 depositAmount,
+        uint256 minimumMint,
+        address recipient,
+        bytes memory distributorCode
+    )
+        internal
+        view
+        returns (Attestation memory attestation)
+    {
+        bytes memory encodedSigAndArgs = abi.encodeWithSignature(
+            "deposit(address,uint256,uint256,address,bytes)",
+            depositAsset,
+            depositAmount,
+            minimumMint,
+            recipient,
+            distributorCode
+        );
+
+        return _createAttestation(uuid, msgSender, target, 0, encodedSigAndArgs);
     }
 
 }

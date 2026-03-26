@@ -5,9 +5,9 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { WETH } from "@solmate/tokens/WETH.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
+import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
-import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 import { Auth, Authority } from "@solmate/auth/Auth.sol";
 import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
@@ -15,7 +15,7 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
  * @title TellerWithMultiAssetSupport
  * @custom:security-contact security@molecularlabs.io
  */
-contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuard {
+contract TellerWithMultiAssetSupport is Auth, ReentrancyGuard {
 
     using FixedPointMathLib for uint256;
     using SafeTransferLib for ERC20;
@@ -77,7 +77,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     //============================== ERRORS ===============================
 
     error TellerWithMultiAssetSupport__ShareLockPeriodTooLong();
-    error TellerWithMultiAssetSupport__SharesAreLocked();
     error TellerWithMultiAssetSupport__SharesAreUnLocked();
     error TellerWithMultiAssetSupport__BadDepositHash();
     error TellerWithMultiAssetSupport__AssetNotSupported();
@@ -207,15 +206,6 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
         shareLockPeriod = _shareLockPeriod;
     }
 
-    // ========================================= BeforeTransferHook FUNCTIONS =========================================
-
-    /**
-     * @notice Implement beforeTransfer hook to check if shares are locked.
-     */
-    function beforeTransfer(address from) public view {
-        if (shareUnlockTime[from] > block.timestamp) revert TellerWithMultiAssetSupport__SharesAreLocked();
-    }
-
     // ========================================= REVERT DEPOSIT FUNCTIONS =========================================
 
     /**
@@ -332,6 +322,9 @@ contract TellerWithMultiAssetSupport is Auth, BeforeTransferHook, ReentrancyGuar
     {
         if (isPaused) revert TellerWithMultiAssetSupport__Paused();
         if (!isWithdrawSupported[withdrawAsset]) revert TellerWithMultiAssetSupport__AssetNotSupported();
+
+        BeforeTransferHook hook = vault.hook();
+        if (address(hook) != address(0)) hook.beforeWithdraw(msg.sender, to, msg.sender, shareAmount);
 
         if (shareAmount == 0) revert TellerWithMultiAssetSupport__ZeroShares();
         assetsOut = shareAmount.mulDivDown(accountant.getRateInQuoteSafe(withdrawAsset), ONE_SHARE);
