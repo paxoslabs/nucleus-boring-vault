@@ -19,6 +19,7 @@ contract DeployIonBoringVaultScript is BaseScript {
         // Require config Values
         bytes32 boringVaultSalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":BoringVault")));
+
         require(keccak256(bytes(config.boringVaultName)) != keccak256(bytes("")));
         require(keccak256(bytes(config.boringVaultSymbol)) != keccak256(bytes("")));
 
@@ -41,7 +42,6 @@ contract DeployIonBoringVaultScript is BaseScript {
 
         // Post Deploy Checks
         require(boringVault.owner() == broadcaster, "owner should be the deployer");
-        require(address(boringVault.hook()) == address(0), "before transfer hook should be zero");
         require(
             boringVault.decimals() == ERC20(config.base).decimals(), "boringVault decimals should be the same as base"
         );

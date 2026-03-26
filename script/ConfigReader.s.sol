@@ -68,6 +68,7 @@ library ConfigReader {
         uint256 withdrawQueueMinimumOrderSize;
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
+        address freezeListBeforeTransferHook;
     }
 
     function toConfig(string memory _config, string memory _chainConfig) internal pure returns (Config memory config) {
@@ -140,6 +141,9 @@ library ConfigReader {
         config.withdrawQueueFeeRecipient = _config.readAddress(".withdrawQueue.feeRecipient");
         config.withdrawQueueMinimumOrderSize = uint256(_config.readUint(".withdrawQueue.minimumOrderSize"));
         config.withdrawQueueProcessorAddress = _config.readAddress(".withdrawQueue.processorAddress");
+
+        // Reading from the 'freezeListBeforeTransferHook' section
+        config.freezeListBeforeTransferHook = _config.readAddress(".freezeListBeforeTransferHook.address");
 
         // Reading from the 'chainConfig' section
         config.balancerVault = _chainConfig.readAddress(".balancerVault");

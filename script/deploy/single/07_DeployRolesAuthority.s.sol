@@ -10,8 +10,8 @@ import { BaseScript } from "script/Base.s.sol";
 import { ConfigReader } from "script/ConfigReader.s.sol";
 import { CrossChainTellerBase } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
-
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
+import { FreezeListBeforeTransferHook } from "src/helper/FreezeListBeforeTransferHook.sol";
 import "src/helper/Constants.sol";
 
 /**
@@ -127,6 +127,13 @@ contract DeployRolesAuthority is BaseScript {
         );
         rolesAuthority.setRoleCapability(
             PAUSER_ROLE, config.manager, ManagerWithMerkleVerification.pause.selector, true
+        );
+
+        rolesAuthority.setRoleCapability(
+            FREEZE_MANAGER_ROLE,
+            config.freezeListBeforeTransferHook,
+            FreezeListBeforeTransferHook.setFreezeList.selector,
+            true
         );
 
         // --- Set Public Capabilities ---

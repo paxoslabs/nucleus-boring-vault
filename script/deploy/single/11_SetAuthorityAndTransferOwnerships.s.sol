@@ -26,6 +26,10 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(address(config.accountant) != address(0), "accountant must not be zero address");
         require(address(config.teller) != address(0), "teller must not be zero address");
         require(address(config.withdrawQueue) != address(0), "withdrawQueue must not be zero address");
+        require(
+            address(config.freezeListBeforeTransferHook) != address(0),
+            "freezeListBeforeTransferHook must not be zero address"
+        );
 
         require(address(config.boringVault).code.length != 0, "boringVault must have code");
         require(address(config.manager).code.length != 0, "manager must have code");
@@ -34,6 +38,9 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(address(config.withdrawQueue).code.length != 0, "withdrawQueue must have code");
         require(config.rolesAuthority != address(0), "rolesAuthority");
         require(config.protocolAdmin != address(0), "protocolAdmin");
+        require(
+            address(config.freezeListBeforeTransferHook).code.length != 0, "freezeListBeforeTransferHook must have code"
+        );
 
         require(
             address(WithdrawQueue(config.withdrawQueue).feeModule()) != address(0),
@@ -50,12 +57,15 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         IAuthority(config.manager).setAuthority(config.rolesAuthority);
         IAuthority(config.teller).setAuthority(config.rolesAuthority);
         IAuthority(config.withdrawQueue).setAuthority(config.rolesAuthority);
+        IAuthority(config.freezeListBeforeTransferHook).setAuthority(config.rolesAuthority);
+
         IAuthority(config.boringVault).transferOwnership(config.protocolAdmin);
         IAuthority(config.manager).transferOwnership(config.protocolAdmin);
         IAuthority(config.accountant).transferOwnership(config.protocolAdmin);
         IAuthority(config.teller).transferOwnership(config.protocolAdmin);
         IAuthority(config.withdrawQueue).transferOwnership(config.protocolAdmin);
         IAuthority(config.rolesAuthority).transferOwnership(config.protocolAdmin);
+        IAuthority(config.freezeListBeforeTransferHook).transferOwnership(config.protocolAdmin);
 
         // No need to transfer ownership to distributor code depositor as it is set to protocolAdmin in deployment.
 
@@ -65,6 +75,10 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(IAuthority(config.accountant).owner() == config.protocolAdmin, "accountant");
         require(IAuthority(config.teller).owner() == config.protocolAdmin, "teller");
         require(IAuthority(config.withdrawQueue).owner() == config.protocolAdmin, "withdrawQueue");
+        require(
+            IAuthority(config.freezeListBeforeTransferHook).owner() == config.protocolAdmin,
+            "freezeListBeforeTransferHook"
+        );
         if (config.distributorCodeDepositorDeploy) {
             require(
                 IAuthority(config.distributorCodeDepositor).owner() == config.protocolAdmin, "distributorCodeDepositor"

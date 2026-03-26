@@ -1,11 +1,14 @@
 {
-  "nameEntropy": "soohoUSDGt",
+  "nameEntropy": "soohoUSDGt2",
   "base": "0x25bB581e8f56fD1F1ED29C48324727aD1b3A4c68",
   "protocolAdmin": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
   "boringVaultAndBaseDecimals": "6",
   "boringVault": {
     "boringVaultName": "Sooho USDG Treasury",
     "boringVaultSymbol": "soohoUSDGt",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "freezeListBeforeTransferHook": {
     "address": "0x0000000000000000000000000000000000000000"
   },
   "manager": {
@@ -52,6 +55,9 @@
   },
   "distributorCodeDepositor": {
     "deploy": true,
+    "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "policyID": "",
     "nativeSupported": false
   },
   "withdrawQueue": {
