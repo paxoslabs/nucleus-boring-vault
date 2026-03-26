@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 import { DeployAll } from "script/deploy/deployAll.s.sol";
 import { ConfigReader } from "script/ConfigReader.s.sol";
-import { SOLVER_ROLE } from "script/deploy/single/06_DeployRolesAuthority.s.sol";
+import { SOLVER_ROLE } from "script/deploy/single/07_DeployRolesAuthority.s.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";

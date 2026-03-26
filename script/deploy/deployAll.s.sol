@@ -8,19 +8,19 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 // import {DeployRateProviders} from "./single/01_DeployRateProviders.s.sol";
 import { DeployIonBoringVaultScript } from "./single/02_DeployBoringVault.s.sol";
-import { DeployFreezeListBeforeTransferHookScript } from "./single/02a_DeployFreezeListBeforeTransferHook.s.sol";
-import { DeployManagerWithMerkleVerification } from "./single/03_DeployManagerWithMerkleVerification.s.sol";
-import { DeployAccountantWithRateProviders } from "./single/04_DeployAccountantWithRateProviders.s.sol";
-import { DeployTellerWithMultiAssetSupport } from "./single/05_DeployTellerWithMultiAssetSupport.s.sol";
+import { DeployFreezeListBeforeTransferHookScript } from "./single/03_DeployFreezeListBeforeTransferHook.s.sol";
+import { DeployManagerWithMerkleVerification } from "./single/04_DeployManagerWithMerkleVerification.s.sol";
+import { DeployAccountantWithRateProviders } from "./single/05_DeployAccountantWithRateProviders.s.sol";
+import { DeployTellerWithMultiAssetSupport } from "./single/06_DeployTellerWithMultiAssetSupport.s.sol";
 import {
     DeployMultiChainLayerZeroTellerWithMultiAssetSupport
-} from "./single/05b_DeployMultiChainLayerZeroTellerWithMultiAssetSupport.s.sol";
-import { DeployMultiChainHyperlaneTeller } from "./single/05c_DeployMultiChainHyperlaneTeller.s.sol";
-import { DeployRolesAuthority } from "./single/06_DeployRolesAuthority.s.sol";
-import { TellerSetup } from "./single/07_TellerSetup.s.sol";
-import { DeployDistributorCodeDepositor } from "./single/08_DeployDistributorCodeDepositor.s.sol";
-import { DeployWithdrawQueueAndFeeModule } from "./single/09_DeployWithdrawQueueAndFeeModule.s.sol";
-import { SetAuthorityAndTransferOwnerships } from "./single/10_SetAuthorityAndTransferOwnerships.s.sol";
+} from "./single/06b_DeployMultiChainLayerZeroTellerWithMultiAssetSupport.s.sol";
+import { DeployMultiChainHyperlaneTeller } from "./single/06c_DeployMultiChainHyperlaneTeller.s.sol";
+import { DeployRolesAuthority } from "./single/07_DeployRolesAuthority.s.sol";
+import { TellerSetup } from "./single/08_TellerSetup.s.sol";
+import { DeployDistributorCodeDepositor } from "./single/09_DeployDistributorCodeDepositor.s.sol";
+import { DeployWithdrawQueueAndFeeModule } from "./single/10_DeployWithdrawQueueAndFeeModule.s.sol";
+import { SetAuthorityAndTransferOwnerships } from "./single/11_SetAuthorityAndTransferOwnerships.s.sol";
 
 import { ConfigReader, IAuthority } from "../ConfigReader.s.sol";
 import { console } from "forge-std/console.sol";
