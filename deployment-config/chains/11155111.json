@@ -3,5 +3,12 @@
     "balancerVault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
     "lzEndpoint": "0x6EDCE65403992e310A62460808c4b910D972f10f",
     "mailbox": "0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766",
-    "nativeWrapper": "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+    "nativeWrapper": "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+    "assetToRateProviderAndPriceFeed": {
+    "maxTimeFromLastUpdate": "86400",
+    "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    }
   }
+}
