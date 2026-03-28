@@ -168,9 +168,7 @@ contract DeployRolesAuthority is BaseScript {
 
         rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);
         rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
-        if (config.pauser != address(0)) {
-            rolesAuthority.setUserRole(config.pauser, PAUSER_ROLE, true);
-        }
+        rolesAuthority.setUserRole(PAUSER_CONTRACT, PAUSER_ROLE, true);
 
         // Post Deploy Checks
         require(
@@ -197,9 +195,8 @@ contract DeployRolesAuthority is BaseScript {
             );
         }
 
-        if (config.pauser != address(0)) {
-            require(rolesAuthority.doesUserHaveRole(config.pauser, PAUSER_ROLE), "pauser should have PAUSER_ROLE");
-        }
+        require(rolesAuthority.doesUserHaveRole(PAUSER_CONTRACT, PAUSER_ROLE), "pauser should have PAUSER_ROLE");
+        require(rolesAuthority.doesUserHaveRole(PAUSER_EOA, PAUSER_ROLE), "pauser eoa should have PAUSER_ROLE");
 
         require(
             rolesAuthority.canCall(
@@ -252,9 +249,8 @@ contract DeployRolesAuthority is BaseScript {
 
         // Pauser Roles
         _validatePauserRole(config, rolesAuthority, config.protocolAdmin);
-        if (config.pauser != address(0)) {
-            _validatePauserRole(config, rolesAuthority, config.pauser);
-        }
+        _validatePauserRole(config, rolesAuthority, PAUSER_EOA);
+        _validatePauserRole(config, rolesAuthority, PAUSER_CONTRACT);
 
         return address(rolesAuthority);
     }

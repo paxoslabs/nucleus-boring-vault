@@ -48,7 +48,6 @@
   "rolesAuthority": {
     "strategist": "0xD58EF3c6FEFFE90a0e2760C3dd3693310DD15786",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
-    "pauser": "0x07F99eF00C778d5D30e86C2EDB15E69e8763D5f7",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "distributorCodeDepositor": {

@@ -47,7 +47,6 @@ library ConfigReader {
         string tellerContractName;
         address strategist;
         address exchangeRateBot;
-        address pauser;
         address rolesAuthority;
         uint256 maxTimeFromLastUpdate;
         address[] withdrawAssets;
@@ -124,7 +123,6 @@ library ConfigReader {
         config.rolesAuthority = _config.readAddress(".rolesAuthority.address");
         config.strategist = _config.readAddress(".rolesAuthority.strategist");
         config.exchangeRateBot = _config.readAddress(".rolesAuthority.exchangeRateBot");
-        config.pauser = _config.readAddress(".rolesAuthority.pauser");
 
         // Reading from the 'distributorCodeDepositor' section
         config.distributorCodeDepositorDeploy = _config.readBool(".distributorCodeDepositor.deploy");
