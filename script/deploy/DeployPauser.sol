@@ -21,7 +21,7 @@ contract DeployPauser is BaseScript {
 
         bytes memory creationCode = type(Pauser).creationCode;
         pauser = Pauser(CREATEX.deployCreate3(salt, abi.encodePacked(creationCode, abi.encode(admin, approvedPausers))));
-        require(address(pauser) == PAUSER_EOA, "pauser salt does not resolve to expected address - check deployer");
+        require(address(pauser) == PAUSER_CONTRACT, "pauser salt does not resolve to expected address - check deployer");
         require(pauser.owner() == admin);
         require(pauser.isApprovedPauser(approvedPausers[0]));
         console.log("Pauser Address: ", address(pauser));
