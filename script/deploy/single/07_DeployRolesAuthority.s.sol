@@ -167,6 +167,7 @@ contract DeployRolesAuthority is BaseScript {
         }
 
         rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);
+        rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
         if (config.pauser != address(0)) {
             rolesAuthority.setUserRole(config.pauser, PAUSER_ROLE, true);
         }
