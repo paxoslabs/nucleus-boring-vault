@@ -5,7 +5,7 @@ import { Pauser } from "src/helper/Pauser.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BaseScript } from "../Base.s.sol";
 import "@forge-std/Script.sol";
-import "src/helpers/Constants.sol";
+import "src/helper/Constants.sol";
 
 contract DeployPauser is BaseScript {
 
