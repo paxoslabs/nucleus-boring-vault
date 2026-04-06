@@ -10,11 +10,11 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
-import { DirectTransferAddress1 } from "src/helper/DirectTransferAddress1.sol";
-import { DirectTransferAddress2 } from "src/helper/DirectTransferAddress2.sol";
+import { DirectTransferAddress1 } from "src/direct-transfer/DirectTransferAddress1.sol";
+import { DirectTransferAddress2 } from "src/direct-transfer/DirectTransferAddress2.sol";
+import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
-import { ICreateX } from "src/interfaces/ICreateX.sol";
 import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
@@ -26,65 +26,6 @@ import { console } from "forge-std/console.sol";
     ERC1967 storage slot overhead.
 //////////////////////////////////////////////////////////////*/
 
-/// @notice Minimal UpgradeableBeacon compatible with Shanghai EVM.
-contract SimpleBeacon {
-
-    address public implementation;
-    address public owner;
-
-    error NotOwner();
-    error InvalidImplementation(address impl);
-
-    event Upgraded(address indexed implementation);
-
-    constructor(address _implementation, address _owner) {
-        if (_implementation.code.length == 0) revert InvalidImplementation(_implementation);
-        implementation = _implementation;
-        owner = _owner;
-    }
-
-    function upgradeTo(address newImplementation) external {
-        if (msg.sender != owner) revert NotOwner();
-        if (newImplementation.code.length == 0) revert InvalidImplementation(newImplementation);
-        implementation = newImplementation;
-        emit Upgraded(newImplementation);
-    }
-
-}
-
-/// @notice Minimal BeaconProxy compatible with Shanghai EVM.
-///         Stores the beacon address as an immutable and delegates all calls to the beacon's implementation.
-contract SimpleBeaconProxy {
-
-    address private immutable _beacon;
-
-    constructor(address beacon_, bytes memory data) {
-        _beacon = beacon_;
-        if (data.length > 0) {
-            address impl = SimpleBeacon(beacon_).implementation();
-            (bool success, bytes memory returndata) = impl.delegatecall(data);
-            if (!success) {
-                assembly {
-                    revert(add(returndata, 32), mload(returndata))
-                }
-            }
-        }
-    }
-
-    fallback() external payable {
-        address impl = SimpleBeacon(_beacon).implementation();
-        assembly {
-            calldatacopy(0, 0, calldatasize())
-            let result := delegatecall(gas(), impl, 0, calldatasize(), 0, 0)
-            returndatacopy(0, 0, returndatasize())
-            switch result
-            case 0 { revert(0, returndatasize()) }
-            default { return(0, returndatasize()) }
-        }
-    }
-
-}
-
 uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
 
 contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
@@ -93,15 +34,18 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     using FixedPointMathLib for uint256;
     using stdStorage for StdStorage;
 
-    ICreateX public constant CREATEX = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
-
     DistributorCodeDepositor public dcd;
-    SimpleBeacon public beacon;
+    FactoryBeacon public beacon;
     address public owner = vm.addr(uint256(bytes32("owner")));
 
     address[5] public users;
     address[5] public dtas; // Direct Transfer Addresses (proxies)
 
+    // Example UUID -> bytes 32
+    // Can be converted like:
+    // const key = "0x" + uuid.replace(/-/g, "").padEnd(64, "0"); // preserves UUID
+    bytes32 public constant ORGANIZATION_ID =
+        bytes32(0x700768aec71d42cc9ff913b777d6d37900000000000000000000000000000000);
     uint256 public constant DEPOSIT_AMOUNT = 1000e6; // 1000 USDC
 
     function setUp() public {
@@ -147,64 +91,6 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        DTA DEPLOYMENT HELPER
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Deploys a SimpleBeaconProxy for a user via CREATEX with a deterministic address.
-    /// @dev The salt is derived from (deployer, crosschainProtected=true, hash(user, dcd)).
-    ///      Anyone can verify a DTA address is correct just from the user address and DCD address.
-    function _deployDTA(
-        SimpleBeacon _beacon,
-        DistributorCodeDepositor _dcd,
-        address user
-    )
-        internal
-        returns (address dta)
-    {
-        bytes32 salt = _makeDTASalt(address(this), _dcd, user);
-
-        // Build SimpleBeaconProxy creation code with initialize calldata
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, user);
-        bytes memory creationCode =
-            abi.encodePacked(type(SimpleBeaconProxy).creationCode, abi.encode(address(_beacon), initData));
-
-        dta = CREATEX.deployCreate3(salt, creationCode);
-    }
-
-    /// @notice Computes the deterministic salt for a DTA deployment.
-    function _makeDTASalt(
-        address deployer,
-        DistributorCodeDepositor _dcd,
-        address user
-    )
-        internal
-        pure
-        returns (bytes32)
-    {
-        bytes1 crosschainProtectionFlag = bytes1(0x01);
-        bytes32 nameEntropyHash = keccak256(abi.encodePacked(user, address(_dcd)));
-        bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
-        return bytes32(abi.encodePacked(deployer, crosschainProtectionFlag, nameEntropyHash11));
-    }
-
-    /// @notice Computes the expected DTA address without deploying.
-    /// @dev Replicates CREATEX's _guard logic for (MsgSender, CrosschainProtected=true):
-    ///      guardedSalt = keccak256(abi.encode(msg.sender, block.chainid, salt))
-    function _computeDTAAddress(
-        address deployer,
-        DistributorCodeDepositor _dcd,
-        address user
-    )
-        internal
-        view
-        returns (address)
-    {
-        bytes32 salt = _makeDTASalt(deployer, _dcd, user);
-        bytes32 guardedSalt = keccak256(abi.encode(deployer, block.chainid, salt));
-        return CREATEX.computeCreate3Address(guardedSalt, address(CREATEX));
-    }
-
-    /*//////////////////////////////////////////////////////////////
                               TEST 1
         Deploy impl1 + beacon, create 5 DTA proxies via CREATEX,
         fund each with USDC, forward into vault, verify shares.
@@ -213,14 +99,14 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     function test_setup5Users() public {
         // Deploy implementation and beacon
         DirectTransferAddress1 impl = new DirectTransferAddress1(dcd);
-        beacon = new SimpleBeacon(address(impl), address(this));
+        beacon = new FactoryBeacon(address(impl), address(this));
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            dtas[i] = _deployDTA(beacon, dcd, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
 
             // Verify the deployed address matches the deterministic computation
-            address expected = _computeDTAAddress(address(this), dcd, users[i]);
+            address expected = beacon.computeDTAAddress(dcd, ORGANIZATION_ID, users[i], address(USDC));
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
@@ -254,11 +140,11 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     function test_upgradeDCDFor5Users() public {
         // Deploy first DCD + implementation + beacon
         DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
-        beacon = new SimpleBeacon(address(impl1), address(this));
+        beacon = new FactoryBeacon(address(impl1), address(this));
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {
-            dtas[i] = _deployDTA(beacon, dcd, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Verify initial DCD
@@ -326,10 +212,10 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     function test_upgradeImplementationFor5Users() public {
         // Deploy impl1 + beacon + 5 proxies
         DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
-        beacon = new SimpleBeacon(address(impl1), address(this));
+        beacon = new FactoryBeacon(address(impl1), address(this));
 
         for (uint256 i; i < 5; i++) {
-            dtas[i] = _deployDTA(beacon, dcd, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Fund each DTA with some extra tokens (simulating stuck funds)
