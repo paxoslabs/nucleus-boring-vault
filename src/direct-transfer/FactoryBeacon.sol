@@ -19,6 +19,12 @@ contract FactoryBeacon is SimpleBeacon {
 
     /// @notice Deploys a DTA beacon proxy via CREATEX with a deterministic address.
     /// @dev The beacon is always this factory contract.
+    /// @param organizationId Organization identifier as bytes32, typically a UUID hex string left-padded to 32 bytes.
+    /// Example:
+    /// import { Hex, size } from 'viem'
+    /// const organizationId = "700768ae-c71d-42cc-9ff9-13b777d6d379"
+    /// const organizationIdAsBytes32 = `0x${uuid.replaceAll('-', '').padStart(64, '0')}` as Hex
+    /// invariant(size === 32)
     function deployBeaconProxy(
         DistributorCodeDepositor _dcd,
         bytes32 organizationId,
