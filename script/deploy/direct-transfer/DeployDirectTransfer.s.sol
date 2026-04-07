@@ -15,15 +15,24 @@ contract DeployDirectTransfer is BaseScript {
         // https://paxoslabs.slack.com/archives/C09E8FBMA3T/p1774381184792619?thread_ts=1774378030.319969&cid=C09E8FBMA3T
         address dcdAddress = address(0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843);
         address beaconOwner = broadcaster;
-        address proxyReceiver = broadcaster;
 
-        DirectTransferAddress2 implementation = new DirectTransferAddress2(DistributorCodeDepositor(dcdAddress));
-        FactoryBeacon beacon = new FactoryBeacon(address(implementation), beaconOwner);
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress2.initialize.selector, proxyReceiver);
+        bytes32 implSalt = makeSalt(broadcaster, true, "DirectTransferAddress2:implementation");
+        bytes32 beaconSalt = makeSalt(broadcaster, true, "DirectTransferAddress2:FactoryBeacon");
 
-        console.log("DirectTransferAddress2 implementation:", address(implementation));
-        console.log("FactoryBeacon:", address(beacon));
-        console.log("FactoryBeacon owner:", beacon.owner());
+        // Deploy implementation via CREATEX for consistent cross-chain address
+        bytes memory implCreationCode = type(DirectTransferAddress2).creationCode;
+        address implementation =
+            CREATEX.deployCreate3(implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress)));
+
+        // Deploy FactoryBeacon via CREATEX for consistent cross-chain address
+        bytes memory beaconCreationCode = type(FactoryBeacon).creationCode;
+        address beacon = CREATEX.deployCreate3(
+            beaconSalt, abi.encodePacked(beaconCreationCode, abi.encode(implementation, beaconOwner))
+        );
+
+        console.log("DirectTransferAddress2 implementation:", implementation);
+        console.log("FactoryBeacon:", beacon);
+        console.log("FactoryBeacon owner:", FactoryBeacon(beacon).owner());
     }
 
 }
