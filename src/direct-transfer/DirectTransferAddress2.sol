@@ -46,12 +46,11 @@ contract DirectTransferAddress2 {
     /// @notice Approves USDC to the DCD and deposits on behalf of the receiver.
     /// @param amount The amount of USDC to forward.
     /// @return shares The vault shares minted to the receiver.
-    function forward(uint256 amount) external returns (uint256 shares) {
+    function forward(uint256 amount, Attestation calldata attestation) external returns (uint256 shares) {
         ERC20 usdc = ERC20(USDC);
-        Attestation memory emptyAttestation;
 
         usdc.safeApprove(address(DCD), amount);
-        shares = DCD.deposit(usdc, amount, 0, receiver, "", emptyAttestation);
+        shares = DCD.deposit(usdc, amount, 0, receiver, "", attestation);
     }
 
     /// @notice Recovers tokens stuck in this proxy by transferring them to a specified address.

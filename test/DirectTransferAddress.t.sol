@@ -246,7 +246,14 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         for (uint256 i; i < 5; i++) {
             _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
 
-            DirectTransferAddress2(dtas[i]).forward(DEPOSIT_AMOUNT);
+            Attestation memory emptyAttestation = Attestation({
+                uuid: "0x0000000000000000000000000000000000000000000000000000000000000000",
+                expiration: block.timestamp + 1000,
+                attester: attesterOne,
+                signature: new bytes(0)
+            });
+
+            DirectTransferAddress2(dtas[i]).forward(DEPOSIT_AMOUNT, emptyAttestation);
 
             uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
             uint256 expectedShares = DEPOSIT_AMOUNT.mulDivDown(ONE_SHARE, quoteRate);
