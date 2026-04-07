@@ -9,6 +9,10 @@
     "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": {
       "isPegged": true,
       "rateProvider": "0x0000000000000000000000000000000000000000"
+    },
+    "0xfbb2a78cceeb415b00300925e464c3e44e6e06b0": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
     }
   }
 }

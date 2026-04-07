@@ -1,0 +1,69 @@
+{
+  "nameEntropy": "bkeyUSDGt2.2",
+  "base": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "protocolAdmin": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+  "boringVaultAndBaseDecimals": "6",
+  "boringVault": {
+    "boringVaultName": "BKey USDG Treasury Account",
+    "boringVaultSymbol": "bkeyUSDGt",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "freezeListBeforeTransferHook": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "manager": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "accountant": {
+    "payoutAddress": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "allowedExchangeRateChangeUpper": "10000",
+    "allowedExchangeRateChangeLower": "10000",
+    "minimumUpdateDelayInSeconds": "3600",
+    "managementFee": "0",
+    "performanceFee": "0",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "teller": {
+    "maxGasForPeer": 100000,
+    "minGasForPeer": 0,
+    "peerEid": 40245,
+    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "withdrawAssets": [
+    ],
+    "depositAssets": [
+    ],
+    "dvnIfNoDefault": {
+      "required": [
+        "0x8eebf8b423b73bfca51a1db4b7354aa0bfca9193"
+      ],
+      "optional": [
+        "0x68802e01d6321d5159208478f297d7007a7516ed",
+        "0xdd7b5e1db4aafd5c8ec3b764efb8ed265aa5445b",
+        "0x9efba56c8598853e5b40fd9a66b54a6c163742d7"
+      ],
+      "blockConfirmationsRequiredIfNoDefault": 15,
+      "optionalThreshold": 1
+    },
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "rolesAuthority": {
+    "strategist": "0xD58EF3c6FEFFE90a0e2760C3dd3693310DD15786",
+    "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "distributorCodeDepositor": {
+    "deploy": true,
+    "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "policyID": "",
+    "nativeSupported": false
+  },
+  "withdrawQueue": {
+    "name": "BKey USDG Treasury Account Withdraw Queue",
+    "symbol": "bkeyUSDGtQ",
+    "feeRecipient": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "feePercentage": "0",
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0xaa77cD1Ca296a537FE6b4847e5CfBF4a0A44c7b1"
+  }
+}

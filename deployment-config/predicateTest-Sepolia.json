@@ -1,0 +1,68 @@
+{
+  "nameEntropy": "TestVault-Sepolia",
+  "base": "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0",
+  "protocolAdmin": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+  "boringVaultAndBaseDecimals": "6",
+  "boringVault": {
+    "boringVaultName": "Test",
+    "boringVaultSymbol": "TEST",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "freezeListBeforeTransferHook": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "manager": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "accountant": {
+    "payoutAddress": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "allowedExchangeRateChangeUpper": "10003",
+    "allowedExchangeRateChangeLower": "9998",
+    "minimumUpdateDelayInSeconds": "3600",
+    "managementFee": "0",
+    "performanceFee": "0",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "teller": {
+    "maxGasForPeer": 100000,
+    "minGasForPeer": 0,
+    "peerEid": 0,
+    "tellerContractName": "TellerWithMultiAssetSupport",
+    "withdrawAssets": [
+      "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0"
+    ],
+    "depositAssets": [
+      "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0"
+    ],
+    "dvnIfNoDefault": {
+      "required": [
+      ],
+      "optional": [
+      ],
+      "blockConfirmationsRequiredIfNoDefault": 15,
+      "optionalThreshold": 1
+    },
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "rolesAuthority": {
+    "strategist": "0x37773374B444fFD32C830124f62050F3e877d213",
+    "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
+    "pauser": "0xe5CcB29Cb9C886da329098A184302E2D5Ff0cD9E",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "distributorCodeDepositor": {
+    "deploy": true,
+    "nativeSupported": false,
+    "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "policyID": "x-managed-policy-6d40b7743a051caf8bc65a10b40e882c"
+  },
+  "withdrawQueue": {
+    "name": "Example Withdraw Queue",
+    "symbol": "EWQ",
+    "feeRecipient": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
+    "feePercentage": "0",
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0x71939D540a3D0683ddea87B99981aD41F457cAdb"
+  }
+}
