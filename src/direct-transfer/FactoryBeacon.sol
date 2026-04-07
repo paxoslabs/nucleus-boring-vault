@@ -28,7 +28,7 @@ contract FactoryBeacon is SimpleBeacon {
         external
         returns (address dta)
     {
-        bytes32 salt = makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
+        bytes32 salt = _makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, userDestinationAddress);
         bytes memory creationCode =
@@ -37,24 +37,6 @@ contract FactoryBeacon is SimpleBeacon {
 
         // TODO: add other salt components in here
         emit BeaconProxyDeployed(dta, userDestinationAddress, salt);
-    }
-
-    /// @notice Computes the deterministic salt for a DTA deployment.
-    function makeDTASalt(
-        DistributorCodeDepositor _dcd,
-        bytes32 organizationId,
-        address userDestinationAddress,
-        address inputToken
-    )
-        public
-        view
-        returns (bytes32)
-    {
-        bytes1 crosschainProtectionFlag = bytes1(0x01);
-        bytes32 nameEntropyHash =
-            keccak256(abi.encodePacked(address(_dcd), organizationId, userDestinationAddress, inputToken));
-        bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
-        return bytes32(abi.encodePacked(address(this), crosschainProtectionFlag, nameEntropyHash11));
     }
 
     /// @notice Computes the expected DTA address without deploying.
@@ -70,9 +52,27 @@ contract FactoryBeacon is SimpleBeacon {
         view
         returns (address)
     {
-        bytes32 salt = makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
+        bytes32 salt = _makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
         bytes32 guardedSalt = keccak256(abi.encode(address(this), block.chainid, salt));
         return CREATEX.computeCreate3Address(guardedSalt, address(CREATEX));
+    }
+
+    /// @notice Computes the deterministic salt for a DTA deployment.
+    function _makeDTASalt(
+        DistributorCodeDepositor _dcd,
+        bytes32 organizationId,
+        address userDestinationAddress,
+        address inputToken
+    )
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes1 crosschainProtectionFlag = bytes1(0x01);
+        bytes32 nameEntropyHash =
+            keccak256(abi.encodePacked(address(_dcd), organizationId, userDestinationAddress, inputToken));
+        bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
+        return bytes32(abi.encodePacked(address(this), crosschainProtectionFlag, nameEntropyHash11));
     }
 
 }
