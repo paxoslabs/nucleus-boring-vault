@@ -16,8 +16,10 @@ contract DeployDirectTransfer is BaseScript {
         address dcdAddress = address(0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843);
         address beaconOwner = broadcaster;
 
-        bytes32 implSalt = makeSalt(broadcaster, true, "DirectTransferAddress2:implementation");
-        bytes32 beaconSalt = makeSalt(broadcaster, true, "DirectTransferAddress2:FactoryBeacon");
+        // isCrosschainProtected=false because we want the same implementation and FactoryBeacon addresses across all
+        // chains
+        bytes32 implSalt = makeSalt(broadcaster, false, "DirectTransferAddress2:implementation");
+        bytes32 beaconSalt = makeSalt(broadcaster, false, "DirectTransferAddress2:FactoryBeacon");
 
         // Deploy implementation via CREATEX for consistent cross-chain address
         bytes memory implCreationCode = type(DirectTransferAddress2).creationCode;
