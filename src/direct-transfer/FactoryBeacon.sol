@@ -4,7 +4,6 @@ pragma solidity 0.8.21;
 import { SimpleBeacon } from "src/direct-transfer/SimpleBeacon.sol";
 import { SimpleBeaconProxy } from "src/direct-transfer/SimpleBeaconProxy.sol";
 import { DirectTransferAddress1 } from "src/direct-transfer/DirectTransferAddress1.sol";
-import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { ICreateX } from "src/interfaces/ICreateX.sol";
 
 /// @notice Dual-purpose Beacon and Factory contract. Holds implementation
@@ -26,7 +25,7 @@ contract FactoryBeacon is SimpleBeacon {
     /// const organizationIdAsBytes32 = `0x${uuid.replaceAll('-', '').padStart(64, '0')}` as Hex
     /// invariant(size === 32)
     function deployBeaconProxy(
-        DistributorCodeDepositor _dcd,
+        address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
         address inputToken
@@ -34,7 +33,8 @@ contract FactoryBeacon is SimpleBeacon {
         external
         returns (address dta)
     {
-        bytes32 salt = _makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
+        bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
+        // TODO: change selector to latest implementation's selector, so we can upgrade initializable params too.
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, userDestinationAddress);
         bytes memory creationCode =
@@ -49,7 +49,7 @@ contract FactoryBeacon is SimpleBeacon {
     /// @dev Replicates CREATEX's _guard logic for (MsgSender, CrosschainProtected=true):
     ///      guardedSalt = keccak256(abi.encode(msg.sender, block.chainid, salt))
     function computeDTAAddress(
-        DistributorCodeDepositor _dcd,
+        address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
         address inputToken
@@ -58,14 +58,14 @@ contract FactoryBeacon is SimpleBeacon {
         view
         returns (address)
     {
-        bytes32 salt = _makeDTASalt(_dcd, organizationId, userDestinationAddress, inputToken);
+        bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
         bytes32 guardedSalt = keccak256(abi.encode(address(this), block.chainid, salt));
         return CREATEX.computeCreate3Address(guardedSalt, address(CREATEX));
     }
 
     /// @notice Computes the deterministic salt for a DTA deployment.
     function _makeDTASalt(
-        DistributorCodeDepositor _dcd,
+        address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
         address inputToken
@@ -76,7 +76,7 @@ contract FactoryBeacon is SimpleBeacon {
     {
         bytes1 crosschainProtectionFlag = bytes1(0x01);
         bytes32 nameEntropyHash =
-            keccak256(abi.encodePacked(address(_dcd), organizationId, userDestinationAddress, inputToken));
+            keccak256(abi.encodePacked(boringVault, organizationId, userDestinationAddress, inputToken));
         bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
         return bytes32(abi.encodePacked(address(this), crosschainProtectionFlag, nameEntropyHash11));
     }

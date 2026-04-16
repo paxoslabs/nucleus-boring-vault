@@ -103,10 +103,10 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
+            dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
 
             // Verify the deployed address matches the deterministic computation
-            address expected = beacon.computeDTAAddress(dcd, ORGANIZATION_ID, users[i], address(USDC));
+            address expected = beacon.computeDTAAddress(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
@@ -144,7 +144,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
+            dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Verify initial DCD
@@ -215,7 +215,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         beacon = new FactoryBeacon(address(impl1), address(this));
 
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(dcd, ORGANIZATION_ID, users[i], address(USDC));
+            dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Fund each DTA with some extra tokens (simulating stuck funds)
