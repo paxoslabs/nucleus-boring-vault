@@ -21,3 +21,6 @@ broadcast/*
 node_modules/
 
 .vscode
+
+slither-out/
+*.pyc
