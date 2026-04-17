@@ -59,16 +59,12 @@ contract DirectTransferAddress {
 
     error DirectTransferAddress__AlreadyInitialized();
     error DirectTransferAddress__NotOwner();
-    error DirectTransferAddress__ZeroAddress();
 
     /// @param _dcd The DistributorCodeDepositor contract for this beacon's proxies.
     /// @param _owner The only address allowed to call forward(), refund(), and recover().
     /// @param _recoveryAccount Recovery sink for recover().
     /// @param _token The stablecoin this implementation handles (e.g. USDC, USDT).
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
-        if (_owner == address(0) || _recoveryAccount == address(0) || address(_token) == address(0)) {
-            revert DirectTransferAddress__ZeroAddress();
-        }
         DCD = _dcd;
         owner = _owner;
         recoveryAccount = _recoveryAccount;
