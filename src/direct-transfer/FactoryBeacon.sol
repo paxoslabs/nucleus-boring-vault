@@ -51,6 +51,8 @@ contract FactoryBeacon is SimpleBeacon {
      * @notice Deploys a DirectTransferAddress beacon proxy at a deterministic address via CreateX.
      * @dev The beacon for the new proxy is always this contract, and the salt disables CreateX's
      *      cross-chain redeploy protection so identical inputs produce the same address on every chain.
+     *      Callers relying on cross-chain determinism MUST ensure this factory was deployed to the same address on each
+     * target chain.
      * @param boringVault BoringVault where forwarded funds settle after depositing through the DCD;
      *                    used only as salt entropy.
      * @param organizationId Organization identifier as bytes32, typically a UUID left-padded to 32
@@ -73,6 +75,7 @@ contract FactoryBeacon is SimpleBeacon {
         address inputToken
     )
         external
+        onlyOwner
         returns (address dta)
     {
         address expectedToken = address(DirectTransferAddress(implementation).token());

@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { BaseDirectTransferTest } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
 
 /// @notice Forked-mainnet so the real CreateX at
@@ -35,6 +36,7 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     function test_DeployBeaconProxyDeploysToComputedAddress() public {
         address expected = beacon.computeDTAAddress(boringVault, ORG_ID, user, address(token));
 
+        vm.prank(beaconAdmin);
         address dta = beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
 
         assertEq(dta, expected, "deployed DTA must equal computeDTAAddress for identical inputs");
@@ -44,10 +46,12 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         address expected = beacon.computeDTAAddress(boringVault, ORG_ID, user, address(token));
 
         _expectBeaconProxyDeployedEvent(expected, user, ORG_ID, address(token));
+        vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
     }
 
     function test_DeployBeaconProxyInitializesReceiver() public {
+        vm.prank(beaconAdmin);
         address dtaAddr = beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
 
         assertEq(
@@ -64,24 +68,36 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
             abi.encodeWithSelector(FactoryBeacon.InputTokenMismatch.selector, address(token), wrongToken),
             address(beacon)
         );
+        vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(boringVault, ORG_ID, user, wrongToken);
     }
 
     function test_RevertWhen_DeployBeaconProxyReusedSalt() public {
+        vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
 
         // CREATEX collision: the CREATE3 proxy at the derived address already exists.
         vm.expectRevert();
+        vm.prank(beaconAdmin);
+        beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
+    }
+
+    function test_RevertWhen_DeployBeaconProxyCallerNotOwner() public {
+        address notOwner = makeAddr("notOwner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));
+        vm.prank(notOwner);
         beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
     }
 
     function test_DeployBeaconProxyIsCrossChainDeterministic() public {
         vm.chainId(1);
         uint256 snap = vm.snapshot();
+        vm.prank(beaconAdmin);
         address dtaMainnet = beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
 
         vm.revertTo(snap);
         vm.chainId(137);
+        vm.prank(beaconAdmin);
         address dtaPolygon = beacon.deployBeaconProxy(boringVault, ORG_ID, user, address(token));
 
         assertEq(

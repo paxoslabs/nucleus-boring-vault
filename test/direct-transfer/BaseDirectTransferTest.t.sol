@@ -54,7 +54,7 @@ abstract contract BaseDirectTransferTest is Test {
 
     /// FactoryBeacon events
     event BeaconProxyDeployed(
-        address indexed directTransferAddress, address indexed user, bytes32 organizationId, address inputToken
+        address indexed directTransferAddress, address indexed user, bytes32 indexed organizationId, address inputToken
     );
     event Upgraded(address indexed implementation);
 
