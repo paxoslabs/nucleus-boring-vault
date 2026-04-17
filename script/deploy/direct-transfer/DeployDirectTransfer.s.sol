@@ -13,20 +13,25 @@ import { SimpleBeaconProxy } from "src/direct-transfer/SimpleBeaconProxy.sol";
 contract DeployDirectTransfer is BaseScript {
 
     function run() external broadcast {
-        // sepolia dcd address from here:
-        // https://paxoslabs.slack.com/archives/C09E8FBMA3T/p1774381184792619?thread_ts=1774378030.319969&cid=C09E8FBMA3T
-        address dcdAddress = address(0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843);
+        address dcdAddress;
+        ERC20 inputToken;
+        if (block.chainid == 11_155_111) {
+            // sepolia test vault dcd address from here:
+            // https://paxoslabs.slack.com/archives/C09E8FBMA3T/p1774381184792619?thread_ts=1774378030.319969&cid=C09E8FBMA3T
+            dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843;
+            // The stablecoin this implementation+beacon handles. To support another stablecoin
+            // (e.g. USDT) deploy a second impl+beacon with a different value here; the salt labels
+            // below mix in the token address so the resulting addresses don't collide.
+            inputToken = ERC20(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238); // sepolia test USDC
+        } else {
+            revert("unsupported chain; add dcd + inputToken for this chainid");
+        }
+
         address beaconOwner = broadcaster;
         address implOwner = beaconOwner;
         // TODO: replace with a multisig before production use.
         address recoveryAccount = broadcaster;
 
-        // The stablecoin this implementation+beacon handles. To support another stablecoin
-        // (e.g. USDT) deploy a second impl+beacon with a different value here; the salt labels
-        // below mix in the token address so the resulting addresses don't collide.
-        // mainnet usdc: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-        // our sepolia test usdc: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
-        ERC20 inputToken = ERC20(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238);
         string memory tokenLabel = Strings.toHexString(address(inputToken));
 
         // isCrosschainProtected=false because we want the same implementation and FactoryBeacon addresses across all
@@ -46,6 +51,17 @@ contract DeployDirectTransfer is BaseScript {
         bytes memory beaconCreationCode = type(FactoryBeacon).creationCode;
         address beacon = CREATEX.deployCreate3(
             beaconSalt, abi.encodePacked(beaconCreationCode, abi.encode(implementation, beaconOwner))
+        );
+
+        require(implementation.code.length > 0, "impl not deployed");
+        require(beacon.code.length > 0, "beacon not deployed");
+        require(FactoryBeacon(beacon).implementation() == implementation, "beacon impl mismatch");
+        require(FactoryBeacon(beacon).owner() == beaconOwner, "beacon owner mismatch");
+        require(address(DirectTransferAddress(implementation).token()) == address(inputToken), "impl token mismatch");
+        require(address(DirectTransferAddress(implementation).DCD()) == dcdAddress, "impl dcd mismatch");
+        require(DirectTransferAddress(implementation).owner() == implOwner, "impl owner mismatch");
+        require(
+            DirectTransferAddress(implementation).recoveryAccount() == recoveryAccount, "impl recoveryAccount mismatch"
         );
 
         console.log("DirectTransferAddress implementation:", implementation);
