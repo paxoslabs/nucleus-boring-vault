@@ -29,8 +29,7 @@ contract DeployDirectTransfer is BaseScript {
 
         address beaconOwner = broadcaster;
         address implOwner = beaconOwner;
-        // TODO: replace with a multisig before production use.
-        address recoveryAccount = broadcaster;
+        address recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
 
         string memory tokenLabel = Strings.toHexString(address(inputToken));
 
