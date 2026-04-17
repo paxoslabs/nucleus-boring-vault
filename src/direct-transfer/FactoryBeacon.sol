@@ -32,7 +32,7 @@ contract FactoryBeacon is SimpleBeacon {
      * @param inputToken The stablecoin the DTA accepts and forwards.
      */
     event BeaconProxyDeployed(
-        address indexed directTransferAddress, address indexed user, bytes32 organizationId, address inputToken
+        address indexed directTransferAddress, address indexed user, bytes32 indexed organizationId, address inputToken
     );
 
     /// @notice Thrown when `inputToken` does not match the implementation's immutable `token`.
