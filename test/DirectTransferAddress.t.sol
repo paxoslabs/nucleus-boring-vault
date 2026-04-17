@@ -237,11 +237,11 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     /*//////////////////////////////////////////////////////////////
                               TEST 3
         Deploy impl1 + beacon + 5 proxies, upgrade beacon to the new
-        DirectTransferAddress impl, trigger the sanctions-class recover
-        path via forward() (KYT on + bad attestation ⇒
-        UnauthorizedTransaction), verify USDC was swept to
-        recoveryAccount, then verify forward() happy path still works
-        once KYT is disabled.
+        DirectTransferAddress impl, trigger a sanctions-class revert
+        from forward() (KYT on + bad attestation ⇒
+        UnauthorizedTransaction), have the operator follow up with
+        recover() to sweep USDC to recoveryAccount, then verify
+        forward() happy path still works once KYT is disabled.
     //////////////////////////////////////////////////////////////*/
 
     function test_upgradeImplementationFor5Users() public {
@@ -253,7 +253,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
         }
 
-        // Upgrade beacon to new implementation (with in-flow recover path)
+        // Upgrade beacon to new implementation (forward now propagates reverts)
         DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount);
         beacon.upgradeTo(address(impl2));
 
@@ -262,7 +262,8 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         dcd.updateKytStatus(ERC20(address(USDC)), true);
 
         // Mock PredicateRegistry.validateAttestation to return false. This drives DCD through the
-        // `!_authorizeTransaction → revert UnauthorizedTransaction()` branch, which forward() classifies as recover.
+        // `!_authorizeTransaction → revert UnauthorizedTransaction()` branch, which forward()
+        // now propagates; the operator classifies this off-chain as sanctions and calls recover().
         bytes4 validateSelector = bytes4(
             keccak256(
                 "validateAttestation((string,address,address,uint256,bytes,string,uint256),(string,uint256,address,bytes))"
@@ -281,10 +282,17 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
             uint256 recoveryBalBefore = ERC20(address(USDC)).balanceOf(recoveryAccount);
 
+            // forward() propagates the sanctions revert (was previously swallowed + auto-recovered)
             vm.prank(owner);
-            uint256 shares = DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, 0, badAttestation);
+            vm.expectRevert(DistributorCodeDepositor.UnauthorizedTransaction.selector);
+            DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, 0, badAttestation);
 
-            assertEq(shares, 0, "forward must return 0 when sanctions revert routes to recover");
+            // USDC is still on the DTA — operator classifies the revert and sweeps via recover()
+            assertEq(ERC20(address(USDC)).balanceOf(dtas[i]), DEPOSIT_AMOUNT, "DTA must retain USDC after revert");
+
+            vm.prank(owner);
+            DirectTransferAddress(dtas[i]).recover();
+
             assertEq(ERC20(address(boringVault)).balanceOf(users[i]), 0, "user must not receive shares on recover");
             assertEq(ERC20(address(USDC)).balanceOf(dtas[i]), 0, "DTA must have no USDC left after recover");
             assertEq(
@@ -292,7 +300,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
                 recoveryBalBefore + DEPOSIT_AMOUNT,
                 "recoveryAccount must receive the swept USDC"
             );
-            console.log("User %s forward() recovered %d USDC to recoveryAccount", i, DEPOSIT_AMOUNT);
+            console.log("User %s recover() swept %d USDC to recoveryAccount", i, DEPOSIT_AMOUNT);
         }
 
         // Clear the mock and disable KYT: verify forward() happy path still works after an earlier recover.
@@ -313,6 +321,44 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             );
             console.log("User %s forwarded after impl upgrade, received %d shares", i, expectedShares);
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              TEST 4
+        Trigger a non-sanctions revert from forward() (minimumMint
+        higher than the vault will mint) and verify the operator can
+        sweep the stranded USDC back to the receiver via refund().
+    //////////////////////////////////////////////////////////////*/
+
+    function test_refundOnNonSanctionsRevert() public {
+        // Deploy impl1 + beacon + 1 proxy, upgrade to the new impl
+        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
+        beacon = new FactoryBeacon(address(impl1), address(this));
+        address dta = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[0], address(USDC));
+
+        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount);
+        beacon.upgradeTo(address(impl2));
+
+        // Fund the DTA and attempt to forward with an unreachable minimumMint
+        _setERC20Balance(address(USDC), dta, DEPOSIT_AMOUNT);
+        uint256 userBalBefore = ERC20(address(USDC)).balanceOf(users[0]);
+
+        Attestation memory emptyAttestation;
+        vm.prank(owner);
+        vm.expectRevert(TellerWithMultiAssetSupport.TellerWithMultiAssetSupport__MinimumMintNotMet.selector);
+        DirectTransferAddress(dta).forward(DEPOSIT_AMOUNT, type(uint256).max, emptyAttestation);
+
+        // USDC still sits on the DTA — operator classifies as non-sanctions and calls refund()
+        assertEq(ERC20(address(USDC)).balanceOf(dta), DEPOSIT_AMOUNT, "DTA must retain USDC after revert");
+
+        vm.prank(owner);
+        DirectTransferAddress(dta).refund();
+
+        assertEq(ERC20(address(USDC)).balanceOf(dta), 0, "DTA must have no USDC left after refund");
+        assertEq(
+            ERC20(address(USDC)).balanceOf(users[0]), userBalBefore + DEPOSIT_AMOUNT, "receiver must get refunded USDC"
+        );
+        assertEq(ERC20(address(boringVault)).balanceOf(users[0]), 0, "user must not have vault shares after refund");
     }
 
 }
