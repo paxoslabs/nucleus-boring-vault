@@ -85,6 +85,9 @@ contract DirectTransferAddress {
     {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
 
+        // Reset to 0 first so USDT-class tokens (which reject non-zero → non-zero approve
+        // transitions) don't brick subsequent forward() calls if any residual allowance remains.
+        token.safeApprove(address(DCD), 0);
         token.safeApprove(address(DCD), amount);
         shares = DCD.deposit(token, amount, minimumMint, receiver, "", attestation);
         emit Forwarded(address(this), receiver, amount, shares);
