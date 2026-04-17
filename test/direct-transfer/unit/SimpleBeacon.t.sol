@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
 import { Vm } from "@forge-std/Vm.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SimpleBeacon } from "src/direct-transfer/SimpleBeacon.sol";
 import { BaseDirectTransferTest } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
 
@@ -80,7 +81,7 @@ contract SimpleBeaconUnitTest is BaseDirectTransferTest {
 
     function test_RevertWhen_UpgradeByNonOwner() public {
         vm.prank(user);
-        vm.expectRevert(SimpleBeacon.NotOwner.selector, address(localBeacon));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user), address(localBeacon));
         localBeacon.upgradeTo(address(v2));
     }
 
