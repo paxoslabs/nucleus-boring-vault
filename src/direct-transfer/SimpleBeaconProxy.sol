@@ -10,11 +10,10 @@ contract SimpleBeaconProxy {
     /// @dev ERC-1967 beacon slot (to let explorers know this is a beacon proxy):
     /// bytes32(uint256(keccak256("eip1967.proxy.beacon")) - 1)
     bytes32 private constant _ERC1967_BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
+    address private immutable _beacon;
 
     error InvalidBeacon(address beacon);
     error InvalidImplementation(address implementation);
-
-    address private immutable _beacon;
 
     constructor(address beacon_, bytes memory data) {
         if (beacon_.code.length == 0) revert InvalidBeacon(beacon_);
