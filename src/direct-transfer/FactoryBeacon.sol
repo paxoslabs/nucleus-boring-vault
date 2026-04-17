@@ -46,8 +46,8 @@ contract FactoryBeacon is SimpleBeacon {
     }
 
     /// @notice Computes the expected DTA address without deploying.
-    /// @dev Replicates CREATEX's _guard logic for (MsgSender, CrosschainProtected=true):
-    ///      guardedSalt = keccak256(abi.encode(msg.sender, block.chainid, salt))
+    /// @dev Replicates CREATEX's _guard logic for (MsgSender, CrosschainProtected=false):
+    ///      guardedSalt = keccak256(abi.encode(msg.sender, salt))
     function computeDTAAddress(
         address boringVault,
         bytes32 organizationId,
@@ -59,7 +59,7 @@ contract FactoryBeacon is SimpleBeacon {
         returns (address)
     {
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
-        bytes32 guardedSalt = keccak256(abi.encode(address(this), block.chainid, salt));
+        bytes32 guardedSalt = keccak256(abi.encode(address(this), salt));
         return CREATEX.computeCreate3Address(guardedSalt, address(CREATEX));
     }
 
@@ -74,7 +74,9 @@ contract FactoryBeacon is SimpleBeacon {
         view
         returns (bytes32)
     {
-        bytes1 crosschainProtectionFlag = bytes1(0x01);
+        // 0x00 disables CreateX's crosschain redeploy protection so the same salt yields the same
+        // address on every chain (CreateX otherwise mixes block.chainid into the guarded salt).
+        bytes1 crosschainProtectionFlag = bytes1(0x00);
         bytes32 nameEntropyHash =
             keccak256(abi.encodePacked(boringVault, organizationId, userDestinationAddress, inputToken));
         bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
