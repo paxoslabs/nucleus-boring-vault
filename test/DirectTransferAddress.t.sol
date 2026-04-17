@@ -282,7 +282,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             uint256 recoveryBalBefore = ERC20(address(USDC)).balanceOf(recoveryAccount);
 
             vm.prank(owner);
-            uint256 shares = DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, badAttestation);
+            uint256 shares = DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, 0, badAttestation);
 
             assertEq(shares, 0, "forward must return 0 when sanctions revert routes to recover");
             assertEq(ERC20(address(boringVault)).balanceOf(users[i]), 0, "user must not receive shares on recover");
@@ -304,7 +304,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
 
             vm.prank(owner);
-            DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, badAttestation);
+            DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, 0, badAttestation);
 
             uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
             uint256 expectedShares = DEPOSIT_AMOUNT.mulDivDown(ONE_SHARE, quoteRate);

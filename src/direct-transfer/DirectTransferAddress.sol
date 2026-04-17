@@ -101,16 +101,24 @@ contract DirectTransferAddress {
     ///        upstream version drift (e.g. Predicate adds a new sanctions error we haven't learned) -
     ///        better to strand funds than auto-refund a sanctioned user.
     /// @param amount The amount of USDC to forward.
+    /// @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
     /// @param attestation The Predicate attestation authorizing this deposit.
     /// @return shares The vault shares minted to the receiver, or 0 if we refunded/recovered/failed.
-    function forward(uint256 amount, Attestation calldata attestation) external returns (uint256 shares) {
+    function forward(
+        uint256 amount,
+        uint256 minimumMint,
+        Attestation calldata attestation
+    )
+        external
+        returns (uint256 shares)
+    {
         if (msg.sender != owner) revert DirectTransferAddress__NotForwarder();
 
         ERC20 usdc = ERC20(USDC);
 
         usdc.safeApprove(address(DCD), amount);
 
-        try DCD.deposit(usdc, amount, 0, receiver, "", attestation) returns (uint256 _shares) {
+        try DCD.deposit(usdc, amount, minimumMint, receiver, "", attestation) returns (uint256 _shares) {
             emit Forwarded(address(this), receiver, amount, _shares);
             return _shares;
         } catch Error(string memory reason) {
