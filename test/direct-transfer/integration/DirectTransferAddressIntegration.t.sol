@@ -51,14 +51,6 @@ contract DirectTransferAddress1 {
 
 }
 
-/*//////////////////////////////////////////////////////////////
-                    MINIMAL BEACON CONTRACTS
-    OZ 5.x BeaconProxy requires Cancun (tload/tstore) which is
-    incompatible with this project's Shanghai EVM target. These
-    minimal versions provide the same beacon proxy pattern without
-    ERC1967 storage slot overhead.
-//////////////////////////////////////////////////////////////*/
-
 uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
 
 contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
