@@ -24,7 +24,9 @@ contract DeployDirectTransfer is BaseScript {
         // The stablecoin this implementation+beacon handles. To support another stablecoin
         // (e.g. USDT) deploy a second impl+beacon with a different value here; the salt labels
         // below mix in the token address so the resulting addresses don't collide.
-        ERC20 inputToken = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        // mainnet usdc: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+        // our sepolia test usdc: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+        ERC20 inputToken = ERC20(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238);
         string memory tokenLabel = Strings.toHexString(address(inputToken));
 
         // isCrosschainProtected=false because we want the same implementation and FactoryBeacon addresses across all
