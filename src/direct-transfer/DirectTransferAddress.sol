@@ -11,14 +11,15 @@ import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRatePr
 import { USDC } from "src/helper/Constants.sol";
 
 /**
- * @title DirectTransferAddress2
- * @notice Upgraded beacon proxy implementation that adds token recovery on top of DirectTransferAddress1.
+ * @title DirectTransferAddress
+ * @notice Beacon proxy implementation that forwards USDC deposits into a DistributorCodeDepositor with
+ *         sanctions-aware recovery and refund fallback paths.
  * @dev Intended to be deployed as a new implementation and set via UpgradeableBeacon.upgradeTo().
  *      - USDC is a compile-time constant.
  *      - DCD is immutable in the implementation (shared by all proxies under the same beacon).
  *      - receiver is stored in proxy storage via initialize().
  */
-contract DirectTransferAddress2 {
+contract DirectTransferAddress {
 
     using SafeTransferLib for ERC20;
 
@@ -144,8 +145,8 @@ contract DirectTransferAddress2 {
                 return 0;
             }
 
-            // Refund class: all other known-reachable reverts. Includes DCD/Teller/Accountant custom errors, Panic(uint256),
-            // and empty revert data (OOG / low-level).
+            // Refund class: all other known-reachable reverts. Includes DCD/Teller/Accountant custom errors,
+            // Panic(uint256), and empty revert data (OOG / low-level).
             if (
                 rawData.length < 4 || _isRevertSelector(rawData, bytes4(0x4e487b71))
                     || _isRevertSelector(rawData, DistributorCodeDepositor.FeesExceedOrEqualAmount.selector)

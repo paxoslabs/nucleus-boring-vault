@@ -10,13 +10,44 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
-import { DirectTransferAddress1 } from "src/direct-transfer/DirectTransferAddress1.sol";
-import { DirectTransferAddress2 } from "src/direct-transfer/DirectTransferAddress2.sol";
+import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { USDC } from "src/helper/Constants.sol";
 import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
+
+/// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
+contract DirectTransferAddress1 {
+
+    using SafeTransferLib for ERC20;
+
+    address public receiver;
+    bool private _initialized;
+    DistributorCodeDepositor public immutable DCD;
+
+    error DirectTransferAddress__AlreadyInitialized();
+
+    constructor(DistributorCodeDepositor _dcd) {
+        DCD = _dcd;
+    }
+
+    function initialize(address _receiver) external {
+        if (_initialized) revert DirectTransferAddress__AlreadyInitialized();
+        _initialized = true;
+        receiver = _receiver;
+    }
+
+    function forward(uint256 amount) external returns (uint256 shares) {
+        ERC20 usdc = ERC20(USDC);
+        Attestation memory emptyAttestation;
+
+        usdc.safeApprove(address(DCD), amount);
+        shares = DCD.deposit(usdc, amount, 0, receiver, "", emptyAttestation);
+    }
+
+}
 
 /*//////////////////////////////////////////////////////////////
                     MINIMAL BEACON CONTRACTS
@@ -37,6 +68,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     DistributorCodeDepositor public dcd;
     FactoryBeacon public beacon;
     address public owner = vm.addr(uint256(bytes32("owner")));
+    address public recoveryAccount = vm.addr(uint256(bytes32("recoveryAccount")));
 
     address[5] public users;
     address[5] public dtas; // Direct Transfer Addresses (proxies)
@@ -204,9 +236,12 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     /*//////////////////////////////////////////////////////////////
                               TEST 3
-        Deploy impl1 + beacon + 5 proxies, send stuck DAI to each,
-        upgrade beacon to impl2 (DirectTransferAddress2), recover
-        DAI for all users, then verify forward still works.
+        Deploy impl1 + beacon + 5 proxies, upgrade beacon to the new
+        DirectTransferAddress impl, trigger the sanctions-class recover
+        path via forward() (KYT on + bad attestation ⇒
+        UnauthorizedTransaction), verify USDC was swept to
+        recoveryAccount, then verify forward() happy path still works
+        once KYT is disabled.
     //////////////////////////////////////////////////////////////*/
 
     function test_upgradeImplementationFor5Users() public {
@@ -218,42 +253,58 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
         }
 
-        // Fund each DTA with some extra tokens (simulating stuck funds)
-        ERC20 dai = ERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F); // DAI on mainnet
-        for (uint256 i; i < 5; i++) {
-            _setERC20Balance(address(dai), dtas[i], 500e18); // 500 DAI stuck
-        }
-
-        // Upgrade beacon to implementation2 (which has recover)
-        DirectTransferAddress2 impl2 = new DirectTransferAddress2(dcd);
+        // Upgrade beacon to new implementation (with in-flow recover path)
+        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount);
         beacon.upgradeTo(address(impl2));
 
-        // Verify all proxies can now recover stuck DAI
+        // Enable KYT so a bad attestation routes through _authorizeTransaction → UnauthorizedTransaction
+        vm.prank(owner);
+        dcd.updateKytStatus(ERC20(address(USDC)), true);
+
+        // Mock PredicateRegistry.validateAttestation to return false. This drives DCD through the
+        // `!_authorizeTransaction → revert UnauthorizedTransaction()` branch, which forward() classifies as recover.
+        bytes4 validateSelector = bytes4(
+            keccak256(
+                "validateAttestation((string,address,address,uint256,bytes,string,uint256),(string,uint256,address,bytes))"
+            )
+        );
+        vm.mockCall(address(predicateRegistry), abi.encodeWithSelector(validateSelector), abi.encode(false));
+
+        Attestation memory badAttestation = Attestation({
+            uuid: "0x0000000000000000000000000000000000000000000000000000000000000000",
+            expiration: block.timestamp + 1000,
+            attester: attesterOne,
+            signature: new bytes(0)
+        });
+
         for (uint256 i; i < 5; i++) {
-            address recoveryTarget = users[i];
-            uint256 balBefore = dai.balanceOf(recoveryTarget);
+            _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
+            uint256 recoveryBalBefore = ERC20(address(USDC)).balanceOf(recoveryAccount);
 
-            DirectTransferAddress2(dtas[i]).recover(dai, 500e18, recoveryTarget);
+            vm.prank(owner);
+            uint256 shares = DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, badAttestation);
 
-            assertEq(dai.balanceOf(recoveryTarget), balBefore + 500e18, "user must have recovered DAI");
-            assertEq(dai.balanceOf(dtas[i]), 0, "DTA must have no DAI left");
-            console.log("User %s recovered 500 DAI", i);
+            assertEq(shares, 0, "forward must return 0 when sanctions revert routes to recover");
+            assertEq(ERC20(address(boringVault)).balanceOf(users[i]), 0, "user must not receive shares on recover");
+            assertEq(ERC20(address(USDC)).balanceOf(dtas[i]), 0, "DTA must have no USDC left after recover");
+            assertEq(
+                ERC20(address(USDC)).balanceOf(recoveryAccount),
+                recoveryBalBefore + DEPOSIT_AMOUNT,
+                "recoveryAccount must receive the swept USDC"
+            );
+            console.log("User %s forward() recovered %d USDC to recoveryAccount", i, DEPOSIT_AMOUNT);
         }
 
-        // Verify forward still works after upgrade
-        // NOTE: Maybe something worth noting in this simple implementation. Is that if sanctioned and recovered, the
-        // forward still works unless permanantly frozen. In the event a user is unsanctioned
+        // Clear the mock and disable KYT: verify forward() happy path still works after an earlier recover.
+        vm.clearMockedCalls();
+        vm.prank(owner);
+        dcd.updateKytStatus(ERC20(address(USDC)), false);
+
         for (uint256 i; i < 5; i++) {
             _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
 
-            Attestation memory emptyAttestation = Attestation({
-                uuid: "0x0000000000000000000000000000000000000000000000000000000000000000",
-                expiration: block.timestamp + 1000,
-                attester: attesterOne,
-                signature: new bytes(0)
-            });
-
-            DirectTransferAddress2(dtas[i]).forward(DEPOSIT_AMOUNT, emptyAttestation);
+            vm.prank(owner);
+            DirectTransferAddress(dtas[i]).forward(DEPOSIT_AMOUNT, badAttestation);
 
             uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
             uint256 expectedShares = DEPOSIT_AMOUNT.mulDivDown(ONE_SHARE, quoteRate);

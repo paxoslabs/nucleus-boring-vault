@@ -3,7 +3,7 @@ pragma solidity 0.8.21;
 
 import { SimpleBeacon } from "src/direct-transfer/SimpleBeacon.sol";
 import { SimpleBeaconProxy } from "src/direct-transfer/SimpleBeaconProxy.sol";
-import { DirectTransferAddress1 } from "src/direct-transfer/DirectTransferAddress1.sol";
+import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { ICreateX } from "src/interfaces/ICreateX.sol";
 
 /// @notice Dual-purpose Beacon and Factory contract. Holds implementation
@@ -36,7 +36,7 @@ contract FactoryBeacon is SimpleBeacon {
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
         // TODO: change selector to latest implementation's selector, so we can upgrade initializable params too.
         bytes memory initData =
-            abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, userDestinationAddress);
+            abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
         bytes memory creationCode =
             abi.encodePacked(type(SimpleBeaconProxy).creationCode, abi.encode(address(this), initData));
         dta = CREATEX.deployCreate3(salt, creationCode);
