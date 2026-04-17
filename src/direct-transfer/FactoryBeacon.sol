@@ -12,7 +12,9 @@ contract FactoryBeacon is SimpleBeacon {
 
     ICreateX public constant CREATEX = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
 
-    event BeaconProxyDeployed(address indexed proxy, address indexed user, bytes32 salt);
+    event BeaconProxyDeployed(
+        address indexed directTransferAddress, address indexed user, bytes32 organizationId, address inputToken
+    );
 
     constructor(address _implementation, address _owner) SimpleBeacon(_implementation, _owner) { }
 
@@ -34,15 +36,13 @@ contract FactoryBeacon is SimpleBeacon {
         returns (address dta)
     {
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
-        // TODO: change selector to latest implementation's selector, so we can upgrade initializable params too.
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
         bytes memory creationCode =
             abi.encodePacked(type(SimpleBeaconProxy).creationCode, abi.encode(address(this), initData));
         dta = CREATEX.deployCreate3(salt, creationCode);
 
-        // TODO: add other salt components in here
-        emit BeaconProxyDeployed(dta, userDestinationAddress, salt);
+        emit BeaconProxyDeployed(dta, userDestinationAddress, organizationId, inputToken);
     }
 
     /// @notice Computes the expected DTA address without deploying.
