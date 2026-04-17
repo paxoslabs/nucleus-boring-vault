@@ -8,30 +8,27 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
 
 /**
  * @title DirectTransferAddress
- * @notice Beacon proxy implementation that forwards a single configured stablecoin into a
- *         DistributorCodeDepositor. When forward() reverts, an off-chain classifier inspects the
- *         revert and decides whether to route stranded funds back to the receiver via refund() or
- *         to recoveryAccount via recover().
- * @dev Intended to be deployed as a new implementation and set via UpgradeableBeacon.upgradeTo().
- *      - `token` is an immutable of the implementation: one implementation (and therefore one
- *        beacon) supports exactly one stablecoin. Supporting USDC and USDT simultaneously means
- *        deploying two implementations and two beacons; the factory picks the right beacon for
- *        the requested token. The CREATE2 salt already binds address↔token (inputToken), so
- *        making `token` immutable mirrors that invariant in the type system rather than storage.
- *      - DCD is immutable in the implementation (shared by all proxies under the same beacon).
- *      - receiver is stored in proxy storage via initialize().
+ * @notice Implementation contract for DirectTransferAddress BeaconProxies. Receives one configured
+ *         stablecoin and forwards balances into a DistributorCodeDepositor, minting BoringVault shares
+ *         to a pre-configured receiver.
+ * @custom:security-contact security@molecularlabs.io
  */
 contract DirectTransferAddress {
 
     using SafeTransferLib for ERC20;
 
     /// @notice Authorized caller for forward(), refund(), and recover().
-    /// @dev Also referred to as the owner in deployment/configuration docs.
     address public immutable owner;
 
     /// @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
     ///         a prior refund() attempt fails (e.g. receiver is on a token-level blacklist).
     address public immutable recoveryAccount;
+
+    /// @notice The DistributorCodeDepositor every proxy under this implementation forwards deposits to.
+    DistributorCodeDepositor public immutable DCD;
+
+    /// @notice The single stablecoin this implementation accepts, forwards, refunds, and recovers (e.g. USDC or USDT).
+    ERC20 public immutable token;
 
     /// @notice The receiver of vault shares from DCD deposits. Also the refund recipient.
     address public receiver;
@@ -39,31 +36,22 @@ contract DirectTransferAddress {
     /// @notice Guard against re-initialization.
     bool private _initialized;
 
-    /// @notice The DistributorCodeDepositor this implementation forwards deposits to.
-    DistributorCodeDepositor public immutable DCD;
-
-    /// @notice The stablecoin this implementation forwards, refunds, and recovers.
-    /// @dev Immutable so every proxy under the beacon is pinned to a single token. Support a new
-    ///      stablecoin by deploying a fresh implementation + beacon with that token.
-    ERC20 public immutable token;
-
-    /// @notice Emitted after a successful deposit: token moved from this DTA into DCD and `shares`
-    ///         were minted to `to`.
     event Forwarded(address indexed from, address indexed to, uint256 amount, uint256 shares);
-
-    /// @notice Emitted after refund(): the DTA's token balance was swept to `to` (the receiver).
     event Refunded(address indexed from, address indexed to, uint256 amount);
-
-    /// @notice Emitted after recover(): the DTA's token balance was swept to `to` (recoveryAccount).
     event Recovered(address indexed from, address indexed to, uint256 amount);
 
     error DirectTransferAddress__AlreadyInitialized();
     error DirectTransferAddress__NotOwner();
 
-    /// @param _dcd The DistributorCodeDepositor contract for this beacon's proxies.
-    /// @param _owner The only address allowed to call forward(), refund(), and recover().
-    /// @param _recoveryAccount Recovery sink for recover().
-    /// @param _token The stablecoin this implementation handles (e.g. USDC, USDT).
+    /**
+     * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
+     * @dev All four arguments become shared immutables on the implementation; none live in proxy storage.
+     * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
+     * @param _owner The only address allowed to call forward(), refund(), and recover() on resulting proxies.
+     * @param _recoveryAccount Recovery sink for recover().
+     * @param _token The single stablecoin this implementation handles; must match the `inputToken` that
+     *               FactoryBeacon.deployBeaconProxy() enforces.
+     */
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
         DCD = _dcd;
         owner = _owner;
@@ -102,10 +90,11 @@ contract DirectTransferAddress {
         emit Forwarded(address(this), receiver, amount, shares);
     }
 
-    /// @notice Sweeps the DTA's full token balance to `receiver`.
-    /// @dev Intended use: call after a non-sanctions revert from forward(). Reverts if the transfer
-    ///      itself fails (e.g. receiver is on a token-level blacklist); operators must then call
-    ///      recover() to route funds to recoveryAccount instead.
+    /**
+     * @notice Sweep this DTA's full `token` balance to `receiver`
+     * @dev Intended for non-sanctions forward() reverts. If the refund transfer reverts (e.g. `receiver`
+     *      is on a token-level blacklist), the owner should then call recover().
+     */
     function refund() external {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
         uint256 amount = token.balanceOf(address(this));
@@ -113,9 +102,10 @@ contract DirectTransferAddress {
         emit Refunded(address(this), receiver, amount);
     }
 
-    /// @notice Sweeps the DTA's full token balance to `recoveryAccount`.
-    /// @dev Intended use: call after a sanctions revert from forward(), or when refund() itself
-    ///      fails. If this transfer also reverts, `recoveryAccount` must be fixed operationally.
+    /**
+     * @notice Sweep this DTA's full `token` balance to `recoveryAccount`. Only callable by `owner`.
+     * @dev Intended for sanctions-class forward() reverts or when a prior refund() attempt itself reverted.
+     */
     function recover() external {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
         uint256 amount = token.balanceOf(address(this));
