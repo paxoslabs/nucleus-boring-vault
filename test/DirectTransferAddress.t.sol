@@ -19,6 +19,7 @@ import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
 /// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
+/// @dev Exposes `token()` so FactoryBeacon.deployBeaconProxy's inputToken↔token match check passes.
 contract DirectTransferAddress1 {
 
     using SafeTransferLib for ERC20;
@@ -26,11 +27,13 @@ contract DirectTransferAddress1 {
     address public receiver;
     bool private _initialized;
     DistributorCodeDepositor public immutable DCD;
+    ERC20 public immutable token;
 
     error DirectTransferAddress__AlreadyInitialized();
 
-    constructor(DistributorCodeDepositor _dcd) {
+    constructor(DistributorCodeDepositor _dcd, ERC20 _token) {
         DCD = _dcd;
+        token = _token;
     }
 
     function initialize(address _receiver) external {
@@ -40,11 +43,10 @@ contract DirectTransferAddress1 {
     }
 
     function forward(uint256 amount) external returns (uint256 shares) {
-        ERC20 usdc = ERC20(USDC);
         Attestation memory emptyAttestation;
 
-        usdc.safeApprove(address(DCD), amount);
-        shares = DCD.deposit(usdc, amount, 0, receiver, "", emptyAttestation);
+        token.safeApprove(address(DCD), amount);
+        shares = DCD.deposit(token, amount, 0, receiver, "", emptyAttestation);
     }
 
 }
@@ -130,7 +132,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_setup5Users() public {
         // Deploy implementation and beacon
-        DirectTransferAddress1 impl = new DirectTransferAddress1(dcd);
+        DirectTransferAddress1 impl = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
         beacon = new FactoryBeacon(address(impl), address(this));
 
         // Deploy 5 DTA proxies via CREATEX
@@ -171,7 +173,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_upgradeDCDFor5Users() public {
         // Deploy first DCD + implementation + beacon
-        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
+        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
         beacon = new FactoryBeacon(address(impl1), address(this));
 
         // Deploy 5 DTA proxies
@@ -211,7 +213,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         dcd2.updateKytStatus(ERC20(address(USDC)), false);
 
         // Deploy new implementation pointing to dcd2 and upgrade beacon
-        DirectTransferAddress1 impl2 = new DirectTransferAddress1(dcd2);
+        DirectTransferAddress1 impl2 = new DirectTransferAddress1(dcd2, ERC20(address(USDC)));
         beacon.upgradeTo(address(impl2));
 
         // Verify all proxies now use the new DCD (immutable is in the new implementation bytecode)
@@ -246,7 +248,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_upgradeImplementationFor5Users() public {
         // Deploy impl1 + beacon + 5 proxies
-        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
+        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
         beacon = new FactoryBeacon(address(impl1), address(this));
 
         for (uint256 i; i < 5; i++) {
@@ -254,7 +256,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         }
 
         // Upgrade beacon to new implementation (forward now propagates reverts)
-        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount);
+        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount, ERC20(address(USDC)));
         beacon.upgradeTo(address(impl2));
 
         // Enable KYT so a bad attestation routes through _authorizeTransaction → UnauthorizedTransaction
@@ -332,11 +334,11 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_refundOnNonSanctionsRevert() public {
         // Deploy impl1 + beacon + 1 proxy, upgrade to the new impl
-        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
+        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
         beacon = new FactoryBeacon(address(impl1), address(this));
         address dta = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[0], address(USDC));
 
-        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount);
+        DirectTransferAddress impl2 = new DirectTransferAddress(dcd, owner, recoveryAccount, ERC20(address(USDC)));
         beacon.upgradeTo(address(impl2));
 
         // Fund the DTA and attempt to forward with an unreachable minimumMint

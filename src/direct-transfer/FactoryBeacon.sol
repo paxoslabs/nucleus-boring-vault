@@ -16,6 +16,8 @@ contract FactoryBeacon is SimpleBeacon {
         address indexed directTransferAddress, address indexed user, bytes32 organizationId, address inputToken
     );
 
+    error InputTokenMismatch(address expected, address provided);
+
     constructor(address _implementation, address _owner) SimpleBeacon(_implementation, _owner) { }
 
     /// @notice Deploys a DTA beacon proxy via CREATEX with a deterministic address.
@@ -35,6 +37,9 @@ contract FactoryBeacon is SimpleBeacon {
         external
         returns (address dta)
     {
+        address expectedToken = address(DirectTransferAddress(implementation).token());
+        if (inputToken != expectedToken) revert InputTokenMismatch(expectedToken, inputToken);
+
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);

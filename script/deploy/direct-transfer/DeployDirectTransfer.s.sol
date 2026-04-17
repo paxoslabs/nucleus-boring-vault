@@ -2,6 +2,8 @@
 pragma solidity 0.8.21;
 
 import { console } from "forge-std/console.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
+import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { BaseScript } from "script/Base.s.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
@@ -19,15 +21,23 @@ contract DeployDirectTransfer is BaseScript {
         // TODO: replace with a multisig before production use.
         address recoveryAccount = broadcaster;
 
+        // The stablecoin this implementation+beacon handles. To support another stablecoin
+        // (e.g. USDT) deploy a second impl+beacon with a different value here; the salt labels
+        // below mix in the token address so the resulting addresses don't collide.
+        ERC20 inputToken = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        string memory tokenLabel = Strings.toHexString(address(inputToken));
+
         // isCrosschainProtected=false because we want the same implementation and FactoryBeacon addresses across all
-        // chains
-        bytes32 implSalt = makeSalt(broadcaster, false, "DirectTransferAddress:implementation");
-        bytes32 beaconSalt = makeSalt(broadcaster, false, "DirectTransferAddress:FactoryBeacon");
+        // chains. Token address is mixed in so USDC and USDT deploys land at distinct addresses.
+        bytes32 implSalt =
+            makeSalt(broadcaster, false, string.concat("DirectTransferAddress:implementation:", tokenLabel));
+        bytes32 beaconSalt =
+            makeSalt(broadcaster, false, string.concat("DirectTransferAddress:FactoryBeacon:", tokenLabel));
 
         // Deploy implementation via CREATEX for consistent cross-chain address
         bytes memory implCreationCode = type(DirectTransferAddress).creationCode;
         address implementation = CREATEX.deployCreate3(
-            implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress, implOwner, recoveryAccount))
+            implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress, implOwner, recoveryAccount, inputToken))
         );
 
         // Deploy FactoryBeacon via CREATEX for consistent cross-chain address
@@ -37,6 +47,7 @@ contract DeployDirectTransfer is BaseScript {
         );
 
         console.log("DirectTransferAddress implementation:", implementation);
+        console.log("  token:", address(inputToken));
         console.log("FactoryBeacon:", beacon);
         console.log("FactoryBeacon owner:", FactoryBeacon(beacon).owner());
     }
