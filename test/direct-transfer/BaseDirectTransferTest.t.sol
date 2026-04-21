@@ -9,8 +9,7 @@ import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
-import { SimpleBeacon } from "src/direct-transfer/SimpleBeacon.sol";
-import { SimpleBeaconProxy } from "src/direct-transfer/SimpleBeaconProxy.sol";
+import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconProxy.sol";
 
 /// @dev Pulls `depositAsset` from msg.sender (matching the real DCD's safeTransferFrom on deposit)
 ///      and sends `shareToken` to `to` at a 1:1 rate from a pre-funded pool, so tests can assert
@@ -113,7 +112,7 @@ abstract contract BaseDirectTransferTest is Test {
     function _deployDTA(address userDestinationAddress) internal returns (DirectTransferAddress dta) {
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
-        SimpleBeaconProxy proxy = new SimpleBeaconProxy(address(beacon), initData);
+        BeaconProxy proxy = new BeaconProxy(address(beacon), initData);
         dta = DirectTransferAddress(address(proxy));
     }
 

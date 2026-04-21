@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { SimpleBeacon } from "src/direct-transfer/SimpleBeacon.sol";
-import { SimpleBeaconProxy } from "src/direct-transfer/SimpleBeaconProxy.sol";
+import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconProxy.sol";
+import { UpgradeableBeacon } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/UpgradeableBeacon.sol";
+
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { ICreateX } from "src/interfaces/ICreateX.sol";
 
 /**
  * @title FactoryBeacon
- * @notice Dual-purpose contract that is both the UpgradeableBeacon (via SimpleBeacon) for every
- *         DirectTransferAddress proxy it spawns and the factory that deploys those proxies at
- *         deterministic, cross-chain-stable addresses.
+ * @notice Dual-purpose contract that is both the UpgradeableBeacon for every DirectTransferAddress
+ *         proxy it spawns and the factory that deploys those proxies at deterministic,
+ *         cross-chain-stable addresses.
  * @dev One FactoryBeacon serves one DirectTransferAddress implementation, pinned to one DCD and one
  *      stablecoin. Deployment uses CreateX's CREATE3 flow keyed on `msg.sender == this`, so the DTA
  *      address is a pure function of the inputs and this factory's address — identical on every chain.
  * @custom:security-contact security@molecularlabs.io
  */
-contract FactoryBeacon is SimpleBeacon {
+contract FactoryBeacon is UpgradeableBeacon {
 
     /// @notice Canonical CreateX deployer used for CREATE3 deployments.
     /// @dev Same address on every EVM chain where CreateX is deployed, which is what enables
@@ -25,7 +26,7 @@ contract FactoryBeacon is SimpleBeacon {
 
     /**
      * @notice Emitted when a new DirectTransferAddress beacon proxy is deployed.
-     * @param directTransferAddress Address of the freshly deployed SimpleBeaconProxy (the DTA).
+     * @param directTransferAddress Address of the freshly deployed BeaconProxy (the DTA).
      * @param user The end-user configured as the DTA's `receiver`.
      * @param organizationId Organization identifier mixed into the deployment salt; surfaced here
      *                       so indexers can correlate DTAs to an off-chain org.
@@ -43,9 +44,9 @@ contract FactoryBeacon is SimpleBeacon {
     error InputTokenMismatch(address expected, address provided);
 
     /// @param _implementation Initial DirectTransferAddress implementation this beacon serves; must
-    /// already be deployed (SimpleBeacon enforces nonzero code length).
-    /// @param _owner Address authorized to call upgradeTo() on the inherited SimpleBeacon.
-    constructor(address _implementation, address _owner) SimpleBeacon(_implementation, _owner) { }
+    /// already be deployed (UpgradeableBeacon enforces nonzero code length).
+    /// @param _owner Address authorized to call upgradeTo() on the inherited UpgradeableBeacon.
+    constructor(address _implementation, address _owner) UpgradeableBeacon(_implementation, _owner) { }
 
     /**
      * @notice Deploys a DirectTransferAddress beacon proxy at a deterministic address via CreateX.
@@ -66,7 +67,7 @@ contract FactoryBeacon is SimpleBeacon {
      *                               the refund target on refund().
      * @param inputToken Single token the beaconProxy expects to receive; must equal the current
      *                   implementation's `token()`.
-     * @return dta The deployed SimpleBeaconProxy address — stable across chains for identical inputs.
+     * @return dta The deployed BeaconProxy address — stable across chains for identical inputs.
      */
     function deployBeaconProxy(
         address boringVault,
@@ -78,14 +79,14 @@ contract FactoryBeacon is SimpleBeacon {
         onlyOwner
         returns (address dta)
     {
-        address expectedToken = address(DirectTransferAddress(implementation).token());
+        address expectedToken = address(DirectTransferAddress(implementation()).token());
         if (inputToken != expectedToken) revert InputTokenMismatch(expectedToken, inputToken);
 
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
         bytes memory creationCode =
-            abi.encodePacked(type(SimpleBeaconProxy).creationCode, abi.encode(address(this), initData));
+            abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(this), initData));
         dta = CREATEX.deployCreate3(salt, creationCode);
 
         emit BeaconProxyDeployed(dta, userDestinationAddress, organizationId, inputToken);
