@@ -4,7 +4,7 @@ pragma solidity 0.8.21;
 import { BaseScript } from "./../../Base.s.sol";
 import { stdJson as StdJson } from "@forge-std/StdJson.sol";
 import { ConfigReader, IAuthority } from "../../ConfigReader.s.sol";
-import { SimpleFeeModule, IFeeModule } from "src/helper/SimpleFeeModule.sol";
+import { WithdrawQueueAssetSpecificFeeModule } from "src/helper/WithdrawQueueAssetSpecificFeeModule.sol";
 import { WithdrawQueue } from "src/base/Roles/WithdrawQueue.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import "src/helper/Constants.sol";
@@ -39,13 +39,21 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
         address feeModule;
         {
             // Deploy the Fee Module
-            bytes32 feeModuleSalt =
-                makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":SimpleFeeModule")));
-            bytes memory feeModuleCreationCode = type(SimpleFeeModule).creationCode;
+            bytes32 feeModuleSalt = makeSalt(
+                broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":WithdrawQueueAssetSpecificFeeModule"))
+            );
+            bytes memory feeModuleCreationCode = type(WithdrawQueueAssetSpecificFeeModule).creationCode;
             feeModule = CREATEX.deployCreate3(
-                feeModuleSalt, abi.encodePacked(feeModuleCreationCode, abi.encode(config.withdrawQueueFeePercentage))
+                feeModuleSalt,
+                abi.encodePacked(feeModuleCreationCode, abi.encode(config.protocolAdmin, config.accountant))
             );
         }
+
+        require(
+            address(WithdrawQueueAssetSpecificFeeModule(feeModule).accountant()) == config.accountant,
+            "accountant mismatch"
+        );
+
         // Deploy the Withdraw Queue
         bytes32 withdrawQueueSalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":WithdrawQueue")));
