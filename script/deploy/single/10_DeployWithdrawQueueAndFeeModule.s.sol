@@ -54,6 +54,8 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             "accountant mismatch"
         );
 
+        require(WithdrawQueueAssetSpecificFeeModule(feeModule).owner() == config.protocolAdmin, "owner mismatch");
+
         // Deploy the Withdraw Queue
         bytes32 withdrawQueueSalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":WithdrawQueue")));
