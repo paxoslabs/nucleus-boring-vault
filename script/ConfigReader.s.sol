@@ -60,7 +60,6 @@ library ConfigReader {
         uint256 distributorCodeDepositorSupplyCap;
         address registry;
         string policyID;
-        uint256 withdrawQueueFeePercentage;
         string withdrawQueueName;
         string withdrawQueueSymbol;
         address withdrawQueueFeeRecipient;
@@ -133,7 +132,6 @@ library ConfigReader {
         config.policyID = _config.readString(".distributorCodeDepositor.policyID");
 
         // Reading from the 'withdrawQueue' section
-        config.withdrawQueueFeePercentage = uint256(_config.readUint(".withdrawQueue.feePercentage"));
         config.withdrawQueueName = _config.readString(".withdrawQueue.name");
         config.withdrawQueueSymbol = _config.readString(".withdrawQueue.symbol");
         config.withdrawQueueFeeRecipient = _config.readAddress(".withdrawQueue.feeRecipient");
