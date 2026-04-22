@@ -81,9 +81,8 @@ contract DirectTransferAddress {
     }
 
     /// @notice Approves the configured token to the DCD and deposits on behalf of the receiver.
-    /// @dev Propagates any DCD revert. Operators classify the revert off-chain and then follow up
-    ///      with refund() or recover() to sweep the stranded token — see
-    ///      Design_Notes/forward-error-handling.md for the classification taxonomy.
+    /// @dev Propagates any DCD revert. Owner classifies the revert off-chain and then follows up
+    ///      with refund() or recover() to sweep the stranded token depending on the error.
     /// @param amount The amount of token to forward.
     /// @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
     /// @param distributorCode The DCD distributor code forwarded as-is into DCD.deposit.
