@@ -62,10 +62,8 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @param organizationId Organization identifier as bytes32, typically a UUID left-padded to 32
      *                       bytes; used only as salt entropy.
      *                       Example:
-     *                       import { Hex, size } from 'viem'
-     *                       const organizationId = "700768ae-c71d-42cc-9ff9-13b777d6d379"
-     *                       const organizationIdAsBytes32 = `0x${uuid.replaceAll('-', '').padStart(64, '0')}` as Hex
-     *                       invariant(size === 32)
+     *                       Input: "700768ae-c71d-42cc-9ff9-13b777d6d379"
+     *                       Output: "0x00000000000000000000000000000000700768aec71d42cc9ff913b777d6d379"
      * @param userDestinationAddress End-user that BoringVault shares are minted to on forward() and
      *                               the refund target on refund().
      * @param inputToken Single token the beaconProxy expects to receive; must equal the current
