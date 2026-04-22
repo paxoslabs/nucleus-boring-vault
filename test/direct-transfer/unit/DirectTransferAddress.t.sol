@@ -2,6 +2,7 @@
 pragma solidity 0.8.21;
 
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
+import { MockERC20 } from "@forge-std/mocks/MockERC20.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
@@ -140,14 +141,29 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "receiver must hold swept balance");
     }
 
-    function test_RefundWithZeroBalance() public {
+    function test_RefundSweepsStrayTokenAtTokenAddress() public {
+        // A non-configured ERC20 accidentally sent to the DTA should be swept to `receiver`
+        // using the tokenAddress argument, independent of the immutable `token`.
+        MockERC20 strayToken = new MockERC20();
+        strayToken.initialize("Stray", "STRAY", 18);
+        uint256 strayAmount = 123e18;
+        deal(address(strayToken), address(dta), strayAmount);
+
+        _expectRefundedEvent(address(dta), address(strayToken), user, strayAmount);
+        vm.prank(owner);
+        dta.refund(address(strayToken));
+
+        assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after refund");
+        assertEq(strayToken.balanceOf(user), strayAmount, "receiver must hold swept stray-token balance");
+        assertEq(token.balanceOf(address(dta)), 0, "immutable token balance must be untouched");
+    }
+
+    function test_RevertWhen_RefundBalanceIsZero() public {
         assertEq(token.balanceOf(address(dta)), 0, "precondition: DTA balance is zero");
 
-        _expectRefundedEvent(address(dta), address(token), user, 0);
         vm.prank(owner);
+        vm.expectRevert(DirectTransferAddress.ZeroAmount.selector, address(dta));
         dta.refund(address(token));
-
-        assertEq(token.balanceOf(user), 0, "receiver balance unchanged on zero-amount refund");
     }
 
     function test_RevertWhen_RefundCallerNotOwner() public {
@@ -173,14 +189,31 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         assertEq(token.balanceOf(recoveryAccount), DEPOSIT_AMOUNT, "recoveryAccount must hold swept balance");
     }
 
-    function test_RecoverWithZeroBalance() public {
+    function test_RecoverSweepsStrayTokenAtTokenAddress() public {
+        // A non-configured ERC20 accidentally sent to the DTA should be swept to `recoveryAccount`
+        // using the tokenAddress argument, independent of the immutable `token`.
+        MockERC20 strayToken = new MockERC20();
+        strayToken.initialize("Stray", "STRAY", 18);
+        uint256 strayAmount = 456e18;
+        deal(address(strayToken), address(dta), strayAmount);
+
+        _expectRecoveredEvent(address(dta), address(strayToken), recoveryAccount, strayAmount);
+        vm.prank(owner);
+        dta.recover(address(strayToken));
+
+        assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after recover");
+        assertEq(
+            strayToken.balanceOf(recoveryAccount), strayAmount, "recoveryAccount must hold swept stray-token balance"
+        );
+        assertEq(token.balanceOf(address(dta)), 0, "immutable token balance must be untouched");
+    }
+
+    function test_RevertWhen_RecoverBalanceIsZero() public {
         assertEq(token.balanceOf(address(dta)), 0, "precondition: DTA balance is zero");
 
-        _expectRecoveredEvent(address(dta), address(token), recoveryAccount, 0);
         vm.prank(owner);
+        vm.expectRevert(DirectTransferAddress.ZeroAmount.selector, address(dta));
         dta.recover(address(token));
-
-        assertEq(token.balanceOf(recoveryAccount), 0, "recoveryAccount balance unchanged on zero-amount recover");
     }
 
     function test_RevertWhen_RecoverCallerNotOwner() public {

@@ -50,6 +50,7 @@ contract DirectTransferAddress {
     /// @dev The owner is not a valid owner account (e.g. `address(0)`).
     error OwnableInvalidOwner(address owner);
     error ZeroAddress();
+    error ZeroAmount();
     error NoCode();
 
     /**
@@ -120,23 +121,33 @@ contract DirectTransferAddress {
     }
 
     /**
-     * @notice Sweep this DTA's full `token` balance to `receiver`
+     * @notice Sweep this DTA's full balance of `tokenAddress` to `receiver`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
-     *      is on a token-level blacklist), the owner should then call recover().
+     *      is on a token-level blacklist), the owner should then call recover(). `tokenAddress` is a parameter
+     *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can be
+     * swept.
+     * @param tokenAddress The ERC20 to sweep.
      */
     function refund(address tokenAddress) external onlyOwner {
-        uint256 amount = token.balanceOf(address(this));
-        token.safeTransfer(receiver, amount);
+        ERC20 tokenToSweep = ERC20(tokenAddress);
+        uint256 amount = tokenToSweep.balanceOf(address(this));
+        if (amount == 0) revert ZeroAmount();
+        tokenToSweep.safeTransfer(receiver, amount);
         emit Refunded(tokenAddress, receiver, amount);
     }
 
     /**
-     * @notice Sweep this DTA's full `token` balance to `recoveryAccount`. Only callable by `owner`.
+     * @notice Sweep this DTA's full balance of `tokenAddress` to `recoveryAccount`. Only callable by `owner`.
      * @dev Intended for sanctions-class depositAndForward() reverts or when a prior refund() attempt itself reverted.
+     *      `tokenAddress` is a parameter (rather than the immutable `token`) so stray tokens of any kind accidentally
+     *      sent to this proxy can be swept.
+     * @param tokenAddress The ERC20 to sweep.
      */
     function recover(address tokenAddress) external onlyOwner {
-        uint256 amount = token.balanceOf(address(this));
-        token.safeTransfer(recoveryAccount, amount);
+        ERC20 tokenToSweep = ERC20(tokenAddress);
+        uint256 amount = tokenToSweep.balanceOf(address(this));
+        if (amount == 0) revert ZeroAmount();
+        tokenToSweep.safeTransfer(recoveryAccount, amount);
         emit Recovered(tokenAddress, recoveryAccount, amount);
     }
 
