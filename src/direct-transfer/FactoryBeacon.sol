@@ -15,7 +15,7 @@ import { ICreateX } from "src/interfaces/ICreateX.sol";
  * @dev One FactoryBeacon serves one DirectTransferAddress implementation, pinned to one DCD and one
  *      stablecoin. Deployment uses CreateX's CREATE3 flow keyed on `msg.sender == this`, so the DTA
  *      address is a pure function of the inputs and this factory's address — identical on every chain.
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract FactoryBeacon is UpgradeableBeacon {
 
