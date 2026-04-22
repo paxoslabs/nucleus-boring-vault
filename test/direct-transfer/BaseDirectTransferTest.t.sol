@@ -108,7 +108,7 @@ abstract contract BaseDirectTransferTest is Test {
 
     /// @dev Deploy a DTA beacon proxy directly (no CreateX) and initialize it against the shared impl.
     ///      FactoryBeacon.deployBeaconProxy is exercised separately in FactoryBeacon.t.sol, which needs
-    ///      a forked or etched CreateX at 0xba5Ed0…. For DTA-only unit tests we instantiate the proxy separately.
+    ///      a forked or etched CreateX at 0x1077..391f. For DTA-only unit tests we instantiate the proxy separately.
     function _deployDTA(address userDestinationAddress) internal returns (DirectTransferAddress dta) {
         bytes memory initData =
             abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);

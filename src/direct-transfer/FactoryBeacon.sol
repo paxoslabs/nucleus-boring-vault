@@ -22,7 +22,7 @@ contract FactoryBeacon is UpgradeableBeacon {
     /// @notice Canonical CreateX deployer used for CREATE3 deployments.
     /// @dev Same address on every EVM chain where CreateX is deployed, which is what enables
     /// cross-chain deterministic DTA addresses.
-    ICreateX public constant CREATEX = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
+    ICreateX public constant CREATEX = ICreateX(0x1077f8ea07EA34D9F23BC39256BF234665FB391f);
 
     /**
      * @notice Emitted when a new DirectTransferAddress beacon proxy is deployed.
