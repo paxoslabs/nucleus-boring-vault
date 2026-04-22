@@ -47,9 +47,9 @@ contract MockDCD {
 abstract contract BaseDirectTransferTest is Test {
 
     // DTA Events
-    event Forwarded(address indexed from, address indexed to, uint256 amount, uint256 shares);
-    event Refunded(address indexed from, address indexed to, uint256 amount);
-    event Recovered(address indexed from, address indexed to, uint256 amount);
+    event Forwarded(address indexed to, uint256 amount, uint256 shares);
+    event Refunded(address indexed token, address indexed to, uint256 amount);
+    event Recovered(address indexed token, address indexed to, uint256 amount);
 
     /// FactoryBeacon events
     event BeaconProxyDeployed(
@@ -118,17 +118,17 @@ abstract contract BaseDirectTransferTest is Test {
 
     function _expectForwardedEvent(address dta, address to, uint256 amount, uint256 shares) internal {
         vm.expectEmit(true, true, true, true, dta);
-        emit Forwarded(dta, to, amount, shares);
+        emit Forwarded(to, amount, shares);
     }
 
-    function _expectRefundedEvent(address dta, address to, uint256 amount) internal {
+    function _expectRefundedEvent(address dta, address tokenAddress, address to, uint256 amount) internal {
         vm.expectEmit(true, true, true, true, dta);
-        emit Refunded(dta, to, amount);
+        emit Refunded(tokenAddress, to, amount);
     }
 
-    function _expectRecoveredEvent(address dta, address to, uint256 amount) internal {
+    function _expectRecoveredEvent(address dta, address tokenAddress, address to, uint256 amount) internal {
         vm.expectEmit(true, true, true, true, dta);
-        emit Recovered(dta, to, amount);
+        emit Recovered(tokenAddress, to, amount);
     }
 
     function _expectBeaconProxyDeployedEvent(

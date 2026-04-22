@@ -67,7 +67,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         vm.prank(user);
         vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
-        dta.forward(DEPOSIT_AMOUNT, 0, emptyAttestation);
+        dta.depositAndForward(DEPOSIT_AMOUNT, 0, "", emptyAttestation);
     }
 
     function test_ForwardSucceeds() public {
@@ -78,7 +78,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectForwardedEvent(address(dta), user, DEPOSIT_AMOUNT, expectedShares);
         vm.prank(owner);
-        uint256 shares = dta.forward(DEPOSIT_AMOUNT, 0, emptyAttestation);
+        uint256 shares = dta.depositAndForward(DEPOSIT_AMOUNT, 0, "", emptyAttestation);
 
         assertEq(shares, expectedShares, "returned shares must match mock DCD rate");
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after forward");
@@ -93,9 +93,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RefundSweepsFullBalanceToReceiver() public {
         deal(address(token), address(dta), DEPOSIT_AMOUNT);
 
-        _expectRefundedEvent(address(dta), user, DEPOSIT_AMOUNT);
+        _expectRefundedEvent(address(dta), address(token), user, DEPOSIT_AMOUNT);
         vm.prank(owner);
-        dta.refund();
+        dta.refund(address(token));
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after refund");
         assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "receiver must hold swept balance");
@@ -104,9 +104,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RefundWithZeroBalance() public {
         assertEq(token.balanceOf(address(dta)), 0, "precondition: DTA balance is zero");
 
-        _expectRefundedEvent(address(dta), user, 0);
+        _expectRefundedEvent(address(dta), address(token), user, 0);
         vm.prank(owner);
-        dta.refund();
+        dta.refund(address(token));
 
         assertEq(token.balanceOf(user), 0, "receiver balance unchanged on zero-amount refund");
     }
@@ -114,7 +114,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RevertWhen_RefundCallerNotOwner() public {
         vm.prank(user);
         vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
-        dta.refund();
+        dta.refund(address(token));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -124,9 +124,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RecoverSweepsFullBalanceToRecoveryAccount() public {
         deal(address(token), address(dta), DEPOSIT_AMOUNT);
 
-        _expectRecoveredEvent(address(dta), recoveryAccount, DEPOSIT_AMOUNT);
+        _expectRecoveredEvent(address(dta), address(token), recoveryAccount, DEPOSIT_AMOUNT);
         vm.prank(owner);
-        dta.recover();
+        dta.recover(address(token));
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after recover");
         assertEq(token.balanceOf(recoveryAccount), DEPOSIT_AMOUNT, "recoveryAccount must hold swept balance");
@@ -135,9 +135,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RecoverWithZeroBalance() public {
         assertEq(token.balanceOf(address(dta)), 0, "precondition: DTA balance is zero");
 
-        _expectRecoveredEvent(address(dta), recoveryAccount, 0);
+        _expectRecoveredEvent(address(dta), address(token), recoveryAccount, 0);
         vm.prank(owner);
-        dta.recover();
+        dta.recover(address(token));
 
         assertEq(token.balanceOf(recoveryAccount), 0, "recoveryAccount balance unchanged on zero-amount recover");
     }
@@ -145,7 +145,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     function test_RevertWhen_RecoverCallerNotOwner() public {
         vm.prank(user);
         vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
-        dta.recover();
+        dta.recover(address(token));
     }
 
 }

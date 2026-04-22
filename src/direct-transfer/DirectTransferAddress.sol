@@ -19,7 +19,7 @@ contract DirectTransferAddress {
 
     // IMMUTABLES - stored in implementation bytecode and shared amongst proxies.
 
-    /// @notice Authorized caller for forward(), refund(), and recover().
+    /// @notice Authorized caller for depositAndForward(), refund(), and recover().
     address public immutable owner;
 
     /// @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
@@ -40,9 +40,9 @@ contract DirectTransferAddress {
     /// @notice Guard against re-initialization.
     bool public _initialized;
 
-    event Forwarded(address indexed from, address indexed to, uint256 amount, uint256 shares);
-    event Refunded(address indexed from, address indexed to, uint256 amount);
-    event Recovered(address indexed from, address indexed to, uint256 amount);
+    event Forwarded(address indexed to, uint256 amount, uint256 shares);
+    event Refunded(address indexed token, address indexed to, uint256 amount);
+    event Recovered(address indexed token, address indexed to, uint256 amount);
 
     error DirectTransferAddress__AlreadyInitialized();
     error DirectTransferAddress__NotOwner();
@@ -51,7 +51,7 @@ contract DirectTransferAddress {
      * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
      * @dev All four arguments become shared immutables on the implementation; none live in proxy storage.
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
-     * @param _owner The only address allowed to call forward(), refund(), and recover() on resulting proxies.
+     * @param _owner The only address allowed to call depositAndForward(), refund(), and recover() on resulting proxies.
      * @param _recoveryAccount Recovery sink for recover().
      * @param _token The single stablecoin this implementation handles; must match the `inputToken` that
      *               FactoryBeacon.deployBeaconProxy() enforces.
@@ -77,11 +77,13 @@ contract DirectTransferAddress {
     ///      Design_Notes/forward-error-handling.md for the classification taxonomy.
     /// @param amount The amount of token to forward.
     /// @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
+    /// @param distributorCode The DCD distributor code forwarded as-is into DCD.deposit.
     /// @param attestation The Predicate attestation authorizing this deposit.
     /// @return shares The vault shares minted to the receiver.
-    function forward(
+    function depositAndForward(
         uint256 amount,
         uint256 minimumMint,
+        bytes calldata distributorCode,
         Attestation calldata attestation
     )
         external
@@ -90,34 +92,34 @@ contract DirectTransferAddress {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
 
         // Reset to 0 first so USDT-class tokens (which reject non-zero → non-zero approve
-        // transitions) don't brick subsequent forward() calls if any residual allowance remains.
+        // transitions) don't brick subsequent depositAndForward() calls if any residual allowance remains.
         token.safeApprove(address(DCD), 0);
         token.safeApprove(address(DCD), amount);
-        shares = DCD.deposit(token, amount, minimumMint, receiver, "", attestation);
-        emit Forwarded(address(this), receiver, amount, shares);
+        shares = DCD.deposit(token, amount, minimumMint, receiver, distributorCode, attestation);
+        emit Forwarded(receiver, amount, shares);
     }
 
     /**
      * @notice Sweep this DTA's full `token` balance to `receiver`
-     * @dev Intended for non-sanctions forward() reverts. If the refund transfer reverts (e.g. `receiver`
+     * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
      *      is on a token-level blacklist), the owner should then call recover().
      */
-    function refund() external {
+    function refund(address tokenAddress) external {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(receiver, amount);
-        emit Refunded(address(this), receiver, amount);
+        emit Refunded(tokenAddress, receiver, amount);
     }
 
     /**
      * @notice Sweep this DTA's full `token` balance to `recoveryAccount`. Only callable by `owner`.
-     * @dev Intended for sanctions-class forward() reverts or when a prior refund() attempt itself reverted.
+     * @dev Intended for sanctions-class depositAndForward() reverts or when a prior refund() attempt itself reverted.
      */
-    function recover() external {
+    function recover(address tokenAddress) external {
         if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(recoveryAccount, amount);
-        emit Recovered(address(this), recoveryAccount, amount);
+        emit Recovered(tokenAddress, recoveryAccount, amount);
     }
 
 }
