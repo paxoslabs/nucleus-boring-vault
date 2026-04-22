@@ -27,13 +27,16 @@ contract FactoryBeacon is UpgradeableBeacon {
     /**
      * @notice Emitted when a new DirectTransferAddress beacon proxy is deployed.
      * @param directTransferAddress Address of the freshly deployed BeaconProxy (the DTA).
-     * @param user The end-user configured as the DTA's `receiver`.
+     * @param userDestinationAddress The end-user configured as the DTA's `receiver`.
      * @param organizationId Organization identifier mixed into the deployment salt; surfaced here
      *                       so indexers can correlate DTAs to an off-chain org.
      * @param inputToken The stablecoin the DTA accepts and forwards.
      */
     event BeaconProxyDeployed(
-        address indexed directTransferAddress, address indexed user, bytes32 indexed organizationId, address inputToken
+        address directTransferAddress,
+        address indexed userDestinationAddress,
+        bytes32 indexed organizationId,
+        address indexed inputToken
     );
 
     /// @notice Thrown when `inputToken` does not match the implementation's immutable `token`.
