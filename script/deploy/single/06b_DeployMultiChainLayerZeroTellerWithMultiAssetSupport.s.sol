@@ -166,6 +166,11 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             config.requiredDvns.length + config.optionalDvnThreshold > 2, "DEPLOY_06b_setConfig() DVN Count Must Be > 2"
         );
 
+        require(
+            config.optionalDvnThreshold <= config.optionalDvns.length,
+            "Optional DVN threshold is larger than the number of optional DVNs provided"
+        );
+
         bytes memory ulnConfigBytes = abi.encode(
             UlnConfig(
                 config.dvnBlockConfirmationsRequired,
