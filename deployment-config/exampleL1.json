@@ -6,6 +6,7 @@
   "boringVault": {
     "boringVaultName": "Nucleus Vault",
     "boringVaultSymbol": "NV",
+    "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
   "freezeListBeforeTransferHook": {
@@ -70,7 +71,6 @@
   },
   "distributorCodeDepositor": {
     "deploy": true,
-    "distributorCodeDepositorSalt": "0x48b53893da2e0b0248268c00000000000000000000000000000000000000001d",
     "supplyCap": "1000000000000000000000000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "policyOne",
@@ -80,7 +80,6 @@
     "name": "Example Withdraw Queue",
     "symbol": "EWQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "feePercentage": "100",
     "minimumOrderSize": "1000000000000000000",
     "processorAddress": "0x00000000004F96C07B83e86600D86F0000000000"
   }

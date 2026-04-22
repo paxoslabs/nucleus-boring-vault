@@ -29,6 +29,7 @@ library ConfigReader {
         uint16 performanceFee;
         string boringVaultName;
         string boringVaultSymbol;
+        address beforeTransferHookAddress;
         address balancerVault;
         uint32 peerEid;
         address[] requiredDvns;
@@ -60,7 +61,6 @@ library ConfigReader {
         uint256 distributorCodeDepositorSupplyCap;
         address registry;
         string policyID;
-        uint256 withdrawQueueFeePercentage;
         string withdrawQueueName;
         string withdrawQueueSymbol;
         address withdrawQueueFeeRecipient;
@@ -92,6 +92,7 @@ library ConfigReader {
         config.boringVault = _config.readAddress(".boringVault.address");
         config.boringVaultName = _config.readString(".boringVault.boringVaultName");
         config.boringVaultSymbol = _config.readString(".boringVault.boringVaultSymbol");
+        config.beforeTransferHookAddress = _config.readAddress(".boringVault.beforeTransferHookAddress");
 
         // Reading from the 'manager' section
         config.manager = _config.readAddress(".manager.address");
@@ -133,7 +134,6 @@ library ConfigReader {
         config.policyID = _config.readString(".distributorCodeDepositor.policyID");
 
         // Reading from the 'withdrawQueue' section
-        config.withdrawQueueFeePercentage = uint256(_config.readUint(".withdrawQueue.feePercentage"));
         config.withdrawQueueName = _config.readString(".withdrawQueue.name");
         config.withdrawQueueSymbol = _config.readString(".withdrawQueue.symbol");
         config.withdrawQueueFeeRecipient = _config.readAddress(".withdrawQueue.feeRecipient");
