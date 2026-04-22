@@ -101,9 +101,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
     function test_ReceiverLivesAtSlotZero() public {
         // Pins the storage layout: `receiver` is the first declared storage variable and
-        // therefore must occupy slot 0. Reads the raw slot with vm.load so any accidental
-        // pre-pending of storage above `receiver` (including a mis-sized storage gap, or a
-        // future base contract without its own __gap) breaks this assertion immediately.
+        // therefore must occupy slot 0. Reads slot 0 directly with vm.load so that inserting
+        // any new storage variable ahead of `receiver` (including a future base contract
+        // that declares its own storage without a `__gap`) breaks this assertion immediately.
         DirectTransferAddress fresh = _deployUninitializedProxy();
         fresh.initialize(user);
 
