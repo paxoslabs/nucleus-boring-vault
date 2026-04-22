@@ -13,7 +13,14 @@
       "isPegged": true,
       "rateProvider": "0x0000000000000000000000000000000000000000"
     },
-    "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    },
+    "0x6c3ea9036406852006290770bedfcaba0e23a0e8": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    },    "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
       "isPegged": false,
       "denomination": "stETH/wstETH",
       "priceFeedType": 2,
