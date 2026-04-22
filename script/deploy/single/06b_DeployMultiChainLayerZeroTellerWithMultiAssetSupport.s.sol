@@ -68,8 +68,10 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             "Address not left padded correctly"
         );
 
-        teller.setPeer(config.peerEid, leftPaddedBytes32Peer);
-        teller.addChain(config.peerEid, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
+        if (config.peerEid != 0) {
+            teller.setPeer(config.peerEid, leftPaddedBytes32Peer);
+            teller.addChain(config.peerEid, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
+        }
         ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(config.lzEndpoint);
 
         // Post Deploy Checks
@@ -159,6 +161,8 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
         // sort the dvns
         config.requiredDvns = sortAddresses(config.requiredDvns);
         config.optionalDvns = sortAddresses(config.optionalDvns);
+
+        require(requiredDvns.length + config.optionalDvnThreshold > 2, "DEPLOY_06b_setConfig() DVN Count Must Be > 2");
 
         bytes memory ulnConfigBytes = abi.encode(
             UlnConfig(
