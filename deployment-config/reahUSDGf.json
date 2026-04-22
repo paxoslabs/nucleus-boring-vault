@@ -27,7 +27,7 @@
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
     "peerEid": 0,
-    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
       "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
       "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
