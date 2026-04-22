@@ -17,6 +17,8 @@ contract DirectTransferAddress {
 
     using SafeTransferLib for ERC20;
 
+    // IMMUTABLES - stored in implementation bytecode and shared amongst proxies.
+
     /// @notice Authorized caller for forward(), refund(), and recover().
     address public immutable owner;
 
@@ -30,11 +32,13 @@ contract DirectTransferAddress {
     /// @notice The single stablecoin this implementation accepts, forwards, refunds, and recovers (e.g. USDC or USDT).
     ERC20 public immutable token;
 
+    // STORAGE - unique, initializable, per-proxy values.
+
     /// @notice The receiver of vault shares from DCD deposits. Also the refund recipient.
     address public receiver;
 
     /// @notice Guard against re-initialization.
-    bool private _initialized;
+    bool public _initialized;
 
     event Forwarded(address indexed from, address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed from, address indexed to, uint256 amount);
