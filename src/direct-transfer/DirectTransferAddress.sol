@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { Initializable } from "@openzeppelin-v5.0.1/contracts/proxy/utils/Initializable.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 
 /**
@@ -12,8 +13,9 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
  *         stablecoin and forwards balances into a DistributorCodeDepositor, minting BoringVault shares
  *         to a pre-configured receiver.
  * @custom:security-contact security@molecularlabs.io
+ * @custom:oz-upgrades
  */
-contract DirectTransferAddress {
+contract DirectTransferAddress is Initializable {
 
     using SafeTransferLib for ERC20;
 
@@ -38,14 +40,16 @@ contract DirectTransferAddress {
     /// @notice The receiver of vault shares from DCD deposits. Also the refund recipient.
     address public receiver;
 
-    /// @notice Guard against re-initialization.
-    bool public _initialized;
+    /// @dev Reserved for future storage. Shrink this array by the number of slots any newly
+    ///      appended variables consume, mindful of Solidity packing rules (a new array starts
+    ///      at a fresh slot; an address packs with an adjacent uint96; etc.). Recognized as a
+    ///      storage gap by OpenZeppelin's upgrade validator.
+    uint256[49] private __gap;
 
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
-    error AlreadyInitialized();
     error OwnableUnauthorizedAccount(address account);
     error OwnableInvalidOwner(address owner);
     error ZeroAddress();
@@ -73,25 +77,27 @@ contract DirectTransferAddress {
      */
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
         if (_owner == address(0)) revert OwnableInvalidOwner(address(0));
+
         if ((address(_dcd) == address(0)) || (_recoveryAccount == address(0)) || (address(_token) == address(0))) {
             revert ZeroAddress();
         }
+
         if ((address(_dcd).code.length == 0) || (address(_token).code.length == 0)) revert NoCode();
 
         DCD = _dcd;
         owner = _owner;
         recoveryAccount = _recoveryAccount;
         token = _token;
+
+        _disableInitializers();
     }
 
     /**
-     * @notice Initializes the proxy with the receiver address. Callable once.
+     * @notice Initializes the proxy with the receiver address. Callable once per proxy.
      * @param _receiver The address that will receive vault shares from deposits.
      */
-    function initialize(address _receiver) external {
-        if (_initialized) revert AlreadyInitialized();
+    function initialize(address _receiver) external initializer {
         if (_receiver == address(0)) revert ZeroAddress();
-        _initialized = true;
         receiver = _receiver;
     }
 

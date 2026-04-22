@@ -5,6 +5,8 @@ import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test
 import { MockERC20 } from "@forge-std/mocks/MockERC20.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
+import { Initializable } from "@openzeppelin-v5.0.1/contracts/proxy/utils/Initializable.sol";
+import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconProxy.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { BaseDirectTransferTest, MockDCD } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
@@ -68,32 +70,52 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
     //////////////////////////////////////////////////////////////*/
 
     function test_InitializeSetsReceiver() public {
-        DirectTransferAddress freshImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        DirectTransferAddress fresh = _deployUninitializedProxy();
 
-        freshImpl.initialize(user);
+        fresh.initialize(user);
 
-        assertEq(freshImpl.receiver(), user, "receiver must equal initialize argument");
+        assertEq(fresh.receiver(), user, "receiver must equal initialize argument");
     }
 
     function test_RevertWhen_InitializeCalledTwice() public {
-        DirectTransferAddress freshImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
-        freshImpl.initialize(user);
+        DirectTransferAddress fresh = _deployUninitializedProxy();
+        fresh.initialize(user);
 
-        vm.expectRevert(DirectTransferAddress.AlreadyInitialized.selector, address(freshImpl));
-        freshImpl.initialize(user2);
+        vm.expectRevert(Initializable.InvalidInitialization.selector, address(fresh));
+        fresh.initialize(user2);
     }
 
     function test_RevertWhen_InitializeReceiverIsZeroAddress() public {
-        DirectTransferAddress freshImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        DirectTransferAddress fresh = _deployUninitializedProxy();
 
-        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector, address(freshImpl));
-        freshImpl.initialize(address(0));
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector, address(fresh));
+        fresh.initialize(address(0));
+    }
+
+    function test_RevertWhen_InitializeCalledOnBareImpl() public {
+        // The impl's constructor calls _disableInitializers(), so the bare impl must not be
+        // initializable directly under any circumstances.
+        vm.expectRevert(Initializable.InvalidInitialization.selector, address(impl));
+        impl.initialize(user);
+    }
+
+    function test_ReceiverLivesAtSlotZero() public {
+        // Pins the storage layout: `receiver` is the first declared storage variable and
+        // therefore must occupy slot 0. Reads the raw slot with vm.load so any accidental
+        // pre-pending of storage above `receiver` (including a mis-sized storage gap, or a
+        // future base contract without its own __gap) breaks this assertion immediately.
+        DirectTransferAddress fresh = _deployUninitializedProxy();
+        fresh.initialize(user);
+
+        bytes32 slotZero = vm.load(address(fresh), bytes32(uint256(0)));
+        assertEq(address(uint160(uint256(slotZero))), user, "receiver must occupy slot 0");
+        assertEq(fresh.receiver(), user, "receiver getter must return initialized value");
+    }
+
+    /// @dev Deploy a BeaconProxy without initData so `initialize` can be called explicitly by the test.
+    function _deployUninitializedProxy() internal returns (DirectTransferAddress) {
+        BeaconProxy proxy = new BeaconProxy(address(beacon), "");
+        return DirectTransferAddress(address(proxy));
     }
 
     /*//////////////////////////////////////////////////////////////
