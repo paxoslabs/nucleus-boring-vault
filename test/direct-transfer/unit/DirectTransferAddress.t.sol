@@ -34,6 +34,34 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         assertEq(address(freshImpl.token()), address(token), "token immutable must match constructor arg");
     }
 
+    function test_RevertWhen_ConstructorHasZeroAddressArg() public {
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
+        new DirectTransferAddress(DistributorCodeDepositor(address(0)), owner, recoveryAccount, ERC20(address(token)));
+
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
+        new DirectTransferAddress(
+            DistributorCodeDepositor(address(mockDCD)), address(0), recoveryAccount, ERC20(address(token))
+        );
+
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
+        new DirectTransferAddress(DistributorCodeDepositor(address(mockDCD)), owner, address(0), ERC20(address(token)));
+
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
+        new DirectTransferAddress(DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(0)));
+    }
+
+    function test_RevertWhen_ConstructorDcdOrTokenHasNoCode() public {
+        vm.expectRevert(DirectTransferAddress.NoCode.selector);
+        new DirectTransferAddress(
+            DistributorCodeDepositor(address(0xBEEF)), owner, recoveryAccount, ERC20(address(token))
+        );
+
+        vm.expectRevert(DirectTransferAddress.NoCode.selector);
+        new DirectTransferAddress(
+            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(0xCAFE))
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                INITIALIZE
     //////////////////////////////////////////////////////////////*/
@@ -56,6 +84,15 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         vm.expectRevert(DirectTransferAddress.AlreadyInitialized.selector, address(freshImpl));
         freshImpl.initialize(user2);
+    }
+
+    function test_RevertWhen_InitializeReceiverIsZeroAddress() public {
+        DirectTransferAddress freshImpl = new DirectTransferAddress(
+            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(token))
+        );
+
+        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector, address(freshImpl));
+        freshImpl.initialize(address(0));
     }
 
     /*//////////////////////////////////////////////////////////////

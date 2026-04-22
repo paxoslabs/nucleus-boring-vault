@@ -46,10 +46,12 @@ contract DirectTransferAddress {
 
     error AlreadyInitialized();
     error NotOwner();
+    error ZeroAddress();
+    error NoCode();
 
     /**
      * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
-     * @dev All four arguments become shared immutables on the implementation; none live in proxy storage.
+     * @dev All four arguments become shared immutables on the implementation's storage; none live in proxy storage.
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
      * @param _owner The only address allowed to call depositAndForward(), refund(), and recover() on resulting proxies.
      * @param _recoveryAccount Recovery sink for recover().
@@ -57,6 +59,12 @@ contract DirectTransferAddress {
      *               FactoryBeacon.deployBeaconProxy() enforces.
      */
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
+        if (
+            (address(_dcd) == address(0)) || (_owner == address(0)) || (_recoveryAccount == address(0))
+                || (address(_token) == address(0))
+        ) revert ZeroAddress();
+        if ((address(_dcd).code.length == 0) || (address(_token).code.length == 0)) revert NoCode();
+
         DCD = _dcd;
         owner = _owner;
         recoveryAccount = _recoveryAccount;
@@ -67,6 +75,7 @@ contract DirectTransferAddress {
     /// @param _receiver The address that will receive vault shares from deposits.
     function initialize(address _receiver) external {
         if (_initialized) revert AlreadyInitialized();
+        if (_receiver == address(0)) revert ZeroAddress();
         _initialized = true;
         receiver = _receiver;
     }
