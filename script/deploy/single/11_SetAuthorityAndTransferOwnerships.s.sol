@@ -57,7 +57,6 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         IAuthority(config.manager).setAuthority(config.rolesAuthority);
         IAuthority(config.teller).setAuthority(config.rolesAuthority);
         IAuthority(config.withdrawQueue).setAuthority(config.rolesAuthority);
-        IAuthority(config.freezeListBeforeTransferHook).setAuthority(config.rolesAuthority);
 
         IAuthority(config.boringVault).transferOwnership(config.protocolAdmin);
         IAuthority(config.manager).transferOwnership(config.protocolAdmin);
@@ -65,7 +64,13 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         IAuthority(config.teller).transferOwnership(config.protocolAdmin);
         IAuthority(config.withdrawQueue).transferOwnership(config.protocolAdmin);
         IAuthority(config.rolesAuthority).transferOwnership(config.protocolAdmin);
-        IAuthority(config.freezeListBeforeTransferHook).transferOwnership(config.protocolAdmin);
+
+        // If the hook was recently deployed as a part of this script, it's owner will be the broadcaster and not the
+        // multisig yet. If this is the case set it's authority and owner to finish setup
+        if (IAuthority(config.freezeListBeforeTransferHook).owner() == broadcaster) {
+            IAuthority(config.freezeListBeforeTransferHook).setAuthority(config.rolesAuthority);
+            IAuthority(config.freezeListBeforeTransferHook).transferOwnership(config.protocolAdmin);
+        }
 
         // No need to transfer ownership to distributor code depositor as it is set to protocolAdmin in deployment.
 

@@ -29,6 +29,7 @@ library ConfigReader {
         uint16 performanceFee;
         string boringVaultName;
         string boringVaultSymbol;
+        address beforeTransferHookAddress;
         address balancerVault;
         uint32 peerEid;
         address[] requiredDvns;
@@ -91,6 +92,7 @@ library ConfigReader {
         config.boringVault = _config.readAddress(".boringVault.address");
         config.boringVaultName = _config.readString(".boringVault.boringVaultName");
         config.boringVaultSymbol = _config.readString(".boringVault.boringVaultSymbol");
+        config.beforeTransferHookAddress = _config.readAddress(".boringVault.beforeTransferHookAddress");
 
         // Reading from the 'manager' section
         config.manager = _config.readAddress(".manager.address");

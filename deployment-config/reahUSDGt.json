@@ -6,6 +6,7 @@
   "boringVault": {
     "boringVaultName": "Reah USDG Treasury",
     "boringVaultSymbol": "reahUSDGt",
+    "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "freezeListBeforeTransferHook": {
