@@ -19,7 +19,7 @@ import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
 /// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
-/// @dev Exposes `token()` so FactoryBeacon.deployBeaconProxy's inputToken↔token match check passes.
+/// @dev Exposes `DCD()` and `token()` so FactoryBeacon can derive salt entropy from implementation immutables.
 contract DirectTransferAddress1 {
 
     using SafeTransferLib for ERC20;
@@ -127,10 +127,11 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
+            bytes memory initData = abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], initData);
 
             // Verify the deployed address matches the deterministic computation
-            address expected = beacon.computeDTAAddress(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
+            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i], initData);
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
@@ -168,7 +169,8 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(address(boringVault), ORGANIZATION_ID, users[i], address(USDC));
+            bytes memory initData = abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], initData);
         }
 
         // Verify initial DCD

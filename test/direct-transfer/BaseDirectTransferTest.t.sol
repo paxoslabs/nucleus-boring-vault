@@ -20,7 +20,12 @@ contract MockDCD {
 
     using SafeTransferLib for ERC20;
 
+    address public immutable boringVault;
     ERC20 public shareToken;
+
+    constructor(address _boringVault) {
+        boringVault = _boringVault;
+    }
 
     function setShareToken(ERC20 _shareToken) external {
         shareToken = _shareToken;
@@ -96,7 +101,7 @@ abstract contract BaseDirectTransferTest is Test {
         shareToken = new MockERC20();
         shareToken.initialize("Share Token", "SHR", 6);
 
-        mockDCD = new MockDCD();
+        mockDCD = new MockDCD(boringVault);
         mockDCD.setShareToken(ERC20(address(shareToken)));
         // Pre-fund the mock DCD so it can settle share transfers on deposit().
         deal(address(shareToken), address(mockDCD), MOCK_DCD_SHARE_POOL);

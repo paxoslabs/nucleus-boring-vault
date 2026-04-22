@@ -68,8 +68,8 @@ contract DirectTransferAddress {
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
      * @param _owner The only address allowed to call depositAndForward(), refund(), and recover() on resulting proxies.
      * @param _recoveryAccount Recovery sink for recover().
-     * @param _token The single stablecoin this implementation handles; must match the `inputToken` that
-     *               FactoryBeacon.deployBeaconProxy() enforces.
+     * @param _token The single stablecoin this implementation handles; FactoryBeacon derives this
+     *               value from the implementation when computing deterministic deployment salts.
      */
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
         if (_owner == address(0)) revert OwnableInvalidOwner(address(0));

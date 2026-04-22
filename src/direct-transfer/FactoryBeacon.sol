@@ -39,12 +39,11 @@ contract FactoryBeacon is UpgradeableBeacon {
         address indexed inputToken
     );
 
-    /// @notice Thrown when `inputToken` does not match the implementation's immutable `token`.
-    /// @dev Prevents producing DTAs whose salt promises one asset but whose forward() path only
-    /// handles another.
-    /// @param expected The `token` returned by the current implementation.
-    /// @param provided The `inputToken` passed by the caller.
-    error InputTokenMismatch(address expected, address provided);
+    /// @notice Thrown when `userDestinationAddress` is the zero address.
+    error ZeroAddress();
+
+    /// @notice Thrown when `initData` is empty.
+    error EmptyInitData();
 
     /// @param _implementation Initial DirectTransferAddress implementation this beacon serves; must
     /// already be deployed (UpgradeableBeacon enforces nonzero code length).
@@ -55,37 +54,39 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @notice Deploys a DirectTransferAddress beacon proxy at a deterministic address via CreateX.
      * @dev The beacon for the new proxy is always this contract, and the salt disables CreateX's
      *      cross-chain redeploy protection so identical inputs produce the same address on every chain.
-     *      Callers relying on cross-chain determinism MUST ensure this factory was deployed to the same address on each
-     * target chain.
-     * @param boringVault BoringVault where forwarded funds settle after depositing through the DCD;
-     *                    used only as salt entropy.
+     *      `boringVault` and `inputToken` are sourced from the current implementation's immutables.
+     *      `initData` must be ABI-encoded calldata for the implementation's initializer.
+     *      Initialization executes via delegatecall during proxy construction, so initializer logic
+     *      must not assume `msg.sender` is an EOA.
+     *      Callers relying on cross-chain determinism MUST ensure this factory was deployed to the
+     *      same address on each target chain.
      * @param organizationId Organization identifier as bytes32, typically a UUID left-padded to 32
      *                       bytes; used only as salt entropy.
      *                       Example:
      *                       Input: "700768ae-c71d-42cc-9ff9-13b777d6d379"
      *                       Output: "0x00000000000000000000000000000000700768aec71d42cc9ff913b777d6d379"
-     * @param userDestinationAddress End-user that BoringVault shares are minted to on forward() and
-     *                               the refund target on refund().
-     * @param inputToken Single token the beaconProxy expects to receive; must equal the current
-     *                   implementation's `token()`.
+     * @param userDestinationAddress Canonical end-user identity included in the deployment salt and event.
+     * @param initData ABI-encoded initializer calldata for the current implementation.
      * @return dta The deployed BeaconProxy address — stable across chains for identical inputs.
      */
     function deployBeaconProxy(
-        address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
-        address inputToken
+        bytes calldata initData
     )
         external
         onlyOwner
         returns (address dta)
     {
-        address expectedToken = address(DirectTransferAddress(implementation()).token());
-        if (inputToken != expectedToken) revert InputTokenMismatch(expectedToken, inputToken);
+        if (userDestinationAddress == address(0)) revert ZeroAddress();
+        if (initData.length == 0) revert EmptyInitData();
 
-        bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
-        bytes memory initData =
-            abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
+        DirectTransferAddress impl = DirectTransferAddress(implementation());
+        address boringVault = impl.DCD().boringVault();
+        address inputToken = address(impl.token());
+
+        bytes32 salt =
+            _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken, keccak256(initData));
         bytes memory creationCode =
             abi.encodePacked(type(BeaconProxy).creationCode, abi.encode(address(this), initData));
         dta = CREATEX.deployCreate3(salt, creationCode);
@@ -97,26 +98,29 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @notice Computes the DTA address that `deployBeaconProxy` would produce for the given inputs,
      *         without deploying.
      * @dev Replicates CreateX's `_guard` logic for (MsgSender, CrosschainProtected=false):
-     *      guardedSalt = keccak256(abi.encode(address(this), salt)). `inputToken` is not validated
-     *      against the implementation here; callers should supply the value they intend to pass to
-     *      `deployBeaconProxy`.
-     * @param boringVault Same meaning as in `deployBeaconProxy`.
+     *      guardedSalt = keccak256(abi.encode(address(this), salt)).
+     *      `boringVault` and `inputToken` are sourced from the current implementation's immutables,
+     *      so this result can change across beacon upgrades.
      * @param organizationId Same meaning as in `deployBeaconProxy`.
      * @param userDestinationAddress Same meaning as in `deployBeaconProxy`.
-     * @param inputToken Same meaning as in `deployBeaconProxy`.
+     * @param initData Same meaning as in `deployBeaconProxy`.
      * @return The address at which the DTA will be (or has been) deployed for the given inputs.
      */
     function computeDTAAddress(
-        address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
-        address inputToken
+        bytes memory initData
     )
         public
         view
         returns (address)
     {
-        bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
+        DirectTransferAddress impl = DirectTransferAddress(implementation());
+        address boringVault = impl.DCD().boringVault();
+        address inputToken = address(impl.token());
+
+        bytes32 salt =
+            _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken, keccak256(initData));
         bytes32 guardedSalt = keccak256(abi.encode(address(this), salt));
         return CREATEX.computeCreate3Address(guardedSalt, address(CREATEX));
     }
@@ -125,14 +129,15 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @notice Computes the deterministic CreateX salt for a DTA deployment.
      * @dev Salt layout (32 bytes): [0..19] address(this) binds salt to this factory; [20] 0x00
      *      disables CreateX's cross-chain redeploy protection; [21..31] 11 bytes of keccak256 over
-     *      the four inputs provide per-DTA entropy (~2^88 collision resistance).
+     *      five entropy inputs provide per-DTA entropy (~2^88 collision resistance).
      * @return The assembled 32-byte salt to pass to CREATEX.deployCreate3.
      */
     function _makeDTASalt(
         address boringVault,
         bytes32 organizationId,
         address userDestinationAddress,
-        address inputToken
+        address inputToken,
+        bytes32 initDataHash
     )
         internal
         view
@@ -140,7 +145,7 @@ contract FactoryBeacon is UpgradeableBeacon {
     {
         bytes1 crosschainProtectionFlag = bytes1(0x00);
         bytes32 nameEntropyHash =
-            keccak256(abi.encodePacked(boringVault, organizationId, userDestinationAddress, inputToken));
+            keccak256(abi.encodePacked(boringVault, organizationId, userDestinationAddress, inputToken, initDataHash));
         bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
         return bytes32(abi.encodePacked(address(this), crosschainProtectionFlag, nameEntropyHash11));
     }
