@@ -140,6 +140,7 @@ contract DirectTransferAddress is Initializable {
     function refund(address tokenAddress) external onlyOwner {
         ERC20 tokenToSweep = ERC20(tokenAddress);
         uint256 amount = tokenToSweep.balanceOf(address(this));
+        // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(receiver, amount);
         emit Refunded(tokenAddress, receiver, amount);
@@ -156,6 +157,7 @@ contract DirectTransferAddress is Initializable {
     function recover(address tokenAddress) external onlyOwner {
         ERC20 tokenToSweep = ERC20(tokenAddress);
         uint256 amount = tokenToSweep.balanceOf(address(this));
+        // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(recoveryAccount, amount);
         emit Recovered(tokenAddress, recoveryAccount, amount);
