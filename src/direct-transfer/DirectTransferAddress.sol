@@ -22,8 +22,9 @@ contract DirectTransferAddress {
     /// @notice Authorized caller for depositAndForward(), refund(), and recover().
     address public immutable owner;
 
-    /// @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
-    ///         a prior refund() attempt fails (e.g. receiver is on a token-level blacklist).
+    /* @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
+    *          a prior refund() attempt fails (e.g. receiver is on a token-level blacklist).
+    */
     address public immutable recoveryAccount;
 
     /// @notice The DistributorCodeDepositor every proxy under this implementation forwards deposits to.
@@ -45,9 +46,7 @@ contract DirectTransferAddress {
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
     error AlreadyInitialized();
-    /// @dev The caller account is not authorized to perform an operation.
     error OwnableUnauthorizedAccount(address account);
-    /// @dev The owner is not a valid owner account (e.g. `address(0)`).
     error OwnableInvalidOwner(address owner);
     error ZeroAddress();
     error ZeroAmount();
@@ -64,8 +63,8 @@ contract DirectTransferAddress {
     }
 
     /**
-     * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
-     * @dev All four arguments become shared immutables on the implementation's storage; none live in proxy storage.
+     * @notice Deploy a new DirectTransferAddress. There should be one active implementation per (DCD, stablecoin) pair.
+     * @dev All four arguments become shared immutables on the implementation's bytecode; none live in proxy storage.
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
      * @param _owner The only address allowed to call depositAndForward(), refund(), and recover() on resulting proxies.
      * @param _recoveryAccount Recovery sink for recover().
@@ -85,8 +84,10 @@ contract DirectTransferAddress {
         token = _token;
     }
 
-    /// @notice Initializes the proxy with the receiver address. Callable once.
-    /// @param _receiver The address that will receive vault shares from deposits.
+    /**
+     * @notice Initializes the proxy with the receiver address. Callable once.
+     * @param _receiver The address that will receive vault shares from deposits.
+     */
     function initialize(address _receiver) external {
         if (_initialized) revert AlreadyInitialized();
         if (_receiver == address(0)) revert ZeroAddress();
@@ -94,14 +95,16 @@ contract DirectTransferAddress {
         receiver = _receiver;
     }
 
-    /// @notice Approves the configured token to the DCD and deposits on behalf of the receiver.
-    /// @dev Propagates any DCD revert. Owner classifies the revert off-chain and then follows up
-    ///      with refund() or recover() to sweep the stranded token depending on the error.
-    /// @param amount The amount of token to forward.
-    /// @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
-    /// @param distributorCode The DCD distributor code forwarded as-is into DCD.deposit.
-    /// @param attestation The Predicate attestation authorizing this deposit.
-    /// @return shares The vault shares minted to the receiver.
+    /**
+     * @notice Approves the configured token to the DCD and deposits on behalf of the receiver.
+     * @dev Propagates any DCD revert. Owner classifies the revert off-chain and then follows up
+     *      with refund() or recover() to sweep the stranded token depending on the error.
+     * @param amount The amount of token to forward.
+     * @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
+     * @param distributorCode The DCD distributor code forwarded as-is into DCD.deposit.
+     * @param attestation The Predicate attestation authorizing this deposit.
+     * @return shares The vault shares minted to the receiver.
+     */
     function depositAndForward(
         uint256 amount,
         uint256 minimumMint,
@@ -112,7 +115,7 @@ contract DirectTransferAddress {
         onlyOwner
         returns (uint256 shares)
     {
-        // Reset to 0 first so USDT-class tokens (which reject non-zero → non-zero approve
+        // Reset to 0 first so USDT-like tokens (which reject non-zero → non-zero approve
         // transitions) don't brick subsequent depositAndForward() calls if any residual allowance remains.
         token.safeApprove(address(DCD), 0);
         token.safeApprove(address(DCD), amount);
@@ -124,8 +127,8 @@ contract DirectTransferAddress {
      * @notice Sweep this DTA's full balance of `tokenAddress` to `receiver`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
      *      is on a token-level blacklist), the owner should then call recover(). `tokenAddress` is a parameter
-     *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can be
-     * swept.
+     *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can
+     *      be swept.
      * @param tokenAddress The ERC20 to sweep.
      */
     function refund(address tokenAddress) external onlyOwner {
@@ -137,8 +140,9 @@ contract DirectTransferAddress {
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenAddress` to `recoveryAccount`. Only callable by `owner`.
-     * @dev Intended for sanctions-class depositAndForward() reverts or when a prior refund() attempt itself reverted.
+     * @notice Sweep this DTA's full balance of `tokenAddress` to `recoveryAccount`.
+     * @dev Intended for sanctions-class `depositAndForward()` reverts or when a prior `refund()` attempt itself
+     * reverted.
      *      `tokenAddress` is a parameter (rather than the immutable `token`) so stray tokens of any kind accidentally
      *      sent to this proxy can be swept.
      * @param tokenAddress The ERC20 to sweep.

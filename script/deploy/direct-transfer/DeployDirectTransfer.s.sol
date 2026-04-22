@@ -30,9 +30,8 @@ contract DeployDirectTransfer is BaseScript {
         address dcdAddress;
         ERC20 inputToken;
         if (block.chainid == 11_155_111) {
-            // Sepolia test vault DCD address from here:
-            dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843;
-            inputToken = ERC20(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238); // sepolia test USDC
+            dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843; // Sepolia test DCD address
+            inputToken = ERC20(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238); // Sepolia test USDC
         } else {
             revert("unsupported chain; add dcd + inputToken for this chainid");
         }

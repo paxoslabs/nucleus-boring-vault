@@ -19,9 +19,11 @@ import { ICreateX } from "src/interfaces/ICreateX.sol";
  */
 contract FactoryBeacon is UpgradeableBeacon {
 
-    /// @notice Canonical CreateX deployer used for CREATE3 deployments.
-    /// @dev Same address on every EVM chain where CreateX is deployed, which is what enables
-    /// cross-chain deterministic DTA addresses.
+    /**
+     * @notice Canonical CreateX deployer used for CREATE3 deployments.
+     * @dev Same address on every EVM chain where CreateX is deployed, which is what enables
+     *      cross-chain deterministic DTA addresses.
+     */
     ICreateX public constant CREATEX = ICreateX(0x1077f8ea07EA34D9F23BC39256BF234665FB391f);
 
     /**
@@ -45,19 +47,21 @@ contract FactoryBeacon is UpgradeableBeacon {
     /// @notice Thrown when `initData` is empty.
     error EmptyInitData();
 
-    /// @param _implementation Initial DirectTransferAddress implementation this beacon serves; must
-    /// already be deployed (UpgradeableBeacon enforces nonzero code length).
-    /// @param _owner Address authorized to call upgradeTo() on the inherited UpgradeableBeacon.
+    /**
+     * @param _implementation Initial DirectTransferAddress implementation this beacon serves.
+     * @param _owner Address authorized to call upgradeTo() on the inherited UpgradeableBeacon.
+     */
     constructor(address _implementation, address _owner) UpgradeableBeacon(_implementation, _owner) { }
 
     /**
      * @notice Deploys a DirectTransferAddress beacon proxy at a deterministic address via CreateX.
      * @dev The beacon for the new proxy is always this contract, and the salt disables CreateX's
      *      cross-chain redeploy protection so identical inputs produce the same address on every chain.
-     *      `boringVault` and `inputToken` are sourced from the current implementation's immutables.
+     *      `inputToken` is the implementation's `token` immutable; `boringVault` is read through the
+     *      implementation's DCD.
      *      `initData` must be ABI-encoded calldata for the implementation's initializer.
-     *      Initialization executes via delegatecall during proxy construction, so initializer logic
-     *      must not assume `msg.sender` is an EOA.
+     *      Initialization executes via delegatecall during proxy construction, so keep in mind
+     *      `msg.sender` of `initialize` is the address of the proxy being constructed.
      *      Callers relying on cross-chain determinism MUST ensure this factory was deployed to the
      *      same address on each target chain.
      * @param organizationId Organization identifier as bytes32, typically a UUID left-padded to 32
@@ -67,7 +71,7 @@ contract FactoryBeacon is UpgradeableBeacon {
      *                       Output: "0x00000000000000000000000000000000700768aec71d42cc9ff913b777d6d379"
      * @param userDestinationAddress Canonical end-user identity included in the deployment salt and event.
      * @param initData ABI-encoded initializer calldata for the current implementation.
-     * @return dta The deployed BeaconProxy address — stable across chains for identical inputs.
+     * @return dta The deployed BeaconProxy address.
      */
     function deployBeaconProxy(
         bytes32 organizationId,
@@ -127,9 +131,6 @@ contract FactoryBeacon is UpgradeableBeacon {
 
     /**
      * @notice Computes the deterministic CreateX salt for a DTA deployment.
-     * @dev Salt layout (32 bytes): [0..19] address(this) binds salt to this factory; [20] 0x00
-     *      disables CreateX's cross-chain redeploy protection; [21..31] 11 bytes of keccak256 over
-     *      five entropy inputs provide per-DTA entropy (~2^88 collision resistance).
      * @return The assembled 32-byte salt to pass to CREATEX.deployCreate3.
      */
     function _makeDTASalt(
