@@ -44,8 +44,8 @@ contract DirectTransferAddress {
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
-    error DirectTransferAddress__AlreadyInitialized();
-    error DirectTransferAddress__NotOwner();
+    error AlreadyInitialized();
+    error NotOwner();
 
     /**
      * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
@@ -66,7 +66,7 @@ contract DirectTransferAddress {
     /// @notice Initializes the proxy with the receiver address. Callable once.
     /// @param _receiver The address that will receive vault shares from deposits.
     function initialize(address _receiver) external {
-        if (_initialized) revert DirectTransferAddress__AlreadyInitialized();
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         receiver = _receiver;
     }
@@ -89,7 +89,7 @@ contract DirectTransferAddress {
         external
         returns (uint256 shares)
     {
-        if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
+        if (msg.sender != owner) revert NotOwner();
 
         // Reset to 0 first so USDT-class tokens (which reject non-zero → non-zero approve
         // transitions) don't brick subsequent depositAndForward() calls if any residual allowance remains.
@@ -105,7 +105,7 @@ contract DirectTransferAddress {
      *      is on a token-level blacklist), the owner should then call recover().
      */
     function refund(address tokenAddress) external {
-        if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
+        if (msg.sender != owner) revert NotOwner();
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(receiver, amount);
         emit Refunded(tokenAddress, receiver, amount);
@@ -116,7 +116,7 @@ contract DirectTransferAddress {
      * @dev Intended for sanctions-class depositAndForward() reverts or when a prior refund() attempt itself reverted.
      */
     function recover(address tokenAddress) external {
-        if (msg.sender != owner) revert DirectTransferAddress__NotOwner();
+        if (msg.sender != owner) revert NotOwner();
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(recoveryAccount, amount);
         emit Recovered(tokenAddress, recoveryAccount, amount);

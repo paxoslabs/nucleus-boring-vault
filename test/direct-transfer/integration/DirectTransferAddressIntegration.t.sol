@@ -29,7 +29,7 @@ contract DirectTransferAddress1 {
     DistributorCodeDepositor public immutable DCD;
     ERC20 public immutable token;
 
-    error DirectTransferAddress__AlreadyInitialized();
+    error AlreadyInitialized();
 
     constructor(DistributorCodeDepositor _dcd, ERC20 _token) {
         DCD = _dcd;
@@ -37,7 +37,7 @@ contract DirectTransferAddress1 {
     }
 
     function initialize(address _receiver) external {
-        if (_initialized) revert DirectTransferAddress__AlreadyInitialized();
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         receiver = _receiver;
     }

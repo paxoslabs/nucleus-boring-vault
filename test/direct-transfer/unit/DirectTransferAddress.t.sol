@@ -54,7 +54,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         );
         freshImpl.initialize(user);
 
-        vm.expectRevert(DirectTransferAddress.DirectTransferAddress__AlreadyInitialized.selector, address(freshImpl));
+        vm.expectRevert(DirectTransferAddress.AlreadyInitialized.selector, address(freshImpl));
         freshImpl.initialize(user2);
     }
 
@@ -66,7 +66,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         Attestation memory emptyAttestation;
 
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
+        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
         dta.depositAndForward(DEPOSIT_AMOUNT, 0, "", emptyAttestation);
     }
 
@@ -113,7 +113,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
     function test_RevertWhen_RefundCallerNotOwner() public {
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
+        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
         dta.refund(address(token));
     }
 
@@ -144,7 +144,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
     function test_RevertWhen_RecoverCallerNotOwner() public {
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.DirectTransferAddress__NotOwner.selector, address(dta));
+        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
         dta.recover(address(token));
     }
 
