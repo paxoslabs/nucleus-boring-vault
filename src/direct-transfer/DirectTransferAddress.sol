@@ -45,9 +45,22 @@ contract DirectTransferAddress {
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
     error AlreadyInitialized();
-    error NotOwner();
+    /// @dev The caller account is not authorized to perform an operation.
+    error OwnableUnauthorizedAccount(address account);
+    /// @dev The owner is not a valid owner account (e.g. `address(0)`).
+    error OwnableInvalidOwner(address owner);
     error ZeroAddress();
     error NoCode();
+
+    /**
+     * @dev We replicate OZ Ownable's interface rather than inheriting it. OZ's Ownable would store owner in a
+     * proxy storage slot, not as an `immutable` in the implementation contract. We want owner as an `immutable` in the
+     * implementation's bytecode so a single impl upgrade rotates the owner across every proxy at once.
+     */
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
 
     /**
      * @notice Deploy a new DirectTransferAddress implementation, deployed once per (DCD, stablecoin) pair.
@@ -59,10 +72,10 @@ contract DirectTransferAddress {
      *               FactoryBeacon.deployBeaconProxy() enforces.
      */
     constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
-        if (
-            (address(_dcd) == address(0)) || (_owner == address(0)) || (_recoveryAccount == address(0))
-                || (address(_token) == address(0))
-        ) revert ZeroAddress();
+        if (_owner == address(0)) revert OwnableInvalidOwner(address(0));
+        if ((address(_dcd) == address(0)) || (_recoveryAccount == address(0)) || (address(_token) == address(0))) {
+            revert ZeroAddress();
+        }
         if ((address(_dcd).code.length == 0) || (address(_token).code.length == 0)) revert NoCode();
 
         DCD = _dcd;
@@ -95,10 +108,9 @@ contract DirectTransferAddress {
         Attestation calldata attestation
     )
         external
+        onlyOwner
         returns (uint256 shares)
     {
-        if (msg.sender != owner) revert NotOwner();
-
         // Reset to 0 first so USDT-class tokens (which reject non-zero → non-zero approve
         // transitions) don't brick subsequent depositAndForward() calls if any residual allowance remains.
         token.safeApprove(address(DCD), 0);
@@ -112,8 +124,7 @@ contract DirectTransferAddress {
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
      *      is on a token-level blacklist), the owner should then call recover().
      */
-    function refund(address tokenAddress) external {
-        if (msg.sender != owner) revert NotOwner();
+    function refund(address tokenAddress) external onlyOwner {
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(receiver, amount);
         emit Refunded(tokenAddress, receiver, amount);
@@ -123,11 +134,15 @@ contract DirectTransferAddress {
      * @notice Sweep this DTA's full `token` balance to `recoveryAccount`. Only callable by `owner`.
      * @dev Intended for sanctions-class depositAndForward() reverts or when a prior refund() attempt itself reverted.
      */
-    function recover(address tokenAddress) external {
-        if (msg.sender != owner) revert NotOwner();
+    function recover(address tokenAddress) external onlyOwner {
         uint256 amount = token.balanceOf(address(this));
         token.safeTransfer(recoveryAccount, amount);
         emit Recovered(tokenAddress, recoveryAccount, amount);
+    }
+
+    /// @dev Throws if the sender is not the owner.
+    function _checkOwner() internal view {
+        if (msg.sender != owner) revert OwnableUnauthorizedAccount(msg.sender);
     }
 
 }

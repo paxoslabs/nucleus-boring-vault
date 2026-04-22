@@ -38,7 +38,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
         new DirectTransferAddress(DistributorCodeDepositor(address(0)), owner, recoveryAccount, ERC20(address(token)));
 
-        vm.expectRevert(DirectTransferAddress.ZeroAddress.selector);
+        vm.expectRevert(abi.encodeWithSelector(DirectTransferAddress.OwnableInvalidOwner.selector, address(0)));
         new DirectTransferAddress(
             DistributorCodeDepositor(address(mockDCD)), address(0), recoveryAccount, ERC20(address(token))
         );
@@ -103,7 +103,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         Attestation memory emptyAttestation;
 
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
+        vm.expectRevert(
+            abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
+        );
         dta.depositAndForward(DEPOSIT_AMOUNT, 0, "", emptyAttestation);
     }
 
@@ -150,7 +152,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
     function test_RevertWhen_RefundCallerNotOwner() public {
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
+        vm.expectRevert(
+            abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
+        );
         dta.refund(address(token));
     }
 
@@ -181,7 +185,9 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
     function test_RevertWhen_RecoverCallerNotOwner() public {
         vm.prank(user);
-        vm.expectRevert(DirectTransferAddress.NotOwner.selector, address(dta));
+        vm.expectRevert(
+            abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
+        );
         dta.recover(address(token));
     }
 
