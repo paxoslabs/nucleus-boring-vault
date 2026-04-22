@@ -162,7 +162,9 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
         config.requiredDvns = sortAddresses(config.requiredDvns);
         config.optionalDvns = sortAddresses(config.optionalDvns);
 
-        require(requiredDvns.length + config.optionalDvnThreshold > 2, "DEPLOY_06b_setConfig() DVN Count Must Be > 2");
+        require(
+            config.requiredDvns.length + config.optionalDvnThreshold > 2, "DEPLOY_06b_setConfig() DVN Count Must Be > 2"
+        );
 
         bytes memory ulnConfigBytes = abi.encode(
             UlnConfig(
