@@ -130,37 +130,35 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenAddress` to `receiver`.
+     * @notice Sweep this DTA's full balance of `tokenToSweep` to `receiver`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
-     *      is on a token-level blacklist), the owner should then call recover(). `tokenAddress` is a parameter
+     *      is on a token-level blacklist), the owner should then call recover(). `tokenToSweep` is a parameter
      *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can
      *      be swept.
-     * @param tokenAddress The ERC20 to sweep.
+     * @param tokenToSweep The ERC20 to sweep.
      */
-    function refund(address tokenAddress) external onlyOwner {
-        ERC20 tokenToSweep = ERC20(tokenAddress);
+    function refund(ERC20 tokenToSweep) external onlyOwner {
         uint256 amount = tokenToSweep.balanceOf(address(this));
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(receiver, amount);
-        emit Refunded(tokenAddress, receiver, amount);
+        emit Refunded(address(tokenToSweep), receiver, amount);
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenAddress` to `recoveryAccount`.
+     * @notice Sweep this DTA's full balance of `tokenToSweep` to `recoveryAccount`.
      * @dev Intended for sanctions-class `depositAndForward()` reverts or when a prior `refund()` attempt itself
      * reverted.
-     *      `tokenAddress` is a parameter (rather than the immutable `token`) so stray tokens of any kind accidentally
+     *      `tokenToSweep` is a parameter (rather than the immutable `token`) so stray tokens of any kind accidentally
      *      sent to this proxy can be swept.
-     * @param tokenAddress The ERC20 to sweep.
+     * @param tokenToSweep The ERC20 to sweep.
      */
-    function recover(address tokenAddress) external onlyOwner {
-        ERC20 tokenToSweep = ERC20(tokenAddress);
+    function recover(ERC20 tokenToSweep) external onlyOwner {
         uint256 amount = tokenToSweep.balanceOf(address(this));
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(recoveryAccount, amount);
-        emit Recovered(tokenAddress, recoveryAccount, amount);
+        emit Recovered(address(tokenToSweep), recoveryAccount, amount);
     }
 
     /// @dev Throws if the sender is not the owner.

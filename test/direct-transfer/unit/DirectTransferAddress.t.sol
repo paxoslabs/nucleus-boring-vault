@@ -157,7 +157,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectRefundedEvent(address(dta), address(token), user, DEPOSIT_AMOUNT);
         vm.prank(owner);
-        dta.refund(address(token));
+        dta.refund(ERC20(address(token)));
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after refund");
         assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "receiver must hold swept balance");
@@ -173,7 +173,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectRefundedEvent(address(dta), address(strayToken), user, strayAmount);
         vm.prank(owner);
-        dta.refund(address(strayToken));
+        dta.refund(ERC20(address(strayToken)));
 
         assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after refund");
         assertEq(strayToken.balanceOf(user), strayAmount, "receiver must hold swept stray-token balance");
@@ -185,7 +185,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         vm.prank(owner);
         vm.expectRevert(DirectTransferAddress.ZeroAmount.selector, address(dta));
-        dta.refund(address(token));
+        dta.refund(ERC20(address(token)));
     }
 
     function test_RevertWhen_RefundCallerNotOwner() public {
@@ -193,7 +193,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         vm.expectRevert(
             abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
         );
-        dta.refund(address(token));
+        dta.refund(ERC20(address(token)));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectRecoveredEvent(address(dta), address(token), recoveryAccount, DEPOSIT_AMOUNT);
         vm.prank(owner);
-        dta.recover(address(token));
+        dta.recover(ERC20(address(token)));
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after recover");
         assertEq(token.balanceOf(recoveryAccount), DEPOSIT_AMOUNT, "recoveryAccount must hold swept balance");
@@ -221,7 +221,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectRecoveredEvent(address(dta), address(strayToken), recoveryAccount, strayAmount);
         vm.prank(owner);
-        dta.recover(address(strayToken));
+        dta.recover(ERC20(address(strayToken)));
 
         assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after recover");
         assertEq(
@@ -235,7 +235,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         vm.prank(owner);
         vm.expectRevert(DirectTransferAddress.ZeroAmount.selector, address(dta));
-        dta.recover(address(token));
+        dta.recover(ERC20(address(token)));
     }
 
     function test_RevertWhen_RecoverCallerNotOwner() public {
@@ -243,7 +243,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         vm.expectRevert(
             abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
         );
-        dta.recover(address(token));
+        dta.recover(ERC20(address(token)));
     }
 
 }
