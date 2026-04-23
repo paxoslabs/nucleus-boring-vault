@@ -48,7 +48,7 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     function test_DeployBeaconProxyEmitsBeaconProxyDeployed() public {
         address expected = beacon.computeDTAAddress(ORG_ID, user);
 
-        _expectBeaconProxyDeployedEvent(expected, user, ORG_ID, address(token));
+        _expectBeaconProxyDeployedEvent(user, ORG_ID, address(token), boringVault, expected);
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, user);
     }

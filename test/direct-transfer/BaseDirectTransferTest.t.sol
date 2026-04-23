@@ -58,10 +58,11 @@ abstract contract BaseDirectTransferTest is Test {
 
     /// FactoryBeacon events
     event BeaconProxyDeployed(
-        address directTransferAddress,
         address indexed userDestinationAddress,
         bytes32 indexed organizationId,
-        address indexed inputToken
+        address indexed inputToken,
+        address boringVault,
+        address directTransferAddress
     );
     event Upgraded(address indexed implementation);
 
@@ -140,15 +141,16 @@ abstract contract BaseDirectTransferTest is Test {
     }
 
     function _expectBeaconProxyDeployedEvent(
-        address dta,
         address userDestinationAddress,
         bytes32 organizationId,
-        address inputToken
+        address inputToken,
+        address _boringVault,
+        address dta
     )
         internal
     {
         vm.expectEmit(true, true, true, true, address(beacon));
-        emit BeaconProxyDeployed(dta, userDestinationAddress, organizationId, inputToken);
+        emit BeaconProxyDeployed(userDestinationAddress, organizationId, inputToken, _boringVault, dta);
     }
 
 }

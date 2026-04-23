@@ -35,10 +35,11 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @param inputToken The stablecoin the DTA accepts and forwards.
      */
     event BeaconProxyDeployed(
-        address directTransferAddress,
         address indexed userDestinationAddress,
         bytes32 indexed organizationId,
-        address indexed inputToken
+        address indexed inputToken,
+        address boringVault,
+        address directTransferAddress
     );
 
     /// @notice Thrown when `userDestinationAddress` is the zero address.
@@ -120,7 +121,7 @@ contract FactoryBeacon is UpgradeableBeacon {
         bytes32 salt = _makeDTASalt(boringVault, organizationId, userDestinationAddress, inputToken);
         dta = CREATEX.deployCreate3(salt, creationCode);
 
-        emit BeaconProxyDeployed(dta, userDestinationAddress, organizationId, inputToken);
+        emit BeaconProxyDeployed(userDestinationAddress, organizationId, inputToken, boringVault, dta);
     }
 
     /**
