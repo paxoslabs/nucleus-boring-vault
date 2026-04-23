@@ -115,7 +115,7 @@ contract FactoryBeacon is UpgradeableBeacon {
         address userDestinationAddress,
         bytes memory initData
     )
-        public
+        external
         view
         returns (address)
     {
