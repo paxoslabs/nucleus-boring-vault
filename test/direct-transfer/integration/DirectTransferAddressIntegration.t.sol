@@ -127,11 +127,10 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            bytes memory initData = abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, users[i]);
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], initData);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i]);
 
             // Verify the deployed address matches the deterministic computation
-            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i], initData);
+            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i]);
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
@@ -169,8 +168,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {
-            bytes memory initData = abi.encodeWithSelector(DirectTransferAddress1.initialize.selector, users[i]);
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], initData);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i]);
         }
 
         // Verify initial DCD

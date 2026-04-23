@@ -37,82 +37,67 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     //////////////////////////////////////////////////////////////*/
 
     function test_DeployBeaconProxyDeploysToComputedAddress() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-        address expected = beacon.computeDTAAddress(ORG_ID, user, initData);
+        address expected = beacon.computeDTAAddress(ORG_ID, user);
 
         vm.prank(beaconAdmin);
-        address dta = beacon.deployBeaconProxy(ORG_ID, user, initData);
+        address dta = beacon.deployBeaconProxy(ORG_ID, user);
 
         assertEq(dta, expected, "deployed DTA must equal computeDTAAddress for identical inputs");
     }
 
     function test_DeployBeaconProxyEmitsBeaconProxyDeployed() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-        address expected = beacon.computeDTAAddress(ORG_ID, user, initData);
+        address expected = beacon.computeDTAAddress(ORG_ID, user);
 
         _expectBeaconProxyDeployedEvent(expected, user, ORG_ID, address(token));
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user, initData);
+        beacon.deployBeaconProxy(ORG_ID, user);
     }
 
     function test_DeployBeaconProxyInitializesReceiver() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
         vm.prank(beaconAdmin);
-        address dtaAddr = beacon.deployBeaconProxy(ORG_ID, user, initData);
+        address dtaAddr = beacon.deployBeaconProxy(ORG_ID, user);
 
         assertEq(
-            DirectTransferAddress(dtaAddr).receiver(), user, "initialize calldata must set receiver in proxy storage"
+            DirectTransferAddress(dtaAddr).receiver(),
+            user,
+            "factory-constructed initialize calldata must set receiver in proxy storage"
         );
     }
 
     function test_RevertWhen_DeployBeaconProxyZeroDestinationAddress() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
         vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, address(0), initData);
-    }
-
-    function test_RevertWhen_DeployBeaconProxyEmptyInitData() public {
-        vm.expectRevert(FactoryBeacon.EmptyInitData.selector);
-        vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user, "");
+        beacon.deployBeaconProxy(ORG_ID, address(0));
     }
 
     function test_RevertWhen_DeployBeaconProxyReusedSalt() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user, initData);
+        beacon.deployBeaconProxy(ORG_ID, user);
 
         // CREATEX collision: the CREATE3 proxy at the derived address already exists.
         vm.expectRevert();
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user, initData);
+        beacon.deployBeaconProxy(ORG_ID, user);
     }
 
     function test_RevertWhen_DeployBeaconProxyCallerNotOwner() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
         address notOwner = makeAddr("notOwner");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));
         vm.prank(notOwner);
-        beacon.deployBeaconProxy(ORG_ID, user, initData);
+        beacon.deployBeaconProxy(ORG_ID, user);
     }
 
     function test_DeployBeaconProxyIsCrossChainDeterministic() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
         vm.chainId(1);
         uint256 snap = vm.snapshot();
         vm.prank(beaconAdmin);
-        address dtaMainnet = beacon.deployBeaconProxy(ORG_ID, user, initData);
+        address dtaMainnet = beacon.deployBeaconProxy(ORG_ID, user);
 
         vm.revertTo(snap);
         vm.chainId(137);
         vm.prank(beaconAdmin);
-        address dtaPolygon = beacon.deployBeaconProxy(ORG_ID, user, initData);
+        address dtaPolygon = beacon.deployBeaconProxy(ORG_ID, user);
 
         assertEq(
             dtaMainnet,
@@ -126,46 +111,30 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     //////////////////////////////////////////////////////////////*/
 
     function test_ComputeDTAAddressIsDeterministic() public view {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
-        address first = beacon.computeDTAAddress(ORG_ID, user, initData);
-        address second = beacon.computeDTAAddress(ORG_ID, user, initData);
+        address first = beacon.computeDTAAddress(ORG_ID, user);
+        address second = beacon.computeDTAAddress(ORG_ID, user);
 
         assertEq(first, second, "computeDTAAddress must be pure in its inputs");
     }
 
     function test_ComputeDTAAddressDifferentiatesByOrganizationId() public view {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
         bytes32 otherOrgId = bytes32(uint256(ORG_ID) + 1);
 
-        address a = beacon.computeDTAAddress(ORG_ID, user, initData);
-        address b = beacon.computeDTAAddress(otherOrgId, user, initData);
+        address a = beacon.computeDTAAddress(ORG_ID, user);
+        address b = beacon.computeDTAAddress(otherOrgId, user);
 
         assertTrue(a != b, "varying organizationId must change the computed DTA address");
     }
 
     function test_ComputeDTAAddressDifferentiatesByUserDestinationAddress() public view {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-
-        address a = beacon.computeDTAAddress(ORG_ID, user, initData);
-        address b = beacon.computeDTAAddress(ORG_ID, user2, initData);
+        address a = beacon.computeDTAAddress(ORG_ID, user);
+        address b = beacon.computeDTAAddress(ORG_ID, user2);
 
         assertTrue(a != b, "varying userDestinationAddress must change the computed DTA address");
     }
 
-    function test_ComputeDTAAddressDifferentiatesByInitData() public view {
-        bytes memory initDataA = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-        bytes memory initDataB = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user2);
-
-        address a = beacon.computeDTAAddress(ORG_ID, user, initDataA);
-        address b = beacon.computeDTAAddress(ORG_ID, user, initDataB);
-
-        assertTrue(a != b, "varying initData must change the computed DTA address");
-    }
-
-    function test_ComputeDTAAddressDependsOnImplementationImmutables() public {
-        bytes memory initData = abi.encodeWithSelector(DirectTransferAddress.initialize.selector, user);
-        address beforeUpgrade = beacon.computeDTAAddress(ORG_ID, user, initData);
+    function test_ComputeDTAAddressDependsOnImplementationBoringVaultAndInputTokenImmutables() public {
+        address beforeUpgrade = beacon.computeDTAAddress(ORG_ID, user);
 
         MockDCD otherMockDCD = new MockDCD(makeAddr("otherBoringVault"));
         MockERC20 otherToken = new MockERC20();
@@ -177,7 +146,7 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         vm.prank(beaconAdmin);
         beacon.upgradeTo(address(upgradedImpl));
 
-        address afterUpgrade = beacon.computeDTAAddress(ORG_ID, user, initData);
+        address afterUpgrade = beacon.computeDTAAddress(ORG_ID, user);
         assertTrue(beforeUpgrade != afterUpgrade, "implementation immutables must influence computed DTA address");
     }
 
