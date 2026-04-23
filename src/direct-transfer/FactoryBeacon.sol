@@ -44,11 +44,41 @@ contract FactoryBeacon is UpgradeableBeacon {
     /// @notice Thrown when `userDestinationAddress` is the zero address.
     error ZeroAddress();
 
+    /// @notice Thrown when an upgrade's new implementation changes the boringVault referenced by the DCD.
+    error BoringVaultMismatch(address expected, address actual);
+
+    /// @notice Thrown when an upgrade's new implementation changes the input token.
+    error TokenMismatch(address expected, address actual);
+
     /**
      * @param _implementation Initial DirectTransferAddress implementation this beacon serves.
      * @param _owner Address authorized to call upgradeTo() on the inherited UpgradeableBeacon.
      */
     constructor(address _implementation, address _owner) UpgradeableBeacon(_implementation, _owner) { }
+
+    /**
+     * @notice Upgrades the beacon's implementation, enforcing that the new implementation's
+     *         boringVault (via DCD) and input token match the current implementation's.
+     * @dev Both values are mixed into the deterministic deployment salt, so changing either
+     *      would orphan every previously deployed DTA from its computed address. Rejecting
+     *      the upgrade on mismatch preserves the invariant that
+     *      `computeDTAAddress(orgId, user)` remains stable across upgrades.
+     * @param newImplementation The proposed new DirectTransferAddress implementation.
+     */
+    function upgradeTo(address newImplementation) public override onlyOwner {
+        DirectTransferAddress currentImpl = DirectTransferAddress(implementation());
+        address currentBoringVault = currentImpl.DCD().boringVault();
+        address currentToken = address(currentImpl.token());
+
+        DirectTransferAddress nextImpl = DirectTransferAddress(newImplementation);
+        address nextBoringVault = nextImpl.DCD().boringVault();
+        address nextToken = address(nextImpl.token());
+
+        if (nextBoringVault != currentBoringVault) revert BoringVaultMismatch(currentBoringVault, nextBoringVault);
+        if (nextToken != currentToken) revert TokenMismatch(currentToken, nextToken);
+
+        super.upgradeTo(newImplementation);
+    }
 
     /**
      * @notice Deploys a DirectTransferAddress beacon proxy at a deterministic address via CreateX.

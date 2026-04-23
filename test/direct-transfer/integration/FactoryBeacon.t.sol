@@ -133,21 +133,68 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         assertTrue(a != b, "varying userDestinationAddress must change the computed DTA address");
     }
 
-    function test_ComputeDTAAddressDependsOnImplementationBoringVaultAndInputTokenImmutables() public {
+    /*//////////////////////////////////////////////////////////////
+                                UPGRADE TO
+    //////////////////////////////////////////////////////////////*/
+
+    function test_UpgradeToSucceedsWhenBoringVaultAndTokenMatch() public {
+        // Fresh DCD pointing to the same boringVault and same token — the guard checks values, not addresses.
+        MockDCD sameVaultDCD = new MockDCD(boringVault);
+        DirectTransferAddress upgradedImpl = new DirectTransferAddress(
+            DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount, ERC20(address(token))
+        );
+
         address beforeUpgrade = beacon.computeDTAAddress(ORG_ID, user);
 
-        MockDCD otherMockDCD = new MockDCD(makeAddr("otherBoringVault"));
-        MockERC20 otherToken = new MockERC20();
-        otherToken.initialize("Other Token", "OTK", 6);
-
-        DirectTransferAddress upgradedImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(otherMockDCD)), owner, recoveryAccount, ERC20(address(otherToken))
-        );
         vm.prank(beaconAdmin);
         beacon.upgradeTo(address(upgradedImpl));
 
-        address afterUpgrade = beacon.computeDTAAddress(ORG_ID, user);
-        assertTrue(beforeUpgrade != afterUpgrade, "implementation immutables must influence computed DTA address");
+        assertEq(beacon.implementation(), address(upgradedImpl), "implementation must be updated");
+        assertEq(
+            beacon.computeDTAAddress(ORG_ID, user),
+            beforeUpgrade,
+            "computed DTA address must be stable across a matching upgrade"
+        );
+    }
+
+    function test_RevertWhen_UpgradeToChangesBoringVault() public {
+        MockDCD otherVaultDCD = new MockDCD(makeAddr("otherBoringVault"));
+        DirectTransferAddress mismatchedImpl = new DirectTransferAddress(
+            DistributorCodeDepositor(address(otherVaultDCD)), owner, recoveryAccount, ERC20(address(token))
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(FactoryBeacon.BoringVaultMismatch.selector, boringVault, otherVaultDCD.boringVault())
+        );
+        vm.prank(beaconAdmin);
+        beacon.upgradeTo(address(mismatchedImpl));
+    }
+
+    function test_RevertWhen_UpgradeToChangesToken() public {
+        MockERC20 otherToken = new MockERC20();
+        otherToken.initialize("Other Token", "OTK", 6);
+
+        DirectTransferAddress mismatchedImpl = new DirectTransferAddress(
+            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(otherToken))
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(FactoryBeacon.TokenMismatch.selector, address(token), address(otherToken))
+        );
+        vm.prank(beaconAdmin);
+        beacon.upgradeTo(address(mismatchedImpl));
+    }
+
+    function test_RevertWhen_UpgradeToCallerNotOwner() public {
+        MockDCD sameVaultDCD = new MockDCD(boringVault);
+        DirectTransferAddress upgradedImpl = new DirectTransferAddress(
+            DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount, ERC20(address(token))
+        );
+        address notOwner = makeAddr("notOwner");
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));
+        vm.prank(notOwner);
+        beacon.upgradeTo(address(upgradedImpl));
     }
 
 }
