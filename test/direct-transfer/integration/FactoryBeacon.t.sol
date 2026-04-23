@@ -53,14 +53,14 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         beacon.deployBeaconProxy(ORG_ID, user);
     }
 
-    function test_DeployBeaconProxyInitializesReceiver() public {
+    function test_DeployBeaconProxyInitializesUserDestinationAddress() public {
         vm.prank(beaconAdmin);
         address dtaAddr = beacon.deployBeaconProxy(ORG_ID, user);
 
         assertEq(
-            DirectTransferAddress(dtaAddr).receiver(),
+            DirectTransferAddress(dtaAddr).userDestinationAddress(),
             user,
-            "factory-constructed initialize calldata must set receiver in proxy storage"
+            "factory-constructed initialize calldata must set userDestinationAddress in proxy storage"
         );
     }
 

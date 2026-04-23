@@ -24,7 +24,7 @@ contract DirectTransferAddress1 {
 
     using SafeTransferLib for ERC20;
 
-    address public receiver;
+    address public userDestinationAddress;
     bool private _initialized;
     DistributorCodeDepositor public immutable DCD;
     ERC20 public immutable token;
@@ -36,17 +36,17 @@ contract DirectTransferAddress1 {
         token = _token;
     }
 
-    function initialize(address _receiver) external {
+    function initialize(address _userDestinationAddress) external {
         if (_initialized) revert AlreadyInitialized();
         _initialized = true;
-        receiver = _receiver;
+        userDestinationAddress = _userDestinationAddress;
     }
 
     function forward(uint256 amount) external returns (uint256 shares) {
         Attestation memory emptyAttestation;
 
         token.safeApprove(address(DCD), amount);
-        shares = DCD.deposit(token, amount, 0, receiver, "", emptyAttestation);
+        shares = DCD.deposit(token, amount, 0, userDestinationAddress, "", emptyAttestation);
     }
 
 }
@@ -134,7 +134,11 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
-            assertEq(DirectTransferAddress1(dtas[i]).receiver(), users[i], "receiver must be user");
+            assertEq(
+                DirectTransferAddress1(dtas[i]).userDestinationAddress(),
+                users[i],
+                "userDestinationAddress must be user"
+            );
             assertEq(address(DirectTransferAddress1(dtas[i]).DCD()), address(dcd), "DCD must match");
         }
 

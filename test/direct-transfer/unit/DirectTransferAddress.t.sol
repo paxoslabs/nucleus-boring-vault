@@ -69,12 +69,12 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
                                INITIALIZE
     //////////////////////////////////////////////////////////////*/
 
-    function test_InitializeSetsReceiver() public {
+    function test_InitializeSetsUserDestinationAddress() public {
         DirectTransferAddress fresh = _deployUninitializedProxy();
 
         fresh.initialize(user);
 
-        assertEq(fresh.receiver(), user, "receiver must equal initialize argument");
+        assertEq(fresh.userDestinationAddress(), user, "userDestinationAddress must equal initialize argument");
     }
 
     function test_RevertWhen_InitializeCalledTwice() public {
@@ -85,7 +85,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         fresh.initialize(user2);
     }
 
-    function test_RevertWhen_InitializeReceiverIsZeroAddress() public {
+    function test_RevertWhen_InitializeUserDestinationAddressIsZeroAddress() public {
         DirectTransferAddress fresh = _deployUninitializedProxy();
 
         vm.expectRevert(DirectTransferAddress.ZeroAddress.selector, address(fresh));
@@ -99,17 +99,17 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         impl.initialize(user);
     }
 
-    function test_ReceiverLivesAtSlotZero() public {
-        // Pins the storage layout: `receiver` is the first declared storage variable and
+    function test_UserDestinationAddressLivesAtSlotZero() public {
+        // Pins the storage layout: `userDestinationAddress` is the first declared storage variable and
         // therefore must occupy slot 0. Reads slot 0 directly with vm.load so that inserting
-        // any new storage variable ahead of `receiver` (including a future base contract
+        // any new storage variable ahead of `userDestinationAddress` (including a future base contract
         // that declares its own storage without a `__gap`) breaks this assertion immediately.
         DirectTransferAddress fresh = _deployUninitializedProxy();
         fresh.initialize(user);
 
         bytes32 slotZero = vm.load(address(fresh), bytes32(uint256(0)));
-        assertEq(address(uint160(uint256(slotZero))), user, "receiver must occupy slot 0");
-        assertEq(fresh.receiver(), user, "receiver getter must return initialized value");
+        assertEq(address(uint160(uint256(slotZero))), user, "userDestinationAddress must occupy slot 0");
+        assertEq(fresh.userDestinationAddress(), user, "userDestinationAddress getter must return initialized value");
     }
 
     /// @dev Deploy a BeaconProxy without initData so `initialize` can be called explicitly by the test.
@@ -145,14 +145,14 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         assertEq(shares, expectedShares, "returned shares must match mock DCD rate");
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after forward");
         assertEq(token.balanceOf(address(mockDCD)), DEPOSIT_AMOUNT, "DCD must hold the forwarded token");
-        assertEq(shareToken.balanceOf(user), expectedShares, "receiver must hold settled shares");
+        assertEq(shareToken.balanceOf(user), expectedShares, "userDestinationAddress must hold settled shares");
     }
 
     /*//////////////////////////////////////////////////////////////
                                 REFUND
     //////////////////////////////////////////////////////////////*/
 
-    function test_RefundSweepsFullBalanceToReceiver() public {
+    function test_RefundSweepsFullBalanceToUserDestinationAddress() public {
         deal(address(token), address(dta), DEPOSIT_AMOUNT);
 
         _expectRefundedEvent(address(dta), address(token), user, DEPOSIT_AMOUNT);
@@ -160,11 +160,11 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         dta.refund(ERC20(address(token)));
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after refund");
-        assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "receiver must hold swept balance");
+        assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "userDestinationAddress must hold swept balance");
     }
 
     function test_RefundSweepsStrayTokenAtTokenAddress() public {
-        // A non-configured ERC20 accidentally sent to the DTA should be swept to `receiver`
+        // A non-configured ERC20 accidentally sent to the DTA should be swept to `userDestinationAddress`
         // using the tokenAddress argument, independent of the immutable `token`.
         MockERC20 strayToken = new MockERC20();
         strayToken.initialize("Stray", "STRAY", 18);
@@ -176,7 +176,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         dta.refund(ERC20(address(strayToken)));
 
         assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after refund");
-        assertEq(strayToken.balanceOf(user), strayAmount, "receiver must hold swept stray-token balance");
+        assertEq(strayToken.balanceOf(user), strayAmount, "userDestinationAddress must hold swept stray-token balance");
         assertEq(token.balanceOf(address(dta)), 0, "immutable token balance must be untouched");
     }
 

@@ -11,7 +11,7 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
  * @title DirectTransferAddress
  * @notice Implementation contract for DirectTransferAddress BeaconProxies. Receives one configured
  *         stablecoin and forwards balances into a DistributorCodeDepositor, minting BoringVault shares
- *         to a pre-configured receiver.
+ *         to a pre-configured userDestinationAddress.
  * @custom:security-contact security@molecularlabs.io
  * @custom:oz-upgrades
  */
@@ -25,7 +25,7 @@ contract DirectTransferAddress is Initializable {
     address public immutable owner;
 
     /* @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
-    *          a prior refund() attempt fails (e.g. receiver is on a token-level blacklist).
+    *          a prior refund() attempt fails (e.g. userDestinationAddress is on a token-level blacklist).
     */
     address public immutable recoveryAccount;
 
@@ -37,8 +37,8 @@ contract DirectTransferAddress is Initializable {
 
     // STORAGE - unique, initializable, per-proxy values.
 
-    /// @notice The receiver of vault shares from DCD deposits. Also the refund recipient.
-    address public receiver;
+    /// @notice The recipient of vault shares from DCD deposits. Also the refund recipient.
+    address public userDestinationAddress;
 
     /// @dev Reserved for future storage. Shrink this array by the number of slots any newly
     ///      appended variables consume, mindful of Solidity packing rules (a new array starts
@@ -93,23 +93,23 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Initializes the proxy with the receiver address. Callable once per proxy.
-     * @param _receiver The address that will receive vault shares from deposits.
+     * @notice Initializes the proxy with the userDestinationAddress. Callable once per proxy.
+     * @param _userDestinationAddress The address that will receive vault shares from deposits.
      */
-    function initialize(address _receiver) external initializer {
-        if (_receiver == address(0)) revert ZeroAddress();
-        receiver = _receiver;
+    function initialize(address _userDestinationAddress) external initializer {
+        if (_userDestinationAddress == address(0)) revert ZeroAddress();
+        userDestinationAddress = _userDestinationAddress;
     }
 
     /**
-     * @notice Approves the configured token to the DCD and deposits on behalf of the receiver.
+     * @notice Approves the configured token to the DCD and deposits on behalf of the userDestinationAddress.
      * @dev Propagates any DCD revert. Owner classifies the revert off-chain and then follows up
      *      with refund() or recover() to sweep the stranded token depending on the error.
      * @param amount The amount of token to forward.
-     * @param minimumMint The minimum vault shares the receiver must receive; deposit reverts otherwise.
+     * @param minimumMint The minimum vault shares the userDestinationAddress must receive; deposit reverts otherwise.
      * @param distributorCode The DCD distributor code forwarded as-is into DCD.deposit.
      * @param attestation The Predicate attestation authorizing this deposit.
-     * @return shares The vault shares minted to the receiver.
+     * @return shares The vault shares minted to the userDestinationAddress.
      */
     function depositAndForward(
         uint256 amount,
@@ -125,14 +125,15 @@ contract DirectTransferAddress is Initializable {
         // transitions) don't brick subsequent depositAndForward() calls if any residual allowance remains.
         token.safeApprove(address(DCD), 0);
         token.safeApprove(address(DCD), amount);
-        shares = DCD.deposit(token, amount, minimumMint, receiver, distributorCode, attestation);
-        emit Forwarded(receiver, amount, shares);
+        shares = DCD.deposit(token, amount, minimumMint, userDestinationAddress, distributorCode, attestation);
+        emit Forwarded(userDestinationAddress, amount, shares);
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenToSweep` to `receiver`.
-     * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g. `receiver`
-     *      is on a token-level blacklist), the owner should then call recover(). `tokenToSweep` is a parameter
+     * @notice Sweep this DTA's full balance of `tokenToSweep` to `userDestinationAddress`.
+     * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g.
+     *      `userDestinationAddress` is on a token-level blacklist), the owner should then call recover().
+     *      `tokenToSweep` is a parameter
      *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can
      *      be swept.
      * @param tokenToSweep The ERC20 to sweep.
@@ -141,8 +142,8 @@ contract DirectTransferAddress is Initializable {
         uint256 amount = tokenToSweep.balanceOf(address(this));
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
-        tokenToSweep.safeTransfer(receiver, amount);
-        emit Refunded(address(tokenToSweep), receiver, amount);
+        tokenToSweep.safeTransfer(userDestinationAddress, amount);
+        emit Refunded(address(tokenToSweep), userDestinationAddress, amount);
     }
 
     /**

@@ -13,7 +13,8 @@ import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconP
 
 /// @dev Pulls `depositAsset` from msg.sender (matching the real DCD's safeTransferFrom on deposit)
 ///      and sends `shareToken` to `to` at a 1:1 rate from a pre-funded pool, so tests can assert
-///      receiver share balances without a forked vault. The function signature for DistributorCodeDepositor.deposit
+///      userDestinationAddress share balances without a forked vault. The function signature for
+/// DistributorCodeDepositor.deposit
 /// matches the real   `DistributorCodeDepositor.deposit` function so the caller's cast to `DistributorCodeDepositor`
 /// works properly.
 contract MockDCD {
