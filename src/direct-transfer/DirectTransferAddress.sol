@@ -32,7 +32,7 @@ contract DirectTransferAddress is Initializable {
     /// @notice The DistributorCodeDepositor every proxy under this implementation forwards deposits to.
     DistributorCodeDepositor public immutable DCD;
 
-    /// @notice The single stablecoin this implementation accepts, forwards, refunds, and recovers (e.g. USDC or USDT).
+    /// @notice The single token this implementation deposits into a DCD.
     ERC20 public immutable token;
 
     // STORAGE - unique, initializable, per-proxy values.
