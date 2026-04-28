@@ -152,19 +152,34 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
                                 REFUND
     //////////////////////////////////////////////////////////////*/
 
-    function test_RefundSweepsFullBalanceToUserDestinationAddress() public {
+    function test_RefundTransfersAmountToUserDestinationAddress() public {
         deal(address(token), address(dta), DEPOSIT_AMOUNT);
 
         _expectRefundedEvent(address(dta), address(token), user, DEPOSIT_AMOUNT);
         vm.prank(owner);
-        dta.refund(ERC20(address(token)));
+        dta.refund(ERC20(address(token)), DEPOSIT_AMOUNT);
 
         assertEq(token.balanceOf(address(dta)), 0, "DTA token balance must be zero after refund");
-        assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "userDestinationAddress must hold swept balance");
+        assertEq(token.balanceOf(user), DEPOSIT_AMOUNT, "userDestinationAddress must hold refunded amount");
     }
 
-    function test_RefundSweepsStrayTokenAtTokenAddress() public {
-        // A non-configured ERC20 accidentally sent to the DTA should be swept to `userDestinationAddress`
+    function test_RefundTransfersPartialAmount() public {
+        uint256 firstDeposit = DEPOSIT_AMOUNT;
+        uint256 secondDeposit = DEPOSIT_AMOUNT * 2;
+        deal(address(token), address(dta), firstDeposit + secondDeposit);
+
+        _expectRefundedEvent(address(dta), address(token), user, firstDeposit);
+        vm.prank(owner);
+        dta.refund(ERC20(address(token)), firstDeposit);
+
+        assertEq(
+            token.balanceOf(address(dta)), secondDeposit, "second deposit must remain on the DTA after partial refund"
+        );
+        assertEq(token.balanceOf(user), firstDeposit, "userDestinationAddress must hold only the first refund");
+    }
+
+    function test_RefundTransfersStrayTokenAtTokenAddress() public {
+        // A non-configured ERC20 accidentally sent to the DTA should be refundable to `userDestinationAddress`
         // using the tokenAddress argument, independent of the immutable `token`.
         MockERC20 strayToken = new MockERC20();
         strayToken.initialize("Stray", "STRAY", 18);
@@ -173,19 +188,21 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
 
         _expectRefundedEvent(address(dta), address(strayToken), user, strayAmount);
         vm.prank(owner);
-        dta.refund(ERC20(address(strayToken)));
+        dta.refund(ERC20(address(strayToken)), strayAmount);
 
         assertEq(strayToken.balanceOf(address(dta)), 0, "DTA stray-token balance must be zero after refund");
-        assertEq(strayToken.balanceOf(user), strayAmount, "userDestinationAddress must hold swept stray-token balance");
+        assertEq(
+            strayToken.balanceOf(user), strayAmount, "userDestinationAddress must hold refunded stray-token amount"
+        );
         assertEq(token.balanceOf(address(dta)), 0, "immutable token balance must be untouched");
     }
 
-    function test_RevertWhen_RefundBalanceIsZero() public {
-        assertEq(token.balanceOf(address(dta)), 0, "precondition: DTA balance is zero");
+    function test_RevertWhen_RefundAmountIsZero() public {
+        deal(address(token), address(dta), DEPOSIT_AMOUNT);
 
         vm.prank(owner);
         vm.expectRevert(DirectTransferAddress.ZeroAmount.selector, address(dta));
-        dta.refund(ERC20(address(token)));
+        dta.refund(ERC20(address(token)), 0);
     }
 
     function test_RevertWhen_RefundCallerNotOwner() public {
@@ -193,7 +210,7 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         vm.expectRevert(
             abi.encodeWithSelector(DirectTransferAddress.OwnableUnauthorizedAccount.selector, user), address(dta)
         );
-        dta.refund(ERC20(address(token)));
+        dta.refund(ERC20(address(token)), DEPOSIT_AMOUNT);
     }
 
     /*//////////////////////////////////////////////////////////////

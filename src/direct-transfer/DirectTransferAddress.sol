@@ -130,16 +130,15 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenToSweep` to `userDestinationAddress`.
+     * @notice Refund `amount` of `tokenToSweep` from this DTA to `userDestinationAddress`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g.
      *      `userDestinationAddress` is on a token-level blacklist), the owner should then call recover().
-     *      `tokenToSweep` is a parameter
-     *      (rather than the immutable `token`) so stray tokens of any kind accidentally sent to this proxy can
-     *      be swept.
-     * @param tokenToSweep The ERC20 to sweep.
+     *      `tokenToSweep` is a parameter (rather than the immutable `token`) so stray tokens of any
+     *      kind accidentally sent to this proxy can be swept.
+     * @param tokenToSweep The ERC20 to refund.
+     * @param amount The amount of `tokenToSweep` to refund.
      */
-    function refund(ERC20 tokenToSweep) external onlyOwner {
-        uint256 amount = tokenToSweep.balanceOf(address(this));
+    function refund(ERC20 tokenToSweep, uint256 amount) external onlyOwner {
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(userDestinationAddress, amount);
