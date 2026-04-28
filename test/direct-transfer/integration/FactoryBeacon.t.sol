@@ -11,7 +11,7 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
 import { BaseDirectTransferTest, MockDCD } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
 
 /// @notice Forked-mainnet so the real CreateX at
-///         0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed backs `deployBeaconProxy` / `computeDTAAddress`.
+///         0x1077f8ea07EA34D9F23BC39256BF234665FB391f backs `deployBeaconProxy` / `computeDTAAddress`.
 contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
 
     uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
