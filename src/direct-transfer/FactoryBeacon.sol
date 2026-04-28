@@ -72,14 +72,14 @@ contract FactoryBeacon is UpgradeableBeacon {
         address currentBoringVault = currentImpl.DCD().boringVault();
         address currentToken = address(currentImpl.token());
 
-        DirectTransferAddress nextImpl = DirectTransferAddress(newImplementation);
+        super.upgradeTo(newImplementation);
+
+        DirectTransferAddress nextImpl = DirectTransferAddress(implementation());
         address nextBoringVault = nextImpl.DCD().boringVault();
         address nextToken = address(nextImpl.token());
 
         if (nextBoringVault != currentBoringVault) revert BoringVaultMismatch(currentBoringVault, nextBoringVault);
         if (nextToken != currentToken) revert TokenMismatch(currentToken, nextToken);
-
-        super.upgradeTo(newImplementation);
     }
 
     /**
