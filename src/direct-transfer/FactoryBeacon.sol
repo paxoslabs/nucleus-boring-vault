@@ -101,14 +101,7 @@ contract FactoryBeacon is UpgradeableBeacon {
      *                               initializer.
      * @return dta The deployed BeaconProxy address.
      */
-    function deployBeaconProxy(
-        bytes32 organizationId,
-        address userDestinationAddress
-    )
-        external
-        onlyOwner
-        returns (address dta)
-    {
+    function deployBeaconProxy(bytes32 organizationId, address userDestinationAddress) external returns (address dta) {
         if (userDestinationAddress == address(0)) revert ZeroAddress();
 
         DirectTransferAddress impl = DirectTransferAddress(implementation());

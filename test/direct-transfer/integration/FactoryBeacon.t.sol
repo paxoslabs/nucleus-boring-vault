@@ -80,14 +80,6 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         beacon.deployBeaconProxy(ORG_ID, user);
     }
 
-    function test_RevertWhen_DeployBeaconProxyCallerNotOwner() public {
-        address notOwner = makeAddr("notOwner");
-
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));
-        vm.prank(notOwner);
-        beacon.deployBeaconProxy(ORG_ID, user);
-    }
-
     function test_DeployBeaconProxyIsCrossChainDeterministic() public {
         vm.chainId(1);
         uint256 snap = vm.snapshot();
