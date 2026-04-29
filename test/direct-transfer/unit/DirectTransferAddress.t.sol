@@ -77,6 +77,14 @@ contract DirectTransferAddressUnitTest is BaseDirectTransferTest {
         assertEq(fresh.userDestinationAddress(), user, "userDestinationAddress must equal initialize argument");
     }
 
+    function test_InitializeEmitsInitialized() public {
+        DirectTransferAddress fresh = _deployUninitializedProxy();
+
+        vm.expectEmit(true, true, true, true, address(fresh));
+        emit Initialized(user);
+        fresh.initialize(user);
+    }
+
     function test_RevertWhen_InitializeCalledTwice() public {
         DirectTransferAddress fresh = _deployUninitializedProxy();
         fresh.initialize(user);

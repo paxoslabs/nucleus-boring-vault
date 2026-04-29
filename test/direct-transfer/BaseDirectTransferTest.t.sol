@@ -53,6 +53,7 @@ contract MockDCD {
 abstract contract BaseDirectTransferTest is Test {
 
     // DTA Events
+    event Initialized(address indexed userDestinationAddress);
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);

@@ -46,6 +46,7 @@ contract DirectTransferAddress is Initializable {
     ///      storage gap by OpenZeppelin's upgrade validator.
     uint256[49] private __gap;
 
+    event Initialized(address indexed userDestinationAddress);
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
@@ -99,6 +100,7 @@ contract DirectTransferAddress is Initializable {
     function initialize(address _userDestinationAddress) external initializer {
         if (_userDestinationAddress == address(0)) revert ZeroAddress();
         userDestinationAddress = _userDestinationAddress;
+        emit Initialized(_userDestinationAddress);
     }
 
     /**
