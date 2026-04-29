@@ -32,13 +32,6 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         assertEq(beacon.owner(), beaconAdmin, "owner must match constructor arg");
     }
 
-    function test_RevertWhen_ConstructorImplTokenIsZero() public {
-        vm.mockCall(address(impl), abi.encodeWithSelector(impl.token.selector), abi.encode(address(0)));
-
-        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
-        new FactoryBeacon(address(impl), beaconAdmin);
-    }
-
     function test_RevertWhen_ConstructorImplBoringVaultIsZero() public {
         MockDCD zeroVaultDCD = new MockDCD(address(0));
         vm.mockCall(address(impl), abi.encodeWithSelector(impl.DCD.selector), abi.encode(address(zeroVaultDCD)));
@@ -52,59 +45,90 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     //////////////////////////////////////////////////////////////*/
 
     function test_DeployBeaconProxyDeploysToComputedAddress() public {
-        address expected = beacon.computeDTAAddress(ORG_ID, user);
+        address expected = beacon.computeDTAAddress(ORG_ID, user, address(token));
 
         vm.prank(beaconAdmin);
-        address dta = beacon.deployBeaconProxy(ORG_ID, user);
+        address dta = beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
         assertEq(dta, expected, "deployed DTA must equal computeDTAAddress for identical inputs");
     }
 
     function test_DeployBeaconProxyEmitsBeaconProxyDeployed() public {
-        address expected = beacon.computeDTAAddress(ORG_ID, user);
+        address expected = beacon.computeDTAAddress(ORG_ID, user, address(token));
 
         _expectBeaconProxyDeployedEvent(user, ORG_ID, address(token), boringVault, expected);
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user);
+        beacon.deployBeaconProxy(ORG_ID, user, address(token));
     }
 
-    function test_DeployBeaconProxyInitializesUserDestinationAddress() public {
+    function test_DeployBeaconProxyInitializesUserDestinationAddressAndToken() public {
         vm.prank(beaconAdmin);
-        address dtaAddr = beacon.deployBeaconProxy(ORG_ID, user);
+        address dtaAddr = beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
         assertEq(
             DirectTransferAddress(dtaAddr).userDestinationAddress(),
             user,
             "factory-constructed initialize calldata must set userDestinationAddress in proxy storage"
         );
+        assertEq(
+            address(DirectTransferAddress(dtaAddr).token()),
+            address(token),
+            "factory-constructed initialize calldata must set token in proxy storage"
+        );
+    }
+
+    function test_DeployBeaconProxyDifferentiatesByInputToken() public {
+        MockERC20 otherToken = new MockERC20();
+        otherToken.initialize("Other Token", "OTK", 6);
+
+        vm.prank(beaconAdmin);
+        address dtaA = beacon.deployBeaconProxy(ORG_ID, user, address(token));
+        vm.prank(beaconAdmin);
+        address dtaB = beacon.deployBeaconProxy(ORG_ID, user, address(otherToken));
+
+        assertTrue(dtaA != dtaB, "varying inputToken must produce a distinct DTA address");
+        assertEq(address(DirectTransferAddress(dtaA).token()), address(token));
+        assertEq(address(DirectTransferAddress(dtaB).token()), address(otherToken));
     }
 
     function test_RevertWhen_DeployBeaconProxyZeroDestinationAddress() public {
         vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, address(0));
+        beacon.deployBeaconProxy(ORG_ID, address(0), address(token));
+    }
+
+    function test_RevertWhen_DeployBeaconProxyZeroInputToken() public {
+        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
+        vm.prank(beaconAdmin);
+        beacon.deployBeaconProxy(ORG_ID, user, address(0));
+    }
+
+    function test_RevertWhen_DeployBeaconProxyInputTokenHasNoCode() public {
+        vm.expectRevert(FactoryBeacon.NoCode.selector);
+        vm.prank(beaconAdmin);
+        beacon.deployBeaconProxy(ORG_ID, user, address(0xCAFE));
     }
 
     function test_RevertWhen_DeployBeaconProxyReusedSalt() public {
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user);
+        beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
         // CREATEX collision: the CREATE3 proxy at the derived address already exists.
         vm.expectRevert();
         vm.prank(beaconAdmin);
-        beacon.deployBeaconProxy(ORG_ID, user);
+        beacon.deployBeaconProxy(ORG_ID, user, address(token));
     }
 
     function test_DeployBeaconProxyIsCrossChainDeterministic() public {
         vm.chainId(1);
         uint256 snap = vm.snapshot();
         vm.prank(beaconAdmin);
-        address dtaMainnet = beacon.deployBeaconProxy(ORG_ID, user);
+        address dtaMainnet = beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
         vm.revertTo(snap);
         vm.chainId(137);
         vm.prank(beaconAdmin);
-        address dtaPolygon = beacon.deployBeaconProxy(ORG_ID, user);
+        address dtaPolygon = beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
         assertEq(
             dtaMainnet,
@@ -118,8 +142,8 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     //////////////////////////////////////////////////////////////*/
 
     function test_ComputeDTAAddressIsDeterministic() public view {
-        address first = beacon.computeDTAAddress(ORG_ID, user);
-        address second = beacon.computeDTAAddress(ORG_ID, user);
+        address first = beacon.computeDTAAddress(ORG_ID, user, address(token));
+        address second = beacon.computeDTAAddress(ORG_ID, user, address(token));
 
         assertEq(first, second, "computeDTAAddress must be pure in its inputs");
     }
@@ -127,38 +151,47 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     function test_ComputeDTAAddressDifferentiatesByOrganizationId() public view {
         bytes32 otherOrgId = bytes32(uint256(ORG_ID) + 1);
 
-        address a = beacon.computeDTAAddress(ORG_ID, user);
-        address b = beacon.computeDTAAddress(otherOrgId, user);
+        address a = beacon.computeDTAAddress(ORG_ID, user, address(token));
+        address b = beacon.computeDTAAddress(otherOrgId, user, address(token));
 
         assertTrue(a != b, "varying organizationId must change the computed DTA address");
     }
 
     function test_ComputeDTAAddressDifferentiatesByUserDestinationAddress() public view {
-        address a = beacon.computeDTAAddress(ORG_ID, user);
-        address b = beacon.computeDTAAddress(ORG_ID, user2);
+        address a = beacon.computeDTAAddress(ORG_ID, user, address(token));
+        address b = beacon.computeDTAAddress(ORG_ID, user2, address(token));
 
         assertTrue(a != b, "varying userDestinationAddress must change the computed DTA address");
+    }
+
+    function test_ComputeDTAAddressDifferentiatesByInputToken() public {
+        MockERC20 otherToken = new MockERC20();
+        otherToken.initialize("Other Token", "OTK", 6);
+
+        address a = beacon.computeDTAAddress(ORG_ID, user, address(token));
+        address b = beacon.computeDTAAddress(ORG_ID, user, address(otherToken));
+
+        assertTrue(a != b, "varying inputToken must change the computed DTA address");
     }
 
     /*//////////////////////////////////////////////////////////////
                                 UPGRADE TO
     //////////////////////////////////////////////////////////////*/
 
-    function test_UpgradeToSucceedsWhenBoringVaultAndTokenMatch() public {
-        // Fresh DCD pointing to the same boringVault and same token — the guard checks values, not addresses.
+    function test_UpgradeToSucceedsWhenBoringVaultMatches() public {
+        // Fresh DCD pointing to the same boringVault — the guard checks values, not addresses.
         MockDCD sameVaultDCD = new MockDCD(boringVault);
-        DirectTransferAddress upgradedImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        DirectTransferAddress upgradedImpl =
+            new DirectTransferAddress(DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount);
 
-        address beforeUpgrade = beacon.computeDTAAddress(ORG_ID, user);
+        address beforeUpgrade = beacon.computeDTAAddress(ORG_ID, user, address(token));
 
         vm.prank(beaconAdmin);
         beacon.upgradeTo(address(upgradedImpl));
 
         assertEq(beacon.implementation(), address(upgradedImpl), "implementation must be updated");
         assertEq(
-            beacon.computeDTAAddress(ORG_ID, user),
+            beacon.computeDTAAddress(ORG_ID, user, address(token)),
             beforeUpgrade,
             "computed DTA address must be stable across a matching upgrade"
         );
@@ -166,9 +199,8 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
 
     function test_RevertWhen_UpgradeToChangesBoringVault() public {
         MockDCD otherVaultDCD = new MockDCD(makeAddr("otherBoringVault"));
-        DirectTransferAddress mismatchedImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(otherVaultDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        DirectTransferAddress mismatchedImpl =
+            new DirectTransferAddress(DistributorCodeDepositor(address(otherVaultDCD)), owner, recoveryAccount);
 
         vm.expectRevert(
             abi.encodeWithSelector(FactoryBeacon.BoringVaultMismatch.selector, boringVault, otherVaultDCD.boringVault())
@@ -177,26 +209,10 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         beacon.upgradeTo(address(mismatchedImpl));
     }
 
-    function test_RevertWhen_UpgradeToChangesToken() public {
-        MockERC20 otherToken = new MockERC20();
-        otherToken.initialize("Other Token", "OTK", 6);
-
-        DirectTransferAddress mismatchedImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(otherToken))
-        );
-
-        vm.expectRevert(
-            abi.encodeWithSelector(FactoryBeacon.TokenMismatch.selector, address(token), address(otherToken))
-        );
-        vm.prank(beaconAdmin);
-        beacon.upgradeTo(address(mismatchedImpl));
-    }
-
     function test_RevertWhen_UpgradeToCallerNotOwner() public {
         MockDCD sameVaultDCD = new MockDCD(boringVault);
-        DirectTransferAddress upgradedImpl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        DirectTransferAddress upgradedImpl =
+            new DirectTransferAddress(DistributorCodeDepositor(address(sameVaultDCD)), owner, recoveryAccount);
         address notOwner = makeAddr("notOwner");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));

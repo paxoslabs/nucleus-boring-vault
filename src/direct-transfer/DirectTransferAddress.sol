@@ -32,21 +32,22 @@ contract DirectTransferAddress is Initializable {
     /// @notice The DistributorCodeDepositor every proxy under this implementation forwards deposits to.
     DistributorCodeDepositor public immutable DCD;
 
-    /// @notice The single token this implementation deposits into a DCD.
-    ERC20 public immutable token;
-
     // STORAGE - unique, initializable, per-proxy values.
 
     /// @notice The recipient of vault shares from DCD deposits. Also the refund recipient.
     address public userDestinationAddress;
 
+    /// @notice The single stablecoin this proxy accepts and forwards. Set once at initialization;
+    ///         each proxy under one beacon may handle a different token.
+    ERC20 public token;
+
     /// @dev Reserved for future storage. Shrink this array by the number of slots any newly
     ///      appended variables consume, mindful of Solidity packing rules (a new array starts
     ///      at a fresh slot; an address packs with an adjacent uint96; etc.). Recognized as a
     ///      storage gap by OpenZeppelin's upgrade validator.
-    uint256[49] private __gap;
+    uint256[48] private __gap;
 
-    event Initialized(address indexed userDestinationAddress);
+    event Initialized(address indexed userDestinationAddress, address indexed token);
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
@@ -68,39 +69,41 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Deploy a new DirectTransferAddress. There should be one active implementation per (DCD, stablecoin) pair.
-     * @dev All four arguments become shared immutables on the implementation's bytecode; none live in proxy storage.
+     * @notice Deploy a new DirectTransferAddress. One implementation per DCD; each proxy under it
+     *         binds its own stablecoin via initialize().
+     * @dev All three arguments become shared immutables on the implementation's bytecode; none live in proxy storage.
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
      * @param _owner The only address allowed to call depositAndForward(), refund(), and recover() on resulting proxies.
      * @param _recoveryAccount Recovery sink for recover().
-     * @param _token The single stablecoin this implementation handles; FactoryBeacon derives this
-     *               value from the implementation when computing deterministic deployment salts.
      */
-    constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount, ERC20 _token) {
+    constructor(DistributorCodeDepositor _dcd, address _owner, address _recoveryAccount) {
         if (_owner == address(0)) revert OwnableInvalidOwner(address(0));
 
-        if ((address(_dcd) == address(0)) || (_recoveryAccount == address(0)) || (address(_token) == address(0))) {
+        if ((address(_dcd) == address(0)) || (_recoveryAccount == address(0))) {
             revert ZeroAddress();
         }
 
-        if ((address(_dcd).code.length == 0) || (address(_token).code.length == 0)) revert NoCode();
+        if (address(_dcd).code.length == 0) revert NoCode();
 
         DCD = _dcd;
         owner = _owner;
         recoveryAccount = _recoveryAccount;
-        token = _token;
 
         _disableInitializers();
     }
 
     /**
-     * @notice Initializes the proxy with the userDestinationAddress. Callable once per proxy.
+     * @notice Initializes the proxy with its userDestinationAddress and input token. Callable once per proxy.
      * @param _userDestinationAddress The address that will receive vault shares from deposits.
+     * @param _token The stablecoin this proxy will accept and forward. Pinned for the proxy's lifetime.
      */
-    function initialize(address _userDestinationAddress) external initializer {
+    function initialize(address _userDestinationAddress, ERC20 _token) external initializer {
         if (_userDestinationAddress == address(0)) revert ZeroAddress();
+        if (address(_token) == address(0)) revert ZeroAddress();
+        if (address(_token).code.length == 0) revert NoCode();
         userDestinationAddress = _userDestinationAddress;
-        emit Initialized(_userDestinationAddress);
+        token = _token;
+        emit Initialized(_userDestinationAddress, address(_token));
     }
 
     /**

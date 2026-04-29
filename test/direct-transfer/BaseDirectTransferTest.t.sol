@@ -53,7 +53,7 @@ contract MockDCD {
 abstract contract BaseDirectTransferTest is Test {
 
     // DTA Events
-    event Initialized(address indexed userDestinationAddress);
+    event Initialized(address indexed userDestinationAddress, address indexed token);
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
@@ -109,9 +109,7 @@ abstract contract BaseDirectTransferTest is Test {
         // Pre-fund the mock DCD so it can settle share transfers on deposit().
         deal(address(shareToken), address(mockDCD), MOCK_DCD_SHARE_POOL);
 
-        impl = new DirectTransferAddress(
-            DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount, ERC20(address(token))
-        );
+        impl = new DirectTransferAddress(DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount);
         beacon = new FactoryBeacon(address(impl), beaconAdmin);
     }
 
@@ -121,8 +119,9 @@ abstract contract BaseDirectTransferTest is Test {
     ///      FactoryBeacon.deployBeaconProxy is exercised separately in FactoryBeacon.t.sol, which needs
     ///      a forked or etched CreateX at 0x1077..391f. For DTA-only unit tests we instantiate the proxy separately.
     function _deployDTA(address userDestinationAddress) internal returns (DirectTransferAddress dta) {
-        bytes memory initData =
-            abi.encodeWithSelector(DirectTransferAddress.initialize.selector, userDestinationAddress);
+        bytes memory initData = abi.encodeWithSelector(
+            DirectTransferAddress.initialize.selector, userDestinationAddress, ERC20(address(token))
+        );
         BeaconProxy proxy = new BeaconProxy(address(beacon), initData);
         dta = DirectTransferAddress(address(proxy));
     }
