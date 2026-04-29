@@ -55,7 +55,11 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @param _implementation Initial DirectTransferAddress implementation this beacon serves.
      * @param _owner Address authorized to call upgradeTo() on the inherited UpgradeableBeacon.
      */
-    constructor(address _implementation, address _owner) UpgradeableBeacon(_implementation, _owner) { }
+    constructor(address _implementation, address _owner) UpgradeableBeacon(_implementation, _owner) {
+        DirectTransferAddress impl = DirectTransferAddress(_implementation);
+        if (address(impl.token()) == address(0)) revert ZeroAddress();
+        if (impl.DCD().boringVault() == address(0)) revert ZeroAddress();
+    }
 
     /**
      * @notice Upgrades the beacon's implementation, enforcing that the new implementation's

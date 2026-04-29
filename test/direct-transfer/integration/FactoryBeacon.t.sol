@@ -32,6 +32,21 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         assertEq(beacon.owner(), beaconAdmin, "owner must match constructor arg");
     }
 
+    function test_RevertWhen_ConstructorImplTokenIsZero() public {
+        vm.mockCall(address(impl), abi.encodeWithSelector(impl.token.selector), abi.encode(address(0)));
+
+        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
+        new FactoryBeacon(address(impl), beaconAdmin);
+    }
+
+    function test_RevertWhen_ConstructorImplBoringVaultIsZero() public {
+        MockDCD zeroVaultDCD = new MockDCD(address(0));
+        vm.mockCall(address(impl), abi.encodeWithSelector(impl.DCD.selector), abi.encode(address(zeroVaultDCD)));
+
+        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
+        new FactoryBeacon(address(impl), beaconAdmin);
+    }
+
     /*//////////////////////////////////////////////////////////////
                            DEPLOY BEACON PROXY
     //////////////////////////////////////////////////////////////*/
