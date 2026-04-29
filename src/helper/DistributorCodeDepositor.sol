@@ -58,6 +58,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         address indexed depositor,
         ERC20 indexed depositAsset,
         uint256 depositAmount,
+        uint256 feeAmount,
         uint256 minimumMint,
         address to,
         bytes32 depositHash,
@@ -301,7 +302,7 @@ contract DistributorCodeDepositor is Auth, PredicateClient {
         _tryClearApproval(depositAsset);
 
         emit DepositWithDistributorCode(
-            msg.sender, depositAsset, depositAmount, minimumMint, to, depositHash, distributorCode
+            msg.sender, depositAsset, depositAmount, feeAmount, minimumMint, to, depositHash, distributorCode
         );
     }
 
