@@ -69,17 +69,17 @@ contract FactoryBeacon is UpgradeableBeacon {
      */
     function upgradeTo(address newImplementation) public override onlyOwner {
         DirectTransferAddress oldImpl = DirectTransferAddress(implementation());
-        address currentBoringVault = oldImpl.DCD().boringVault();
-        address currentToken = address(oldImpl.token());
+        address oldBoringVault = oldImpl.DCD().boringVault();
+        address oldToken = address(oldImpl.token());
 
         super.upgradeTo(newImplementation);
 
         DirectTransferAddress newImpl = DirectTransferAddress(implementation());
-        address nextBoringVault = newImpl.DCD().boringVault();
-        address nextToken = address(newImpl.token());
+        address newBoringVault = newImpl.DCD().boringVault();
+        address newToken = address(newImpl.token());
 
-        if (nextBoringVault != currentBoringVault) revert BoringVaultMismatch(currentBoringVault, nextBoringVault);
-        if (nextToken != currentToken) revert TokenMismatch(currentToken, nextToken);
+        if (newBoringVault != oldBoringVault) revert BoringVaultMismatch(oldBoringVault, newBoringVault);
+        if (newToken != oldToken) revert TokenMismatch(oldToken, newToken);
     }
 
     /**
