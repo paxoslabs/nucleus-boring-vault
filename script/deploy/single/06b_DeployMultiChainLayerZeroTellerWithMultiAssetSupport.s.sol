@@ -97,9 +97,8 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             require(receiveLib != address(0), "no receiveLib");
         } else {
             console2.log(
-                "Skipping configuration of LZ Teller. Must configure manually in the future from protocol admin: "
-                .config
-                .protocolAdmin
+                "Skipping configuration of LZ Teller. Must configure manually in the future from protocol admin: ",
+                config.protocolAdmin
             );
         }
 
