@@ -28,6 +28,7 @@
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
     "peerEid": 30280,
+    "setupLZConfigs": false,
     "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
       "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
