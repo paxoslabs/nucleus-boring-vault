@@ -138,8 +138,8 @@ contract DirectTransferAddress is Initializable {
      * @notice Refund `amount` of `tokenToSweep` from this DTA to `userDestinationAddress`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g.
      *      `userDestinationAddress` is on a token-level blacklist), the owner should then call recover().
-     *      `tokenToSweep` is a parameter (rather than the immutable `token`) so stray tokens of any
-     *      kind accidentally sent to this proxy can be swept.
+     *      `tokenToSweep` is a parameter so stray tokens of any kind (not just the stored `token`) sitting
+     *      in this proxy can be swept.
      * @param tokenToSweep The ERC20 to refund.
      * @param amount The amount of `tokenToSweep` to refund.
      */
