@@ -50,8 +50,17 @@ library ConfigReader {
         address exchangeRateBot;
         address rolesAuthority;
         uint256 maxTimeFromLastUpdate;
+        // Per-asset fees are stored as parallel arrays rather than a struct array, because Solidity
+        // 0.8.21 does not support copying a memory dynamic array of structs into storage (which
+        // happens when `Config memory` is assigned to `Config storage` in deployAll). Indices line
+        // up: withdrawAssets[i] pairs with withdrawAssetFlatFees[i] and withdrawAssetPercentFees[i].
+        // The author of the config json must be sure these arrays are the same length
         address[] withdrawAssets;
+        uint256[] withdrawAssetFlatFees;
+        uint256[] withdrawAssetPercentFees;
         address[] depositAssets;
+        uint256[] depositAssetFlatFees;
+        uint256[] depositAssetPercentFees;
         address[] rateProviders;
         address[] priceFeeds;
         bool distributorCodeDepositorDeploy;
@@ -70,7 +79,7 @@ library ConfigReader {
         address freezeListBeforeTransferHook;
     }
 
-    function toConfig(string memory _config, string memory _chainConfig) internal pure returns (Config memory config) {
+    function toConfig(string memory _config, string memory _chainConfig) internal view returns (Config memory config) {
         // Reading the 'nameEntropy`
         config.nameEntropy = _config.readString(".nameEntropy");
 
@@ -103,7 +112,26 @@ library ConfigReader {
         config.minGasForPeer = uint64(_config.readUint(".teller.minGasForPeer"));
         config.tellerContractName = _config.readString(".teller.tellerContractName");
         config.withdrawAssets = _config.readAddressArray(".teller.withdrawAssets");
+        config.withdrawAssetFlatFees =
+            _config.readUintArrayOr(".teller.withdrawAssetFlatFees", new uint256[](config.withdrawAssets.length));
+        config.withdrawAssetPercentFees =
+            _config.readUintArrayOr(".teller.withdrawAssetPercentFees", new uint256[](config.withdrawAssets.length));
+        require(
+            config.withdrawAssets.length == config.withdrawAssetFlatFees.length
+                && config.withdrawAssets.length == config.withdrawAssetPercentFees.length,
+            "ConfigReader: withdrawAssets fee arrays length mismatch"
+        );
+
         config.depositAssets = _config.readAddressArray(".teller.depositAssets");
+        config.depositAssetFlatFees =
+            _config.readUintArrayOr(".teller.depositAssetFlatFees", new uint256[](config.depositAssets.length));
+        config.depositAssetPercentFees =
+            _config.readUintArrayOr(".teller.depositAssetPercentFees", new uint256[](config.depositAssets.length));
+        require(
+            config.depositAssets.length == config.depositAssetFlatFees.length
+                && config.depositAssets.length == config.depositAssetPercentFees.length,
+            "ConfigReader: depositAssets fee arrays length mismatch"
+        );
 
         // layerzero
         if (compareStrings(config.tellerContractName, "MultiChainLayerZeroTellerWithMultiAssetSupport")) {
