@@ -37,7 +37,7 @@
     "dvnIfNoDefault": {
       "required": [
         "0x6a02d83e8d433304bba74ef1c427913958187142",
-        "0xd56e4eab23cb81f43168f9f45211eb027b9ac7cc",
+        "0x427bd19a0463fc4edc2e247d35eb61323d7e5541",
         "0xa7b5189bca84cd304d8553977c7c614329750d99"
       ],
       "optional": [
