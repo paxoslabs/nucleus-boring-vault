@@ -19,27 +19,28 @@ import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
 /// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
-/// @dev Exposes `DCD()` and `token()` so FactoryBeacon can derive salt entropy from implementation immutables.
+/// @dev Exposes `DCD()` so FactoryBeacon can derive salt entropy from the DCD's boringVault. `token`
+///      lives in proxy storage and is set by `initialize`, mirroring the production layout.
 contract DirectTransferAddress1 {
 
     using SafeTransferLib for ERC20;
 
     address public userDestinationAddress;
+    ERC20 public token;
     bool private _initialized;
     DistributorCodeDepositor public immutable DCD;
-    ERC20 public immutable token;
 
     error AlreadyInitialized();
 
-    constructor(DistributorCodeDepositor _dcd, ERC20 _token) {
+    constructor(DistributorCodeDepositor _dcd) {
         DCD = _dcd;
-        token = _token;
     }
 
-    function initialize(address _userDestinationAddress) external {
+    function initialize(address _userDestinationAddress, ERC20 _token) external {
         if (_initialized) revert AlreadyInitialized();
         _initialized = true;
         userDestinationAddress = _userDestinationAddress;
+        token = _token;
     }
 
     function forward(uint256 amount) external returns (uint256 shares) {
@@ -122,15 +123,15 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_setup5Users() public {
         // Deploy implementation and beacon
-        DirectTransferAddress1 impl = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
+        DirectTransferAddress1 impl = new DirectTransferAddress1(dcd);
         beacon = new FactoryBeacon(address(impl), address(this));
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
 
             // Verify the deployed address matches the deterministic computation
-            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i]);
+            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i], address(USDC));
             assertEq(dtas[i], expected, "DTA address must be deterministic");
 
             // Verify initialization
@@ -167,12 +168,12 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_upgradeDCDFor5Users() public {
         // Deploy first DCD + implementation + beacon
-        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd, ERC20(address(USDC)));
+        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
         beacon = new FactoryBeacon(address(impl1), address(this));
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i]);
+            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Verify initial DCD
@@ -207,7 +208,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         dcd2.updateKytStatus(ERC20(address(USDC)), false);
 
         // Deploy new implementation pointing to dcd2 and upgrade beacon
-        DirectTransferAddress1 impl2 = new DirectTransferAddress1(dcd2, ERC20(address(USDC)));
+        DirectTransferAddress1 impl2 = new DirectTransferAddress1(dcd2);
         beacon.upgradeTo(address(impl2));
 
         // Verify all proxies now use the new DCD (immutable is in the new implementation bytecode)
