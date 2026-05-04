@@ -12,7 +12,7 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
  * @notice Implementation contract for DirectTransferAddress BeaconProxies. Receives one configured
  *         stablecoin and forwards balances into a DistributorCodeDepositor, minting BoringVault shares
  *         to a pre-configured userDestinationAddress.
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.io
  * @custom:oz-upgrades
  */
 contract DirectTransferAddress is Initializable {
@@ -24,9 +24,10 @@ contract DirectTransferAddress is Initializable {
     /// @notice Authorized caller for depositAndForward(), refund(), and recover().
     address public immutable owner;
 
-    /* @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
-    *          a prior refund() attempt fails (e.g. userDestinationAddress is on a token-level blacklist).
-    */
+    /**
+     * @notice Wallet that receives token swept via recover() — used for sanctions reverts or when
+     *         a prior refund() attempt fails (e.g. userDestinationAddress is on a token-level blacklist).
+     */
     address public immutable recoveryAccount;
 
     /// @notice The DistributorCodeDepositor every proxy under this implementation forwards deposits to.
@@ -144,6 +145,8 @@ contract DirectTransferAddress is Initializable {
      * @param amount The amount of `tokenToSweep` to refund.
      */
     function refund(ERC20 tokenToSweep, uint256 amount) external onlyOwner {
+        if (address(tokenToSweep).code.length == 0) revert NoCode();
+
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();
         tokenToSweep.safeTransfer(userDestinationAddress, amount);
@@ -159,6 +162,8 @@ contract DirectTransferAddress is Initializable {
      * @param tokenToSweep The ERC20 to sweep.
      */
     function recover(ERC20 tokenToSweep) external onlyOwner {
+        if (address(tokenToSweep).code.length == 0) revert NoCode();
+
         uint256 amount = tokenToSweep.balanceOf(address(this));
         // slither-disable-next-line incorrect-equality
         if (amount == 0) revert ZeroAmount();

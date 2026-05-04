@@ -7,11 +7,12 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
 import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { ICreateX } from "src/interfaces/ICreateX.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { BaseDirectTransferTest, MockDCD } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
 
 /// @notice Forked-mainnet so the real CreateX at
-///         0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed backs `deployBeaconProxy` / `computeDTAAddress`.
+///         0x1077f8ea07EA34D9F23BC39256BF234665FB391f backs `deployBeaconProxy` / `computeDTAAddress`.
 contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
 
     uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
@@ -113,8 +114,9 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, user, address(token));
 
-        // CREATEX collision: the CREATE3 proxy at the derived address already exists.
-        vm.expectRevert();
+        // CREATEX collision: the CREATE3 proxy at the derived address already exists, so
+        // CreateX's inner CREATE2 returns address(0) and reverts with FailedContractCreation.
+        vm.expectRevert(abi.encodeWithSelector(ICreateX.FailedContractCreation.selector, address(beacon.CREATEX())));
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, user, address(token));
     }

@@ -30,11 +30,12 @@ contract FactoryBeacon is UpgradeableBeacon {
 
     /**
      * @notice Emitted when a new DirectTransferAddress beacon proxy is deployed.
-     * @param directTransferAddress Address of the freshly deployed BeaconProxy (the DTA).
      * @param userDestinationAddress The end-user configured as the DTA's `userDestinationAddress`.
      * @param organizationId Organization identifier mixed into the deployment salt; surfaced here
      *                       so indexers can correlate DTAs to an off-chain org.
      * @param inputToken The stablecoin the DTA accepts and forwards.
+     * @param boringVault The vault whose shares will be sent to the userDestinationAddress.
+     * @param directTransferAddress Address of the freshly deployed BeaconProxy (the DTA).
      */
     event BeaconProxyDeployed(
         address indexed userDestinationAddress,
@@ -72,15 +73,15 @@ contract FactoryBeacon is UpgradeableBeacon {
      * @param newImplementation The proposed new DirectTransferAddress implementation.
      */
     function upgradeTo(address newImplementation) public override onlyOwner {
-        DirectTransferAddress currentImpl = DirectTransferAddress(implementation());
-        address currentBoringVault = currentImpl.DCD().boringVault();
-
-        DirectTransferAddress nextImpl = DirectTransferAddress(newImplementation);
-        address nextBoringVault = nextImpl.DCD().boringVault();
-
-        if (nextBoringVault != currentBoringVault) revert BoringVaultMismatch(currentBoringVault, nextBoringVault);
+        DirectTransferAddress oldImpl = DirectTransferAddress(implementation());
+        address oldBoringVault = oldImpl.DCD().boringVault();
 
         super.upgradeTo(newImplementation);
+
+        DirectTransferAddress newImpl = DirectTransferAddress(implementation());
+        address newBoringVault = newImpl.DCD().boringVault();
+
+        if (newBoringVault != oldBoringVault) revert BoringVaultMismatch(oldBoringVault, newBoringVault);
     }
 
     /**
