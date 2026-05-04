@@ -8,18 +8,18 @@ import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress
 import { ICreateX } from "src/interfaces/ICreateX.sol";
 
 /**
- * @title FactoryBeacon
+ * @title DirectTransferFactoryBeacon
  * @notice Dual-purpose contract that is both the UpgradeableBeacon for every DirectTransferAddress
  *         proxy it spawns and the factory that deploys those proxies at deterministic,
  *         cross-chain-stable addresses.
- * @dev One FactoryBeacon serves one DirectTransferAddress implementation with one immutable DCD (and
+ * @dev One DirectTransferFactoryBeacon serves one DirectTransferAddress implementation with one immutable DCD (and
  *      therefore one BoringVault). If necessary, DCD can be upgraded by deploying a new
  *      implementation contract. Deployment uses CreateX's CREATE3 flow keyed on
  *      `msg.sender == this`, so the DTA address is a pure function
  *      of the inputs and this factory's address — identical on every chain.
  * @custom:security-contact security@paxoslabs.com
  */
-contract FactoryBeacon is UpgradeableBeacon {
+contract DirectTransferFactoryBeacon is UpgradeableBeacon {
 
     /**
      * @notice Canonical CreateX deployer used for CREATE3 deployments.

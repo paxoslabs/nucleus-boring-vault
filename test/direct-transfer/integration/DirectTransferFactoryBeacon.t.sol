@@ -6,20 +6,20 @@ import { MockERC20 } from "@forge-std/mocks/MockERC20.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
 import { ICreateX } from "src/interfaces/ICreateX.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { BaseDirectTransferTest, MockDCD } from "test/direct-transfer/BaseDirectTransferTest.t.sol";
 
 /// @notice Forked-mainnet so the real CreateX at
 ///         0x1077f8ea07EA34D9F23BC39256BF234665FB391f backs `deployBeaconProxy` / `computeDTAAddress`.
-contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
+contract DirectTransferFactoryBeaconIntegrationTest is BaseDirectTransferTest {
 
     uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
 
     function setUp() public override {
         // Select fork before any deployments so the CreateX predeploy at 0xba5Ed0… is live when
-        // BaseDirectTransferTest's setUp deploys the FactoryBeacon used throughout the suite.
+        // BaseDirectTransferTest's setUp deploys the DirectTransferFactoryBeacon used throughout the suite.
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), FORK_BLOCK_NUMBER));
         super.setUp();
     }
@@ -37,8 +37,8 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
         MockDCD zeroVaultDCD = new MockDCD(address(0));
         vm.mockCall(address(impl), abi.encodeWithSelector(impl.DCD.selector), abi.encode(address(zeroVaultDCD)));
 
-        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
-        new FactoryBeacon(address(impl), beaconAdmin);
+        vm.expectRevert(DirectTransferFactoryBeacon.ZeroAddress.selector);
+        new DirectTransferFactoryBeacon(address(impl), beaconAdmin);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -93,19 +93,19 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
     }
 
     function test_RevertWhen_DeployBeaconProxyZeroDestinationAddress() public {
-        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
+        vm.expectRevert(DirectTransferFactoryBeacon.ZeroAddress.selector);
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, address(0), address(token));
     }
 
     function test_RevertWhen_DeployBeaconProxyZeroInputToken() public {
-        vm.expectRevert(FactoryBeacon.ZeroAddress.selector);
+        vm.expectRevert(DirectTransferFactoryBeacon.ZeroAddress.selector);
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, user, address(0));
     }
 
     function test_RevertWhen_DeployBeaconProxyInputTokenHasNoCode() public {
-        vm.expectRevert(FactoryBeacon.NoCode.selector);
+        vm.expectRevert(DirectTransferFactoryBeacon.NoCode.selector);
         vm.prank(beaconAdmin);
         beacon.deployBeaconProxy(ORG_ID, user, address(0xCAFE));
     }
@@ -205,7 +205,9 @@ contract FactoryBeaconIntegrationTest is BaseDirectTransferTest {
             new DirectTransferAddress(DistributorCodeDepositor(address(otherVaultDCD)), owner, recoveryAccount);
 
         vm.expectRevert(
-            abi.encodeWithSelector(FactoryBeacon.BoringVaultMismatch.selector, boringVault, otherVaultDCD.boringVault())
+            abi.encodeWithSelector(
+                DirectTransferFactoryBeacon.BoringVaultMismatch.selector, boringVault, otherVaultDCD.boringVault()
+            )
         );
         vm.prank(beaconAdmin);
         beacon.upgradeTo(address(mismatchedImpl));

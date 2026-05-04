@@ -11,7 +11,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { USDC } from "src/helper/Constants.sol";
@@ -19,7 +19,7 @@ import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
 /// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
-/// @dev Exposes `DCD()` so FactoryBeacon can derive salt entropy from the DCD's boringVault. `token`
+/// @dev Exposes `DCD()` so DirectTransferFactoryBeacon can derive salt entropy from the DCD's boringVault. `token`
 ///      lives in proxy storage and is set by `initialize`, mirroring the production layout.
 contract DirectTransferAddress1 {
 
@@ -61,7 +61,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     using stdStorage for StdStorage;
 
     DistributorCodeDepositor public dcd;
-    FactoryBeacon public beacon;
+    DirectTransferFactoryBeacon public beacon;
     address public owner = vm.addr(uint256(bytes32("owner")));
     address public recoveryAccount = vm.addr(uint256(bytes32("recoveryAccount")));
 
@@ -124,7 +124,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     function test_setup5Users() public {
         // Deploy implementation and beacon
         DirectTransferAddress1 impl = new DirectTransferAddress1(dcd);
-        beacon = new FactoryBeacon(address(impl), address(this));
+        beacon = new DirectTransferFactoryBeacon(address(impl), address(this));
 
         // Deploy 5 DTA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
@@ -169,7 +169,7 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
     function test_upgradeDCDFor5Users() public {
         // Deploy first DCD + implementation + beacon
         DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
-        beacon = new FactoryBeacon(address(impl1), address(this));
+        beacon = new DirectTransferFactoryBeacon(address(impl1), address(this));
 
         // Deploy 5 DTA proxies
         for (uint256 i; i < 5; i++) {

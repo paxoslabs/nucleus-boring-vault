@@ -5,21 +5,22 @@ import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { BaseScript } from "script/Base.s.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
 
 /**
  * @notice Due to CREATEX deployments, manual verification post-deployment is required.
  *         Save the deployed contract addresses from the logs and verify them with `forge verify-contract`.
  *         Example:
  *         `forge verify-contract --watch --chain sepolia \
- *             <FactoryBeacon address> \
- *             src/direct-transfer/FactoryBeacon.sol:FactoryBeacon \
+ *             <DirectTransferFactoryBeacon address> \
+ *             src/direct-transfer/DirectTransferFactoryBeacon.sol:DirectTransferFactoryBeacon \
  *             --verifier etherscan --etherscan-api-key <etherscan api key>`
  *         `forge verify-contract --watch --chain sepolia \
  *             <DirectTransferAddress implementation address> \
  *             src/direct-transfer/DirectTransferAddress.sol:DirectTransferAddress \
  *             --verifier etherscan --etherscan-api-key <etherscan api key>`
- *         After deploying, make sure to update database with newly deployed FactoryBeacon so offchain systems know
+ *         After deploying, make sure to update database with newly deployed DirectTransferFactoryBeacon so offchain
+ * systems know
  *         which contract to use to deploy new Direct Transfer Address proxies with.
  */
 contract DeployDirectTransfer is BaseScript {
@@ -28,7 +29,7 @@ contract DeployDirectTransfer is BaseScript {
         address dcdAddress;
 
         // Can call upgradeTo() to upgrade DTA implementation
-        address factoryBeaconOwner; // ethereum protocol owner multisig
+        address directTransferFactoryBeaconOwner; // ethereum protocol owner multisig
 
         // Receiver of sanctioned funds
         address recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
@@ -39,30 +40,32 @@ contract DeployDirectTransfer is BaseScript {
         if (block.chainid == 11_155_111) {
             dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843; // Sepolia test DCD address
 
-            // Use same owner for factoryBeacon as implementation contract since it's
+            // Use same owner for directTransferFactoryBeacon as implementation contract since it's
             // just testnet. live chains should use a multi-signer multisig reuiqirng 3/5
             // quorum or more to upgrade implementation.
-            factoryBeaconOwner = implOwner;
+            directTransferFactoryBeaconOwner = implOwner;
         } else if (block.chainid == 1) {
-            factoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F;
+            directTransferFactoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F;
         } else {
-            revert("unsupported chain; set dcdAddress and factoryBeaconOwner for this chainid");
+            revert("unsupported chain; set dcdAddress and directTransferFactoryBeaconOwner for this chainid");
         }
 
         bytes32 implSalt;
-        bytes32 factoryBeaconSalt;
+        bytes32 directTransferFactoryBeaconSalt;
         {
             string memory dcdAddrString = Strings.toHexString(dcdAddress);
 
-            // isCrosschainProtected=false because we want the same implementation and FactoryBeacon addresses across
-            // all chains. DCD address is added so deploys with different inputs land at distinct addresses. "v1" in
+            // isCrosschainProtected=false because we want the same implementation and DirectTransferFactoryBeacon
+            // addresses across all chains. DCD address is added so deploys with different inputs land at distinct
+            // addresses. "v1" in
             // implementation salt so there's a clear upgrade path (next version would be "v2").
             implSalt = makeSalt(
                 broadcaster, false, string.concat("DirectTransferAddress:implementation:v1:", dcdAddrString)
             );
 
-            factoryBeaconSalt =
-                makeSalt(broadcaster, false, string.concat("DirectTransferAddress:FactoryBeacon:", dcdAddrString));
+            directTransferFactoryBeaconSalt = makeSalt(
+                broadcaster, false, string.concat("DirectTransferAddress:DirectTransferFactoryBeacon:", dcdAddrString)
+            );
         }
 
         // Deploy implementation via CREATEX for consistent cross-chain address
@@ -71,17 +74,25 @@ contract DeployDirectTransfer is BaseScript {
             implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress, implOwner, recoveryAccount))
         );
 
-        // Deploy FactoryBeacon via CREATEX for consistent cross-chain address
-        bytes memory factoryBeaconCreationCode = type(FactoryBeacon).creationCode;
-        address factoryBeacon = CREATEX.deployCreate3(
-            factoryBeaconSalt,
-            abi.encodePacked(factoryBeaconCreationCode, abi.encode(implementation, factoryBeaconOwner))
+        // Deploy DirectTransferFactoryBeacon via CREATEX for consistent cross-chain address
+        bytes memory directTransferFactoryBeaconCreationCode = type(DirectTransferFactoryBeacon).creationCode;
+        address directTransferFactoryBeacon = CREATEX.deployCreate3(
+            directTransferFactoryBeaconSalt,
+            abi.encodePacked(
+                directTransferFactoryBeaconCreationCode, abi.encode(implementation, directTransferFactoryBeaconOwner)
+            )
         );
 
         require(implementation.code.length > 0, "impl not deployed");
-        require(factoryBeacon.code.length > 0, "factoryBeacon not deployed");
-        require(FactoryBeacon(factoryBeacon).implementation() == implementation, "factoryBeacon impl mismatch");
-        require(FactoryBeacon(factoryBeacon).owner() == factoryBeaconOwner, "factoryBeacon owner mismatch");
+        require(directTransferFactoryBeacon.code.length > 0, "directTransferFactoryBeacon not deployed");
+        require(
+            DirectTransferFactoryBeacon(directTransferFactoryBeacon).implementation() == implementation,
+            "directTransferFactoryBeacon impl mismatch"
+        );
+        require(
+            DirectTransferFactoryBeacon(directTransferFactoryBeacon).owner() == directTransferFactoryBeaconOwner,
+            "directTransferFactoryBeacon owner mismatch"
+        );
         require(address(DirectTransferAddress(implementation).DCD()) == dcdAddress, "impl dcd mismatch");
         require(DirectTransferAddress(implementation).owner() == implOwner, "impl owner mismatch");
         require(
@@ -89,8 +100,10 @@ contract DeployDirectTransfer is BaseScript {
         );
 
         console.log("DirectTransferAddress implementation:", implementation);
-        console.log("FactoryBeacon:", factoryBeacon);
-        console.log("FactoryBeacon owner:", FactoryBeacon(factoryBeacon).owner());
+        console.log("DirectTransferFactoryBeacon:", directTransferFactoryBeacon);
+        console.log(
+            "DirectTransferFactoryBeacon owner:", DirectTransferFactoryBeacon(directTransferFactoryBeacon).owner()
+        );
     }
 
 }

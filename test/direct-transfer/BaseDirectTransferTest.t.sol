@@ -8,7 +8,7 @@ import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { FactoryBeacon } from "src/direct-transfer/FactoryBeacon.sol";
+import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
 import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconProxy.sol";
 
 /// @dev Pulls `depositAsset` from msg.sender (matching the real DCD's safeTransferFrom on deposit)
@@ -58,7 +58,7 @@ abstract contract BaseDirectTransferTest is Test {
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
-    /// FactoryBeacon events
+    /// DirectTransferFactoryBeacon events
     event BeaconProxyDeployed(
         address indexed userDestinationAddress,
         bytes32 indexed organizationId,
@@ -84,7 +84,7 @@ abstract contract BaseDirectTransferTest is Test {
     MockERC20 shareToken;
     MockDCD mockDCD;
     DirectTransferAddress impl;
-    FactoryBeacon beacon;
+    DirectTransferFactoryBeacon beacon;
 
     // ---------- default salt inputs ----------
 
@@ -110,14 +110,15 @@ abstract contract BaseDirectTransferTest is Test {
         deal(address(shareToken), address(mockDCD), MOCK_DCD_SHARE_POOL);
 
         impl = new DirectTransferAddress(DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount);
-        beacon = new FactoryBeacon(address(impl), beaconAdmin);
+        beacon = new DirectTransferFactoryBeacon(address(impl), beaconAdmin);
     }
 
     // ---------- helpers ----------
 
     /// @dev Deploy a DTA beacon proxy directly (no CreateX) and initialize it against the shared impl.
-    ///      FactoryBeacon.deployBeaconProxy is exercised separately in FactoryBeacon.t.sol, which needs
-    ///      a forked or etched CreateX at 0x1077..391f. For DTA-only unit tests we instantiate the proxy separately.
+    ///      DirectTransferFactoryBeacon.deployBeaconProxy is exercised separately in DirectTransferFactoryBeacon.t.sol,
+    /// which needs a forked or etched CreateX at 0x1077..391f. For DTA-only unit tests we instantiate the proxy
+    /// separately.
     function _deployDTA(address userDestinationAddress) internal returns (DirectTransferAddress dta) {
         bytes memory initData = abi.encodeWithSelector(
             DirectTransferAddress.initialize.selector, userDestinationAddress, ERC20(address(token))
