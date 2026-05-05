@@ -6,6 +6,7 @@ import { ConfigReader } from "../../ConfigReader.s.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DCDAssetSpecificFeeModule } from "src/helper/DCDAssetSpecificFeeModule.sol";
+import { IERC20 } from "src/interfaces/IFeeModule.sol";
 import "src/helper/Constants.sol";
 
 /**
@@ -32,10 +33,22 @@ contract DeployDistributorCodeDepositor is BaseScript {
         // To avoid "stack too deep", split the arguments into intermediate local variables.
 
         bytes32 feeModuleSalt = keccak256(abi.encodePacked(distributorCodeDepositorSalt, "DCDAssetSpecificFeeModule"));
+        // Deploy with `broadcaster` as the temporary owner so this script can configure per-asset
+        // fees via `setFeeData` (which is `requiresAuth`). Ownership is transferred to
+        // `protocolAdmin` after fees are configured.
         address assetSpecificFeeModule = CREATEX.deployCreate3(
-            feeModuleSalt,
-            abi.encodePacked(type(DCDAssetSpecificFeeModule).creationCode, abi.encode(config.protocolAdmin))
+            feeModuleSalt, abi.encodePacked(type(DCDAssetSpecificFeeModule).creationCode, abi.encode(broadcaster))
         );
+
+        // Configure per-asset deposit fees, then hand the module off to the protocol admin.
+        DCDAssetSpecificFeeModule dcdFeeModule = DCDAssetSpecificFeeModule(assetSpecificFeeModule);
+        for (uint256 i; i < config.depositAssets.length; ++i) {
+            dcdFeeModule.setFeeData(
+                IERC20(config.depositAssets[i]), config.depositAssetPercentFees[i], config.depositAssetFlatFees[i]
+            );
+        }
+        dcdFeeModule.transferOwnership(config.protocolAdmin);
+        require(dcdFeeModule.owner() == config.protocolAdmin, "DCD fee module owner mismatch");
 
         address teller = config.teller;
         address rolesAuthority = config.rolesAuthority;
