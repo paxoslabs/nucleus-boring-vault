@@ -65,6 +65,7 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
         // possible interaction even from poisoned DVNs, considering our own receive function reverts if a possible
         // matching chain/peer isn't provided.
         if (config.setupLZConfigs) {
+            require(config.peerEid != 0, "If configuring LZ, peerEid must not be 0");
             console2.log("setting up LZ configs...");
             // configure the crosschain functionality, assume same address
             bytes32 leftPaddedBytes32Peer = addressToBytes32LeftPad(address(teller));
