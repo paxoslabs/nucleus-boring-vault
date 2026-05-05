@@ -7,6 +7,7 @@ import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 import { DCDAssetSpecificFeeModule } from "src/helper/DCDAssetSpecificFeeModule.sol";
 import "src/helper/Constants.sol";
+import { console } from "forge-std/console.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
@@ -36,6 +37,7 @@ contract DeployDistributorCodeDepositor is BaseScript {
             feeModuleSalt,
             abi.encodePacked(type(DCDAssetSpecificFeeModule).creationCode, abi.encode(config.protocolAdmin))
         );
+        console.log("AssetSpecificFeeModule (DCD) deployed: ", assetSpecificFeeModule);
 
         address teller = config.teller;
         address rolesAuthority = config.rolesAuthority;
