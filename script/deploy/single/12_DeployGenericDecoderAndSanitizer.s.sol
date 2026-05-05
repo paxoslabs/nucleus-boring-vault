@@ -25,6 +25,10 @@ contract DeployGenericDecoderAndSanitizer is BaseScript {
             config.uniswapV3NonFungiblePositionManager != address(0),
             "uniswapV3NonFungiblePositionManager must be set in chain config"
         );
+        require(
+            config.uniswapV3NonFungiblePositionManager.code.length != 0,
+            "uniswapV3NonFungiblePositionManager must have code"
+        );
 
         bytes32 salt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":GenericDecoderAndSanitizer")));

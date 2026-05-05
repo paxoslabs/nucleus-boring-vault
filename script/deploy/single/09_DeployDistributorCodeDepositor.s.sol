@@ -41,8 +41,11 @@ contract DeployDistributorCodeDepositor is BaseScript {
         );
 
         // Configure per-asset deposit fees, then hand the module off to the protocol admin.
+        // Skip assets that have both fees as zero — the mapping defaults to zero, so calling
+        // `setFeeData` with all-zero args would just burn gas and emit a no-op event.
         DCDAssetSpecificFeeModule dcdFeeModule = DCDAssetSpecificFeeModule(assetSpecificFeeModule);
         for (uint256 i; i < config.depositAssets.length; ++i) {
+            if (config.depositAssetPercentFees[i] == 0 && config.depositAssetFlatFees[i] == 0) continue;
             dcdFeeModule.setFeeData(
                 IERC20(config.depositAssets[i]), config.depositAssetPercentFees[i], config.depositAssetFlatFees[i]
             );

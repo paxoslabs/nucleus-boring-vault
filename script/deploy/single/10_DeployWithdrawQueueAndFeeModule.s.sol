@@ -58,8 +58,11 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
         );
 
         // Configure per-asset withdraw fees, then hand the module off to the protocol admin.
+        // Skip assets that have both fees as zero — the mapping defaults to zero, so calling
+        // `setFeeData` with all-zero args would just burn gas and emit a no-op event.
         WithdrawQueueAssetSpecificFeeModule wqFeeModule = WithdrawQueueAssetSpecificFeeModule(feeModule);
         for (uint256 i; i < config.withdrawAssets.length; ++i) {
+            if (config.withdrawAssetPercentFees[i] == 0 && config.withdrawAssetFlatFees[i] == 0) continue;
             wqFeeModule.setFeeData(
                 IERC20(config.withdrawAssets[i]), config.withdrawAssetPercentFees[i], config.withdrawAssetFlatFees[i]
             );
