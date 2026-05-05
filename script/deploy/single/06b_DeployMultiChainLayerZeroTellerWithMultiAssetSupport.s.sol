@@ -92,8 +92,8 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             _checkUlnConfig(address(teller), config, receiveLib);
 
             // confirm the library is set
-            sendLib = endpoint.getSendLibrary(config.teller, config.peerEid);
-            (receiveLib,) = endpoint.getReceiveLibrary(config.teller, config.peerEid);
+            sendLib = endpoint.getSendLibrary(address(teller), config.peerEid);
+            (receiveLib,) = endpoint.getReceiveLibrary(address(teller), config.peerEid);
             require(sendLib != address(0), "No sendLib");
             require(receiveLib != address(0), "no receiveLib");
         } else {
