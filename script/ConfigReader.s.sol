@@ -67,6 +67,7 @@ library ConfigReader {
         bool distributorCodeDepositorIsNativeDepositSupported;
         address distributorCodeDepositor;
         address nativeWrapper;
+        address uniswapV3NonFungiblePositionManager;
         uint256 distributorCodeDepositorSupplyCap;
         address registry;
         string policyID;
@@ -77,6 +78,7 @@ library ConfigReader {
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
         address freezeListBeforeTransferHook;
+        address genericDecoderAndSanitizer;
     }
 
     function toConfig(string memory _config, string memory _chainConfig) internal view returns (Config memory config) {
@@ -174,6 +176,9 @@ library ConfigReader {
         // Reading from the 'chainConfig' section
         config.balancerVault = _chainConfig.readAddress(".balancerVault");
         config.nativeWrapper = _chainConfig.readAddress(".nativeWrapper");
+        // Optional: only required by chains that deploy a Uniswap-V3-aware decoder/sanitizer.
+        config.uniswapV3NonFungiblePositionManager =
+            _chainConfig.readAddressOr(".uniswapV3NonFungiblePositionManager", address(0));
 
         return config;
     }
