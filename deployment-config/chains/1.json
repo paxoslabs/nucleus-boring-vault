@@ -21,7 +21,13 @@
     "0x6c3ea9036406852006290770bedfcaba0e23a0e8": {
       "isPegged": true,
       "rateProvider": "0x0000000000000000000000000000000000000000"
-    },    "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
+    },    
+    "0x45804880de22913dafe09f4980848ece6ecbaf78": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000",
+      "name": "PAXG"
+    },
+    "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
       "isPegged": false,
       "denomination": "stETH/wstETH",
       "priceFeedType": 2,

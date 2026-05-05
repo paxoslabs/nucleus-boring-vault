@@ -9,6 +9,7 @@ import { WithdrawQueue } from "src/base/Roles/WithdrawQueue.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { IERC20 } from "src/interfaces/IFeeModule.sol";
 import "src/helper/Constants.sol";
+import { console } from "forge-std/console.sol";
 
 /**
  * Deploy the Withdraw Queue and Fee Module
@@ -50,6 +51,7 @@ contract DeployWithdrawQueueAndFeeModule is BaseScript {
             feeModule = CREATEX.deployCreate3(
                 feeModuleSalt, abi.encodePacked(feeModuleCreationCode, abi.encode(broadcaster, config.accountant))
             );
+            console.log("WithdrawQueueAssetSpecificFeeModule deployed: ", feeModule);
         }
 
         require(

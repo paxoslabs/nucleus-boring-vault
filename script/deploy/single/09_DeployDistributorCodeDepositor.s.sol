@@ -8,6 +8,7 @@ import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.so
 import { DCDAssetSpecificFeeModule } from "src/helper/DCDAssetSpecificFeeModule.sol";
 import { IERC20 } from "src/interfaces/IFeeModule.sol";
 import "src/helper/Constants.sol";
+import { console } from "forge-std/console.sol";
 
 /**
  * Deploy the Distributor Code Depositor contract.
@@ -39,6 +40,7 @@ contract DeployDistributorCodeDepositor is BaseScript {
         address assetSpecificFeeModule = CREATEX.deployCreate3(
             feeModuleSalt, abi.encodePacked(type(DCDAssetSpecificFeeModule).creationCode, abi.encode(broadcaster))
         );
+        console.log("AssetSpecificFeeModule (DCD) deployed: ", assetSpecificFeeModule);
 
         // Configure per-asset deposit fees, then hand the module off to the protocol admin.
         // Skip assets that have both fees as zero — the mapping defaults to zero, so calling

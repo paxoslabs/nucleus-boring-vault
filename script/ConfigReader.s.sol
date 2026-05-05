@@ -32,6 +32,7 @@ library ConfigReader {
         address beforeTransferHookAddress;
         address balancerVault;
         uint32 peerEid;
+        bool setupLZConfigs;
         address[] requiredDvns;
         address[] optionalDvns;
         uint64 dvnBlockConfirmationsRequired;
@@ -140,6 +141,7 @@ library ConfigReader {
             config.lzEndpoint = _chainConfig.readAddress(".lzEndpoint");
 
             config.peerEid = uint32(_config.readUint(".teller.peerEid"));
+            config.setupLZConfigs = _config.readBool(".teller.setupLZConfigs");
             config.requiredDvns = _config.readAddressArray(".teller.dvnIfNoDefault.required");
             config.optionalDvns = _config.readAddressArray(".teller.dvnIfNoDefault.optional");
             config.dvnBlockConfirmationsRequired =
