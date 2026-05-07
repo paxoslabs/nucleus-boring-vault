@@ -7,7 +7,7 @@ interface IAuthority {
 
     function setAuthority(address newAuthority) external;
     function transferOwnership(address newOwner) external;
-    function owner() external returns (address);
+    function owner() external view returns (address);
 
 }
 
