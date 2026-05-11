@@ -31,3 +31,6 @@
 [submodule "lib/predicate-contracts"]
 	path = lib/predicate-contracts
 	url = https://github.com/PredicateLabs/predicate-contracts
+[submodule "lib/openzeppelin-contracts-v5.0.1"]
+	path = lib/openzeppelin-contracts-v5.0.1
+	url = https://github.com/openzeppelin/openzeppelin-contracts

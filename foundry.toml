@@ -7,7 +7,12 @@ optimizer = true
 optimizer_runs = 200
 fs_permissions = [{ access = "read-write", path = "./" }]
 cbor_metadata = true
-gas_limit = "18446744073709551615"        
+gas_limit = "18446744073709551615"
+# Required by @openzeppelin/upgrades-core to validate
+# storage layout across upgrades. build_info emits the full solc input+output JSON,
+# and extra_output ships the storage layout into each artifact.
+build_info = true
+extra_output = ["storageLayout"]
 
 libs = [
     'lib',
