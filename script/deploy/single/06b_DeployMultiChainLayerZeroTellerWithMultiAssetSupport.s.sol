@@ -140,8 +140,8 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             }
         }
 
-        // if no dead address in the ulnConfig, there is a default onchain configuration we can use. However, only promt
-        // to notify user and always set to configured params.
+        // if no dead address in the ulnConfig, there is a default onchain configuration we can use. However, only
+        // prompt to notify user and always set to configured params.
         if (!isDead) {
             console2.log(
                 "A default onchain configuration is provided. Regardless, we will be using the the params provided in the config file"
@@ -192,8 +192,6 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
 
         SetConfigParam[] memory setConfigParams = new SetConfigParam[](1);
         setConfigParams[0] = SetConfigParam(config.peerEid, 2, ulnConfigBytes);
-        console2.log("WTF??\n\n");
-        console2.log("length of required dvns: ", config.requiredDvns.length);
         endpoint.setConfig(newTeller, lib, setConfigParams);
     }
 
