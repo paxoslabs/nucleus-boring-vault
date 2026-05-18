@@ -8,14 +8,14 @@ import { Initializable } from "@openzeppelin-v5.0.1/contracts/proxy/utils/Initia
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
 
 /**
- * @title DirectTransferAddress
- * @notice Implementation contract for DirectTransferAddress BeaconProxies. Receives one configured
+ * @title SmartDepositAddress
+ * @notice Implementation contract for SmartDepositAddress BeaconProxies. Receives one configured
  *         stablecoin and forwards balances into a DistributorCodeDepositor, minting BoringVault shares
  *         to a pre-configured userDestinationAddress.
  * @custom:security-contact security@paxoslabs.io
  * @custom:oz-upgrades
  */
-contract DirectTransferAddress is Initializable {
+contract SmartDepositAddress is Initializable {
 
     using SafeTransferLib for ERC20;
 
@@ -70,7 +70,7 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Deploy a new DirectTransferAddress. One implementation per DCD; each proxy under it
+     * @notice Deploy a new SmartDepositAddress. One implementation per DCD; each proxy under it
      *         binds its own stablecoin via initialize().
      * @dev All three arguments become shared immutables on the implementation's bytecode; none live in proxy storage.
      * @param _dcd The DistributorCodeDepositor every proxy under this implementation will forward to.
@@ -136,7 +136,7 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Refund `amount` of `tokenToSweep` from this DTA to `userDestinationAddress`.
+     * @notice Refund `amount` of `tokenToSweep` from this SDA to `userDestinationAddress`.
      * @dev Intended for non-sanctions depositAndForward() reverts. If the refund transfer reverts (e.g.
      *      `userDestinationAddress` is on a token-level blacklist), the owner should then call recover().
      *      `tokenToSweep` is a parameter so stray tokens of any kind (not just the stored `token`) sitting
@@ -154,7 +154,7 @@ contract DirectTransferAddress is Initializable {
     }
 
     /**
-     * @notice Sweep this DTA's full balance of `tokenToSweep` to `recoveryAccount`.
+     * @notice Sweep this SDA's full balance of `tokenToSweep` to `recoveryAccount`.
      * @dev Intended for sanctions-class `depositAndForward()` reverts or when a prior `refund()` attempt itself
      * reverted.
      *      `tokenToSweep` is a parameter (rather than the immutable `token`) so stray tokens of any kind accidentally

@@ -7,8 +7,8 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { DistributorCodeDepositor } from "src/helper/DistributorCodeDepositor.sol";
-import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
+import { SmartDepositAddress } from "src/smart-deposit/SmartDepositAddress.sol";
+import { SmartDepositFactoryBeacon } from "src/smart-deposit/SmartDepositFactoryBeacon.sol";
 import { BeaconProxy } from "@openzeppelin-v5.0.1/contracts/proxy/beacon/BeaconProxy.sol";
 
 /// @dev Pulls `depositAsset` from msg.sender (matching the real DCD's safeTransferFrom on deposit)
@@ -50,21 +50,21 @@ contract MockDCD {
 
 }
 
-abstract contract BaseDirectTransferTest is Test {
+abstract contract BaseSmartDepositTest is Test {
 
-    // DTA Events
+    // SDA Events
     event Initialized(address indexed userDestinationAddress, address indexed token);
     event Forwarded(address indexed to, uint256 amount, uint256 shares);
     event Refunded(address indexed token, address indexed to, uint256 amount);
     event Recovered(address indexed token, address indexed to, uint256 amount);
 
-    /// DirectTransferFactoryBeacon events
+    /// SmartDepositFactoryBeacon events
     event BeaconProxyDeployed(
         address indexed userDestinationAddress,
         bytes32 indexed organizationId,
         address indexed inputToken,
         address boringVault,
-        address directTransferAddress
+        address smartDepositAddress
     );
     event Upgraded(address indexed implementation);
 
@@ -83,8 +83,8 @@ abstract contract BaseDirectTransferTest is Test {
     MockERC20 token;
     MockERC20 shareToken;
     MockDCD mockDCD;
-    DirectTransferAddress impl;
-    DirectTransferFactoryBeacon beacon;
+    SmartDepositAddress impl;
+    SmartDepositFactoryBeacon beacon;
 
     // ---------- default salt inputs ----------
 
@@ -109,36 +109,36 @@ abstract contract BaseDirectTransferTest is Test {
         // Pre-fund the mock DCD so it can settle share transfers on deposit().
         deal(address(shareToken), address(mockDCD), MOCK_DCD_SHARE_POOL);
 
-        impl = new DirectTransferAddress(DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount);
-        beacon = new DirectTransferFactoryBeacon(address(impl), beaconAdmin);
+        impl = new SmartDepositAddress(DistributorCodeDepositor(address(mockDCD)), owner, recoveryAccount);
+        beacon = new SmartDepositFactoryBeacon(address(impl), beaconAdmin);
     }
 
     // ---------- helpers ----------
 
-    /// @dev Deploy a DTA beacon proxy directly (no CreateX) and initialize it against the shared impl.
-    ///      DirectTransferFactoryBeacon.deployBeaconProxy is exercised separately in DirectTransferFactoryBeacon.t.sol,
-    /// which needs a forked or etched CreateX at 0x1077..391f. For DTA-only unit tests we instantiate the proxy
+    /// @dev Deploy a SDA beacon proxy directly (no CreateX) and initialize it against the shared impl.
+    ///      SmartDepositFactoryBeacon.deployBeaconProxy is exercised separately in SmartDepositFactoryBeacon.t.sol,
+    /// which needs a forked or etched CreateX at 0x1077..391f. For SDA-only unit tests we instantiate the proxy
     /// separately.
-    function _deployDTA(address userDestinationAddress) internal returns (DirectTransferAddress dta) {
+    function _deploySDA(address userDestinationAddress) internal returns (SmartDepositAddress sda) {
         bytes memory initData = abi.encodeWithSelector(
-            DirectTransferAddress.initialize.selector, userDestinationAddress, ERC20(address(token))
+            SmartDepositAddress.initialize.selector, userDestinationAddress, ERC20(address(token))
         );
         BeaconProxy proxy = new BeaconProxy(address(beacon), initData);
-        dta = DirectTransferAddress(address(proxy));
+        sda = SmartDepositAddress(address(proxy));
     }
 
-    function _expectForwardedEvent(address dta, address to, uint256 amount, uint256 shares) internal {
-        vm.expectEmit(true, true, true, true, dta);
+    function _expectForwardedEvent(address sda, address to, uint256 amount, uint256 shares) internal {
+        vm.expectEmit(true, true, true, true, sda);
         emit Forwarded(to, amount, shares);
     }
 
-    function _expectRefundedEvent(address dta, address tokenAddress, address to, uint256 amount) internal {
-        vm.expectEmit(true, true, true, true, dta);
+    function _expectRefundedEvent(address sda, address tokenAddress, address to, uint256 amount) internal {
+        vm.expectEmit(true, true, true, true, sda);
         emit Refunded(tokenAddress, to, amount);
     }
 
-    function _expectRecoveredEvent(address dta, address tokenAddress, address to, uint256 amount) internal {
-        vm.expectEmit(true, true, true, true, dta);
+    function _expectRecoveredEvent(address sda, address tokenAddress, address to, uint256 amount) internal {
+        vm.expectEmit(true, true, true, true, sda);
         emit Recovered(tokenAddress, to, amount);
     }
 
@@ -147,12 +147,12 @@ abstract contract BaseDirectTransferTest is Test {
         bytes32 organizationId,
         address inputToken,
         address _boringVault,
-        address dta
+        address sda
     )
         internal
     {
         vm.expectEmit(true, true, true, true, address(beacon));
-        emit BeaconProxyDeployed(userDestinationAddress, organizationId, inputToken, _boringVault, dta);
+        emit BeaconProxyDeployed(userDestinationAddress, organizationId, inputToken, _boringVault, sda);
     }
 
 }

@@ -10,18 +10,18 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { VaultArchitectureSharedSetup, IPredicateRegistry } from "test/shared-setup/VaultArchitectureSharedSetup.t.sol";
 import { DistributorCodeDepositor, INativeWrapper } from "src/helper/DistributorCodeDepositor.sol";
-import { DirectTransferAddress } from "src/direct-transfer/DirectTransferAddress.sol";
-import { DirectTransferFactoryBeacon } from "src/direct-transfer/DirectTransferFactoryBeacon.sol";
+import { SmartDepositAddress } from "src/smart-deposit/SmartDepositAddress.sol";
+import { SmartDepositFactoryBeacon } from "src/smart-deposit/SmartDepositFactoryBeacon.sol";
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { Attestation } from "@predicate/interfaces/IPredicateRegistry.sol";
 import { USDC } from "src/helper/Constants.sol";
 import { stdStorage, StdStorage, stdError } from "@forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
-/// @notice Minimal initial DTA implementation used only as the pre-upgrade impl in these tests.
-/// @dev Exposes `DCD()` so DirectTransferFactoryBeacon can derive salt entropy from the DCD's boringVault. `token`
+/// @notice Minimal initial SDA implementation used only as the pre-upgrade impl in these tests.
+/// @dev Exposes `DCD()` so SmartDepositFactoryBeacon can derive salt entropy from the DCD's boringVault. `token`
 ///      lives in proxy storage and is set by `initialize`, mirroring the production layout.
-contract DirectTransferAddress1 {
+contract SmartDepositAddress1 {
 
     using SafeTransferLib for ERC20;
 
@@ -54,19 +54,19 @@ contract DirectTransferAddress1 {
 
 uint256 constant FORK_BLOCK_NUMBER = 24_321_829;
 
-contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
+contract SmartDepositAddressTest is VaultArchitectureSharedSetup {
 
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
     using stdStorage for StdStorage;
 
     DistributorCodeDepositor public dcd;
-    DirectTransferFactoryBeacon public beacon;
+    SmartDepositFactoryBeacon public beacon;
     address public owner = vm.addr(uint256(bytes32("owner")));
     address public recoveryAccount = vm.addr(uint256(bytes32("recoveryAccount")));
 
     address[5] public users;
-    address[5] public dtas; // Direct Transfer Addresses (proxies)
+    address[5] public sdas; // Smart Deposit Addresses (proxies)
 
     // Example UUID encoded as bytes 32
     bytes32 public constant ORGANIZATION_ID =
@@ -117,38 +117,36 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     /*//////////////////////////////////////////////////////////////
                               TEST 1
-        Deploy impl1 + beacon, create 5 DTA proxies via CREATEX,
+        Deploy impl1 + beacon, create 5 SDA proxies via CREATEX,
         fund each with USDC, forward into vault, verify shares.
     //////////////////////////////////////////////////////////////*/
 
     function test_setup5Users() public {
         // Deploy implementation and beacon
-        DirectTransferAddress1 impl = new DirectTransferAddress1(dcd);
-        beacon = new DirectTransferFactoryBeacon(address(impl), address(this));
+        SmartDepositAddress1 impl = new SmartDepositAddress1(dcd);
+        beacon = new SmartDepositFactoryBeacon(address(impl), address(this));
 
-        // Deploy 5 DTA proxies via CREATEX
+        // Deploy 5 SDA proxies via CREATEX
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
+            sdas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
 
             // Verify the deployed address matches the deterministic computation
-            address expected = beacon.computeDTAAddress(ORGANIZATION_ID, users[i], address(USDC));
-            assertEq(dtas[i], expected, "DTA address must be deterministic");
+            address expected = beacon.computeSDAAddress(ORGANIZATION_ID, users[i], address(USDC));
+            assertEq(sdas[i], expected, "SDA address must be deterministic");
 
             // Verify initialization
             assertEq(
-                DirectTransferAddress1(dtas[i]).userDestinationAddress(),
-                users[i],
-                "userDestinationAddress must be user"
+                SmartDepositAddress1(sdas[i]).userDestinationAddress(), users[i], "userDestinationAddress must be user"
             );
-            assertEq(address(DirectTransferAddress1(dtas[i]).DCD()), address(dcd), "DCD must match");
+            assertEq(address(SmartDepositAddress1(sdas[i]).DCD()), address(dcd), "DCD must match");
         }
 
-        // Fund each DTA with USDC and forward
+        // Fund each SDA with USDC and forward
         for (uint256 i; i < 5; i++) {
-            _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
+            _setERC20Balance(address(USDC), sdas[i], DEPOSIT_AMOUNT);
 
-            // Forward USDC through the DTA into the vault
-            DirectTransferAddress1(dtas[i]).forward(DEPOSIT_AMOUNT);
+            // Forward USDC through the SDA into the vault
+            SmartDepositAddress1(sdas[i]).forward(DEPOSIT_AMOUNT);
 
             // Verify user received vault shares
             uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
@@ -168,17 +166,17 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
 
     function test_upgradeDCDFor5Users() public {
         // Deploy first DCD + implementation + beacon
-        DirectTransferAddress1 impl1 = new DirectTransferAddress1(dcd);
-        beacon = new DirectTransferFactoryBeacon(address(impl1), address(this));
+        SmartDepositAddress1 impl1 = new SmartDepositAddress1(dcd);
+        beacon = new SmartDepositFactoryBeacon(address(impl1), address(this));
 
-        // Deploy 5 DTA proxies
+        // Deploy 5 SDA proxies
         for (uint256 i; i < 5; i++) {
-            dtas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
+            sdas[i] = beacon.deployBeaconProxy(ORGANIZATION_ID, users[i], address(USDC));
         }
 
         // Verify initial DCD
         for (uint256 i; i < 5; i++) {
-            assertEq(address(DirectTransferAddress1(dtas[i]).DCD()), address(dcd), "initial DCD must match");
+            assertEq(address(SmartDepositAddress1(sdas[i]).DCD()), address(dcd), "initial DCD must match");
         }
 
         // "Burn" the old DCD by revoking its public deposit capability
@@ -208,19 +206,19 @@ contract DirectTransferAddressTest is VaultArchitectureSharedSetup {
         dcd2.updateKytStatus(ERC20(address(USDC)), false);
 
         // Deploy new implementation pointing to dcd2 and upgrade beacon
-        DirectTransferAddress1 impl2 = new DirectTransferAddress1(dcd2);
+        SmartDepositAddress1 impl2 = new SmartDepositAddress1(dcd2);
         beacon.upgradeTo(address(impl2));
 
         // Verify all proxies now use the new DCD (immutable is in the new implementation bytecode)
         for (uint256 i; i < 5; i++) {
-            assertEq(address(DirectTransferAddress1(dtas[i]).DCD()), address(dcd2), "DCD must be upgraded to dcd2");
+            assertEq(address(SmartDepositAddress1(sdas[i]).DCD()), address(dcd2), "DCD must be upgraded to dcd2");
         }
 
-        // Fund and forward through all 5 DTAs using the new DCD
+        // Fund and forward through all 5 SDAs using the new DCD
         for (uint256 i; i < 5; i++) {
-            _setERC20Balance(address(USDC), dtas[i], DEPOSIT_AMOUNT);
+            _setERC20Balance(address(USDC), sdas[i], DEPOSIT_AMOUNT);
 
-            DirectTransferAddress1(dtas[i]).forward(DEPOSIT_AMOUNT);
+            SmartDepositAddress1(sdas[i]).forward(DEPOSIT_AMOUNT);
 
             uint256 quoteRate = accountant.getRateInQuoteSafe(ERC20(address(USDC)));
             uint256 expectedShares = DEPOSIT_AMOUNT.mulDivDown(ONE_SHARE, quoteRate);
