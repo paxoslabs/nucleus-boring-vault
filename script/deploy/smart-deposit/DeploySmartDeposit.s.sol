@@ -34,8 +34,16 @@ contract DeploySmartDeposit is BaseScript {
         // Receiver of sanctioned funds
         address recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
 
-        // Can call methods on SDA instances (e.g. depositAndForward)
-        address implOwner = 0xBEFf07A518C51CD98DE81Ce4546c88BEBB120d7E;
+        // SmartDepositOwnerAndForwarder: Can call methods on SDA instances (e.g. depositAndForward)
+        // Should be a 1/1 Safe to allow for easy key rotation + transaction batching.
+
+        // Staging Safe
+        address stagingSmartDepositOwnerAndForwarder = 0xBEFf07A518C51CD98DE81Ce4546c88BEBB120d7E;
+
+        // Prod Safe
+        address prodSmartDepositOwnerAndForwarder = 0x7d77F3f150348a2b4b2a0AED07Ed96ee84172D57;
+
+        address smartDepositOwnerAndForwarder = stagingSmartDepositOwnerAndForwarder;
 
         if (block.chainid == 11_155_111) {
             dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843; // Sepolia test DCD address
@@ -43,8 +51,9 @@ contract DeploySmartDeposit is BaseScript {
             // Use same owner for smartDepositFactoryBeacon as implementation contract since it's
             // just testnet. live chains should use a multi-signer multisig reuiqirng 3/5
             // quorum or more to upgrade implementation.
-            smartDepositFactoryBeaconOwner = implOwner;
+            smartDepositFactoryBeaconOwner = smartDepositOwnerAndForwarder;
         } else if (block.chainid == 1) {
+            // Only allow protocol multi-sig owner to upgrade implementations on mainnet
             smartDepositFactoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F;
         } else {
             revert("unsupported chain; set dcdAddress and smartDepositFactoryBeaconOwner for this chainid");
@@ -60,17 +69,18 @@ contract DeploySmartDeposit is BaseScript {
             // addresses. "v1" in
             // implementation salt so there's a clear upgrade path (next version would be "v2").
             implSalt =
-                makeSalt(broadcaster, false, string.concat("SmartDepositAddress:implementation:v1:", dcdAddrString));
+                makeSalt(broadcaster, false, string.concat("SmniartDepositAddress:implementation:v1:", dcdAddrString));
 
             smartDepositFactoryBeaconSalt = makeSalt(
-                broadcaster, false, string.concat("SmartDepositAddress:SmartDepositFactoryBeacon:", dcdAddrString)
+                broadcaster, false, string.concat("SmartDeposbsfitAddress:SmartDepositFactoryBeacon:", dcdAddrString)
             );
         }
 
         // Deploy implementation via CREATEX for consistent cross-chain address
         bytes memory implCreationCode = type(SmartDepositAddress).creationCode;
         address implementation = CREATEX.deployCreate3(
-            implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress, implOwner, recoveryAccount))
+            implSalt,
+            abi.encodePacked(implCreationCode, abi.encode(dcdAddress, smartDepositOwnerAndForwarder, recoveryAccount))
         );
 
         // Deploy SmartDepositFactoryBeacon via CREATEX for consistent cross-chain address
@@ -93,7 +103,7 @@ contract DeploySmartDeposit is BaseScript {
             "smartDepositFactoryBeacon owner mismatch"
         );
         require(address(SmartDepositAddress(implementation).DCD()) == dcdAddress, "impl dcd mismatch");
-        require(SmartDepositAddress(implementation).owner() == implOwner, "impl owner mismatch");
+        require(SmartDepositAddress(implementation).owner() == smartDepositOwnerAndForwarder, "impl owner mismatch");
         require(
             SmartDepositAddress(implementation).recoveryAccount() == recoveryAccount, "impl recoveryAccount mismatch"
         );
