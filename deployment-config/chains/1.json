@@ -1,6 +1,7 @@
 {
   "name": "Ethereum",
   "nativeWrapper": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+  "uniswapV3NonFungiblePositionManager": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
   "balancerVault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
   "opMessenger": "0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1",
   "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
@@ -12,6 +13,19 @@
     "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
       "isPegged": true,
       "rateProvider": "0x0000000000000000000000000000000000000000"
+    },
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    },
+    "0x6c3ea9036406852006290770bedfcaba0e23a0e8": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000"
+    },    
+    "0x45804880de22913dafe09f4980848ece6ecbaf78": {
+      "isPegged": true,
+      "rateProvider": "0x0000000000000000000000000000000000000000",
+      "name": "PAXG"
     },
     "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": {
       "isPegged": false,

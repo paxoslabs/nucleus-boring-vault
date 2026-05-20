@@ -6,6 +6,7 @@
   "boringVault": {
     "boringVaultName": "Nucleus Vault",
     "boringVaultSymbol": "NV",
+    "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
   "freezeListBeforeTransferHook": {
@@ -27,6 +28,7 @@
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
     "peerEid": 30280,
+    "setupLZConfigs": false,
     "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
       "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -38,6 +40,8 @@
       "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
       "0x9Ba021B0a9b958B5E75cE9f6dff97C7eE52cb3E6"
     ],
+    "withdrawAssetFlatFees":    [0, 0, 0, 0, 0, 0, 0, 0],
+    "withdrawAssetPercentFees": [0, 0, 0, 0, 0, 0, 0, 0],
     "depositAssets": [
       "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
@@ -48,6 +52,8 @@
       "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
       "0x9Ba021B0a9b958B5E75cE9f6dff97C7eE52cb3E6"
     ],
+    "depositAssetFlatFees":    [0, 0, 0, 0, 0, 0, 0, 0],
+    "depositAssetPercentFees": [0, 0, 0, 0, 0, 0, 0, 0],
     "dvnIfNoDefault": {
       "required": [
         "0x589dEDbD617e0CBcB916A9223F4d1300c294236b"
@@ -70,7 +76,6 @@
   },
   "distributorCodeDepositor": {
     "deploy": true,
-    "distributorCodeDepositorSalt": "0x48b53893da2e0b0248268c00000000000000000000000000000000000000001d",
     "supplyCap": "1000000000000000000000000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "policyOne",
@@ -80,7 +85,6 @@
     "name": "Example Withdraw Queue",
     "symbol": "EWQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "feePercentage": "100",
     "minimumOrderSize": "1000000000000000000",
     "processorAddress": "0x00000000004F96C07B83e86600D86F0000000000"
   }

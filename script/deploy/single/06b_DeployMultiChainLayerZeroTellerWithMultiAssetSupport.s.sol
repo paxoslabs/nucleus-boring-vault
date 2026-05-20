@@ -57,20 +57,54 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             )
         );
 
-        // configure the crosschain functionality, assume same address
-        bytes32 leftPaddedBytes32Peer = addressToBytes32LeftPad(address(teller));
-
-        // this number = 1 << (8*20)
-        // an address cannot take up more than 20 bytes and thus 1 shifted 20 bytes right should be larger than any
-        // number address can be if padded correctly
-        require(
-            leftPaddedBytes32Peer < 0x0000000000000000000000010000000000000000000000000000000000000000,
-            "Address not left padded correctly"
-        );
-
-        teller.setPeer(config.peerEid, leftPaddedBytes32Peer);
-        teller.addChain(config.peerEid, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
         ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(config.lzEndpoint);
+
+        // Only configure the peers, chain, libraries and DVNs if made to do so.
+        // The endpoint is still set and the delegate sent to multisig regardless.
+        // This is for situations where we want the LZ teller deployed for possible future integrations, but with no
+        // possible interaction even from poisoned DVNs, considering our own receive function reverts if a possible
+        // matching chain/peer isn't provided.
+        if (config.setupLZConfigs) {
+            require(config.peerEid != 0, "If configuring LZ, peerEid must not be 0");
+            console2.log("setting up LZ configs...");
+            // configure the crosschain functionality, assume same address
+            bytes32 leftPaddedBytes32Peer = addressToBytes32LeftPad(address(teller));
+
+            // this number = 1 << (8*20)
+            // an address cannot take up more than 20 bytes and thus 1 shifted 20 bytes right should be larger than any
+            // number address can be if padded correctly
+            require(
+                leftPaddedBytes32Peer < 0x0000000000000000000000010000000000000000000000000000000000000000,
+                "Address not left padded correctly"
+            );
+
+            teller.setPeer(config.peerEid, leftPaddedBytes32Peer);
+            teller.addChain(config.peerEid, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
+
+            // get the default libraries for the peer
+            address sendLib = endpoint.defaultSendLibrary(config.peerEid);
+            address receiveLib = endpoint.defaultReceiveLibrary(config.peerEid);
+            require(sendLib != address(0), "sendLib = 0, check peerEid");
+            require(receiveLib != address(0), "receiveLib = 0, check peerEid");
+
+            // check if a default config exists for these libraries and if not set the config
+            _checkUlnConfig(address(teller), config, sendLib);
+            _checkUlnConfig(address(teller), config, receiveLib);
+
+            // confirm the library is set
+            sendLib = endpoint.getSendLibrary(address(teller), config.peerEid);
+            (receiveLib,) = endpoint.getReceiveLibrary(address(teller), config.peerEid);
+            require(sendLib != address(0), "No sendLib");
+            require(receiveLib != address(0), "no receiveLib");
+        } else {
+            console2.log(
+                "Skipping configuration of LZ Teller. Must configure manually in the future from protocol admin: ",
+                config.protocolAdmin
+            );
+        }
+
+        // transfer delegate to the multisig
+        teller.setDelegate(config.protocolAdmin);
 
         // Post Deploy Checks
         require(teller.shareLockPeriod() == 0, "share lock period must be zero");
@@ -80,25 +114,6 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             "the accountant vault must be the teller vault"
         );
         require(address(endpoint) == config.lzEndpoint, "LZ Teller must have endpoint set");
-
-        // get the default libraries for the peer
-        address sendLib = endpoint.defaultSendLibrary(config.peerEid);
-        address receiveLib = endpoint.defaultReceiveLibrary(config.peerEid);
-        require(sendLib != address(0), "sendLib = 0, check peerEid");
-        require(receiveLib != address(0), "receiveLib = 0, check peerEid");
-
-        // check if a default config exists for these libraries and if not set the config
-        _checkUlnConfig(address(teller), config, sendLib);
-        _checkUlnConfig(address(teller), config, receiveLib);
-
-        // confirm the library is set
-        sendLib = endpoint.getSendLibrary(config.teller, config.peerEid);
-        (receiveLib,) = endpoint.getReceiveLibrary(config.teller, config.peerEid);
-        require(sendLib != address(0), "No sendLib");
-        require(receiveLib != address(0), "no receiveLib");
-
-        // transfer delegate to the multisig
-        teller.setDelegate(config.protocolAdmin);
 
         return address(teller);
     }
@@ -159,6 +174,15 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
         // sort the dvns
         config.requiredDvns = sortAddresses(config.requiredDvns);
         config.optionalDvns = sortAddresses(config.optionalDvns);
+
+        require(
+            config.requiredDvns.length + config.optionalDvnThreshold > 2, "DEPLOY_06b_setConfig() DVN Count Must Be > 2"
+        );
+
+        require(
+            config.optionalDvnThreshold <= config.optionalDvns.length,
+            "Optional DVN threshold is larger than the number of optional DVNs provided"
+        );
 
         bytes memory ulnConfigBytes = abi.encode(
             UlnConfig(

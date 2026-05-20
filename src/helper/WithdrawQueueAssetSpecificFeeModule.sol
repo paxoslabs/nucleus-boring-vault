@@ -84,8 +84,10 @@ contract WithdrawQueueAssetSpecificFeeModule is IFeeModule, Auth {
         if (rateInQuote == 0) revert RateInQuoteZero();
 
         // DECIMALS MATH:
-        // QUOTE_ASSET * BASE_ASSET / QUOTE_ASSET = Flat Fee In Quote Assets
-        // NOTE: This is why it's important that flat fees are provided per asset and in terms of that asset's decimals.
+        // QUOTE_ASSET * BASE_ASSET / QUOTE_ASSET = BASE_ASSET
+        // In this way we are able to convert the flat fee in terms of quote asset into a flat fee in terms of shares
+        // (base asset decimals). NOTE: This is why it's important that flat fees are provided per asset and in terms of
+        // that asset's decimals.
         uint256 flatFeeInShares =
             feeData.flatFee > 0 ? feeData.flatFee.mulDivUp(10 ** accountant.decimals(), rateInQuote) : 0;
 

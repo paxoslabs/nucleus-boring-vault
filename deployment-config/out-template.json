@@ -4,5 +4,6 @@
     "accountant": "",
     "teller": "",
     "rolesAuthority": "",
-    "freezeListBeforeTransferHook": ""
+    "freezeListBeforeTransferHook": "",
+    "genericDecoderAndSanitizer": ""
 }

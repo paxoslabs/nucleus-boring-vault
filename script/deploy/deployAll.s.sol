@@ -21,6 +21,7 @@ import { TellerSetup } from "./single/08_TellerSetup.s.sol";
 import { DeployDistributorCodeDepositor } from "./single/09_DeployDistributorCodeDepositor.s.sol";
 import { DeployWithdrawQueueAndFeeModule } from "./single/10_DeployWithdrawQueueAndFeeModule.s.sol";
 import { SetAuthorityAndTransferOwnerships } from "./single/11_SetAuthorityAndTransferOwnerships.s.sol";
+import { DeployGenericDecoderAndSanitizer } from "./single/12_DeployGenericDecoderAndSanitizer.s.sol";
 
 import { ConfigReader, IAuthority } from "../ConfigReader.s.sol";
 import { console } from "forge-std/console.sol";
@@ -72,6 +73,7 @@ contract DeployAll is BaseScript {
         if (mainConfig.distributorCodeDepositorDeploy) {
             mainConfig.distributorCodeDepositor.toHexString().write(OUTPUT_JSON_PATH, ".distributorCodeDepositor");
         }
+        mainConfig.genericDecoderAndSanitizer.toHexString().write(OUTPUT_JSON_PATH, ".genericDecoderAndSanitizer");
     }
 
     function _deploy(ConfigReader.Config memory config) public override returns (address) {
@@ -116,6 +118,9 @@ contract DeployAll is BaseScript {
 
         new SetAuthorityAndTransferOwnerships().deploy(config);
         console.log("Set Authority And Transfer Ownerships Complete");
+
+        config.genericDecoderAndSanitizer = new DeployGenericDecoderAndSanitizer().deploy(config);
+        console.log("Generic Decoder And Sanitizer: ", config.genericDecoderAndSanitizer);
 
         mainConfig = config;
     }

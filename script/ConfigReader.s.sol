@@ -7,7 +7,7 @@ interface IAuthority {
 
     function setAuthority(address newAuthority) external;
     function transferOwnership(address newOwner) external;
-    function owner() external returns (address);
+    function owner() external view returns (address);
 
 }
 
@@ -29,8 +29,10 @@ library ConfigReader {
         uint16 performanceFee;
         string boringVaultName;
         string boringVaultSymbol;
+        address beforeTransferHookAddress;
         address balancerVault;
         uint32 peerEid;
+        bool setupLZConfigs;
         address[] requiredDvns;
         address[] optionalDvns;
         uint64 dvnBlockConfirmationsRequired;
@@ -49,18 +51,27 @@ library ConfigReader {
         address exchangeRateBot;
         address rolesAuthority;
         uint256 maxTimeFromLastUpdate;
+        // Per-asset fees are stored as parallel arrays rather than a struct array, because Solidity
+        // 0.8.21 does not support copying a memory dynamic array of structs into storage (which
+        // happens when `Config memory` is assigned to `Config storage` in deployAll). Indices line
+        // up: withdrawAssets[i] pairs with withdrawAssetFlatFees[i] and withdrawAssetPercentFees[i].
+        // The author of the config json must be sure these arrays are the same length
         address[] withdrawAssets;
+        uint256[] withdrawAssetFlatFees;
+        uint256[] withdrawAssetPercentFees;
         address[] depositAssets;
+        uint256[] depositAssetFlatFees;
+        uint256[] depositAssetPercentFees;
         address[] rateProviders;
         address[] priceFeeds;
         bool distributorCodeDepositorDeploy;
         bool distributorCodeDepositorIsNativeDepositSupported;
         address distributorCodeDepositor;
         address nativeWrapper;
+        address uniswapV3NonFungiblePositionManager;
         uint256 distributorCodeDepositorSupplyCap;
         address registry;
         string policyID;
-        uint256 withdrawQueueFeePercentage;
         string withdrawQueueName;
         string withdrawQueueSymbol;
         address withdrawQueueFeeRecipient;
@@ -68,9 +79,10 @@ library ConfigReader {
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
         address freezeListBeforeTransferHook;
+        address genericDecoderAndSanitizer;
     }
 
-    function toConfig(string memory _config, string memory _chainConfig) internal pure returns (Config memory config) {
+    function toConfig(string memory _config, string memory _chainConfig) internal view returns (Config memory config) {
         // Reading the 'nameEntropy`
         config.nameEntropy = _config.readString(".nameEntropy");
 
@@ -92,6 +104,7 @@ library ConfigReader {
         config.boringVault = _config.readAddress(".boringVault.address");
         config.boringVaultName = _config.readString(".boringVault.boringVaultName");
         config.boringVaultSymbol = _config.readString(".boringVault.boringVaultSymbol");
+        config.beforeTransferHookAddress = _config.readAddress(".boringVault.beforeTransferHookAddress");
 
         // Reading from the 'manager' section
         config.manager = _config.readAddress(".manager.address");
@@ -102,13 +115,33 @@ library ConfigReader {
         config.minGasForPeer = uint64(_config.readUint(".teller.minGasForPeer"));
         config.tellerContractName = _config.readString(".teller.tellerContractName");
         config.withdrawAssets = _config.readAddressArray(".teller.withdrawAssets");
+        config.withdrawAssetFlatFees =
+            _config.readUintArrayOr(".teller.withdrawAssetFlatFees", new uint256[](config.withdrawAssets.length));
+        config.withdrawAssetPercentFees =
+            _config.readUintArrayOr(".teller.withdrawAssetPercentFees", new uint256[](config.withdrawAssets.length));
+        require(
+            config.withdrawAssets.length == config.withdrawAssetFlatFees.length
+                && config.withdrawAssets.length == config.withdrawAssetPercentFees.length,
+            "ConfigReader: withdrawAssets fee arrays length mismatch"
+        );
+
         config.depositAssets = _config.readAddressArray(".teller.depositAssets");
+        config.depositAssetFlatFees =
+            _config.readUintArrayOr(".teller.depositAssetFlatFees", new uint256[](config.depositAssets.length));
+        config.depositAssetPercentFees =
+            _config.readUintArrayOr(".teller.depositAssetPercentFees", new uint256[](config.depositAssets.length));
+        require(
+            config.depositAssets.length == config.depositAssetFlatFees.length
+                && config.depositAssets.length == config.depositAssetPercentFees.length,
+            "ConfigReader: depositAssets fee arrays length mismatch"
+        );
 
         // layerzero
         if (compareStrings(config.tellerContractName, "MultiChainLayerZeroTellerWithMultiAssetSupport")) {
             config.lzEndpoint = _chainConfig.readAddress(".lzEndpoint");
 
             config.peerEid = uint32(_config.readUint(".teller.peerEid"));
+            config.setupLZConfigs = _config.readBool(".teller.setupLZConfigs");
             config.requiredDvns = _config.readAddressArray(".teller.dvnIfNoDefault.required");
             config.optionalDvns = _config.readAddressArray(".teller.dvnIfNoDefault.optional");
             config.dvnBlockConfirmationsRequired =
@@ -133,7 +166,6 @@ library ConfigReader {
         config.policyID = _config.readString(".distributorCodeDepositor.policyID");
 
         // Reading from the 'withdrawQueue' section
-        config.withdrawQueueFeePercentage = uint256(_config.readUint(".withdrawQueue.feePercentage"));
         config.withdrawQueueName = _config.readString(".withdrawQueue.name");
         config.withdrawQueueSymbol = _config.readString(".withdrawQueue.symbol");
         config.withdrawQueueFeeRecipient = _config.readAddress(".withdrawQueue.feeRecipient");
@@ -146,6 +178,9 @@ library ConfigReader {
         // Reading from the 'chainConfig' section
         config.balancerVault = _chainConfig.readAddress(".balancerVault");
         config.nativeWrapper = _chainConfig.readAddress(".nativeWrapper");
+        // Optional: only required by chains that deploy a Uniswap-V3-aware decoder/sanitizer.
+        config.uniswapV3NonFungiblePositionManager =
+            _chainConfig.readAddressOr(".uniswapV3NonFungiblePositionManager", address(0));
 
         return config;
     }

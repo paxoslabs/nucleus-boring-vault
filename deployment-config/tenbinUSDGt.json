@@ -1,0 +1,78 @@
+{
+  "nameEntropy": "tenbinUSDGt",
+  "base": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+  "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+  "boringVaultAndBaseDecimals": "6",
+  "boringVault": {
+    "boringVaultName": "Tenbin Labs USDG Treasury",
+    "boringVaultSymbol": "tenbinUSDGt",
+    "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "freezeListBeforeTransferHook": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "manager": {
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "accountant": {
+    "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "allowedExchangeRateChangeUpper": "10004",
+    "allowedExchangeRateChangeLower": "10000",
+    "minimumUpdateDelayInSeconds": "3600",
+    "managementFee": "50",
+    "performanceFee": "0",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "teller": {
+    "maxGasForPeer": 100000,
+    "minGasForPeer": 0,
+    "peerEid": 0,
+    "setupLZConfigs": false,
+    "tellerContractName": "TellerWithMultiAssetSupport",
+    "withdrawAssets": [
+      "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+    ],
+    "withdrawAssetFlatFees":    [0, 0, 0, 0],
+    "withdrawAssetPercentFees": [0, 5, 12, 0],
+    "depositAssets": [
+      "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+    ],
+    "depositAssetFlatFees":    [0, 0, 0, 0],
+    "depositAssetPercentFees": [0, 5, 12, 0],
+    "dvnIfNoDefault": {
+      "required": [
+      ],
+      "optional": [
+      ],
+      "blockConfirmationsRequiredIfNoDefault": 15,
+      "optionalThreshold": 1
+    },
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "rolesAuthority": {
+    "strategist": "0x5a986040B59eb85D7A117C5E9523e1b17918355d",
+    "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
+    "address": "0x0000000000000000000000000000000000000000"
+  },
+  "distributorCodeDepositor": {
+    "deploy": true,
+    "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "policyID": "",
+    "nativeSupported": false
+  },
+  "withdrawQueue": {
+    "name": "Tenbin Labs USDG Treasury Withdraw Queue",
+    "symbol": "tenbinUSDGtQ",
+    "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0x4e2e79AD865BF7c181b698bCac0f4ad8DFd68c54"
+  }
+}
