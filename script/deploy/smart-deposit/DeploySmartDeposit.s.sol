@@ -19,9 +19,10 @@ import { SmartDepositFactoryBeacon } from "src/smart-deposit/SmartDepositFactory
  *             <SmartDepositAddress implementation address> \
  *             src/smart-deposit/SmartDepositAddress.sol:SmartDepositAddress \
  *             --verifier etherscan --etherscan-api-key <etherscan api key>`
- *         After deploying, make sure to update database with newly deployed SmartDepositFactoryBeacon so offchain
- * systems know
- *         which contract to use to deploy new Direct Transfer Address proxies with.
+ *         After deploying, make sure to update the `paxoslabs` database with the newly deployed
+ *         SmartDepositFactoryBeacon so offchain systems know which contract to use to
+ *         deploy new Smart Deposit Address proxies with. The `insert_smart_deposit_module.sql`
+ *         script in the `backend-v2` project should be used for this.
  */
 contract DeploySmartDeposit is BaseScript {
 
@@ -41,7 +42,7 @@ contract DeploySmartDeposit is BaseScript {
         address stagingSmartDepositOwnerAndForwarder = 0xBEFf07A518C51CD98DE81Ce4546c88BEBB120d7E;
 
         // Prod Safe
-        address prodSmartDepositOwnerAndForwarder = 0x7d77F3f150348a2b4b2a0AED07Ed96ee84172D57;
+        address prodSmartDepositOwnerAndForwarder = 0x5e4ff2d30A9f1Dd7E6ef666cF774841295c3b5D1;
 
         address smartDepositOwnerAndForwarder = stagingSmartDepositOwnerAndForwarder;
 
@@ -69,10 +70,10 @@ contract DeploySmartDeposit is BaseScript {
             // addresses. "v1" in
             // implementation salt so there's a clear upgrade path (next version would be "v2").
             implSalt =
-                makeSalt(broadcaster, false, string.concat("SmniartDepositAddress:implementation:v1:", dcdAddrString));
+                makeSalt(broadcaster, false, string.concat("SmartDepositAddress:implementation:v1:", dcdAddrString));
 
             smartDepositFactoryBeaconSalt = makeSalt(
-                broadcaster, false, string.concat("SmartDeposbsfitAddress:SmartDepositFactoryBeacon:", dcdAddrString)
+                broadcaster, false, string.concat("SmartDepositAddress:SmartDepositFactoryBeacon:", dcdAddrString)
             );
         }
 
