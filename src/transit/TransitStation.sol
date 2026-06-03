@@ -21,15 +21,6 @@ contract TransitStation is OAppAuth {
         address wantAsset;
     }
 
-    struct RouteConfig {
-        bool isSupported;
-        uint256 flatFeeProtocol;
-        uint256 percentFeeProtocolBps;
-        uint256 flatFeeSigner;
-        uint256 percentFeeSignerBps;
-        uint256 minAmount;
-    }
-
     struct Order {
         bytes32 uuid;
         address wantAsset;
@@ -41,23 +32,34 @@ contract TransitStation is OAppAuth {
         uint64 receiveTime;
     }
 
-    struct PeerChain {
-        bool allowFrom;
-        bool allowTo;
-        address peerStation;
-        uint64 messageGasLimit;
-        uint64 minimumMessageGas;
+    // A PXL-backend-signed quote authorizing a single order. The contract holds no fee/route config:
+    // the backend computes fees + rate dynamically and signs the result, which the contract verifies.
+    struct Quote {
+        Route route;
+        uint256 offerAmount; // offerAsset units, pulled from the payer
+        uint256 amountDue; // wantAsset units owed to the receiver (the backend's rate)
+        address receiver;
+        uint256 fee; // offerAsset units, paid to protocolFeeRecipient (capped at MAX_FEE_BPS of offerAmount)
+        address payer; // must equal msg.sender
+        uint256 deadline; // quote is invalid once block.timestamp passes this
+        bytes32 salt; // anti-replay: re-sign with a fresh salt for a legitimate repeat order
     }
 
     uint256 internal constant ONE_HUNDRED_PERCENT = 10_000;
-    string public constant DEFAULT_POLICY = "DEFAULT";
+    // Max total fee a quote may charge, in bps of offerAmount. Hardcoded (not owner-settable) so the cap
+    // holds even if the quote signer key is compromised, bounding the blast radius of a bad signature.
+    uint256 public constant MAX_FEE_BPS = 50; // 0.5%
 
     uint32 public immutable thisChainEID;
     address public protocolFeeRecipient;
+    address public quoteSigner;
 
-    mapping(uint32 => PeerChain) public selectorToChains;
-    mapping(address => string) public signerPolicies;
-    mapping(string => mapping(bytes32 => RouteConfig)) internal routeConfigForPolicy;
+    // Per-destination-EID LayerZero executor gas limit for the lzReceive on the peer station.
+    mapping(uint32 => uint64) public messageGasLimit;
+    // Global per-station directional route allowlist: destEID => offerAsset => wantAsset => approved.
+    // On-chain so a compromised quoteSigner cannot bypass it; also gates which asset pairs are accepted
+    // in normal operation. Nested (not a routeHash) so callers can read approvedRoutes(eid, offer, want).
+    mapping(uint32 => mapping(address => mapping(address => bool))) public approvedRoutes;
     mapping(bytes32 => bool) public usedDigests;
 
     EnumerableSet.Bytes32Set internal pendingOrderIds;
@@ -69,105 +71,86 @@ contract TransitStation is OAppAuth {
     event OrderReceived(bytes32 indexed uuid, Order order);
     event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
     event OrderForceRemoved(bytes32 indexed uuid, Order order);
-    event PolicyRouteSet(string policy, Route route, RouteConfig config);
-    event SignerPolicySet(address indexed signer, string policy);
     event ProtocolFeeRecipientSet(address recipient);
-    event PeerChainSet(uint32 indexed eid, PeerChain chain);
+    event QuoteSignerSet(address indexed signer);
+    event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
+    event RouteApprovalSet(Route route, bool approved);
 
-    error RouteNotSupported();
-    error AmountBelowMin();
-    error InvalidPolicy(address recoveredSigner);
-    error ChainNotAllowedFrom(uint32 eid);
-    error ChainNotAllowedTo(uint32 eid);
-    error PeerStationNotSet();
-    error GasOutOfBounds();
-    error OrderNotFound();
-    error FeesExceedAmount();
-    error AmountExceedsDue();
+    error GasLimitNotSet(uint32 eid);
+    error OrderNotFound(bytes32 uuid);
+    error AmountExceedsDue(bytes32 uuid);
     error LengthMismatch();
     error BadSignature();
     error CallFailed();
     error ZeroAddress();
     error NotAContract(address target);
     error SignatureAlreadyUsed();
+    error QuoteExpired();
+    error FeeTooHigh();
+    error NotQuotePayer();
+    error InvalidSigner(address recoveredSigner);
+    error RouteNotApproved();
 
     constructor(
         address _owner,
         Authority _authority,
         address _endpoint,
-        address _protocolFeeRecipient
+        address _protocolFeeRecipient,
+        address _quoteSigner
     )
         Auth(_owner, _authority)
         OAppAuth(_endpoint, _owner)
     {
-        if (_owner == address(0) || _protocolFeeRecipient == address(0)) revert ZeroAddress();
+        if (_owner == address(0) || _protocolFeeRecipient == address(0) || _quoteSigner == address(0)) {
+            revert ZeroAddress();
+        }
         if (address(_authority).code.length == 0) revert NotAContract(address(_authority));
 
         thisChainEID = endpoint.eid();
         protocolFeeRecipient = _protocolFeeRecipient;
+        quoteSigner = _quoteSigner;
     }
 
-    function submitOrder(
-        Route calldata route,
-        uint256 amount,
-        address receiver,
-        uint256 feFeePercentBps,
-        bytes32 salt,
-        bytes calldata signature
-    )
-        external
-        payable
-        returns (bytes32 uuid)
-    {
-        uint256 net = _validateAndCollect(route, amount, receiver, feFeePercentBps, salt, signature);
+    function submitOrder(Quote calldata quote, bytes calldata signature) external payable returns (bytes32 uuid) {
+        _verifyAndCollect(quote, signature);
 
         uuid = _newUuid(msg.sender);
         Order memory order = Order({
             uuid: uuid,
-            wantAsset: route.wantAsset,
-            amountDue: net,
-            receiver: receiver,
+            wantAsset: quote.route.wantAsset,
+            amountDue: quote.amountDue,
+            receiver: quote.receiver,
             sourceEID: thisChainEID,
-            offerAsset: route.offerAsset,
-            offerAmount: amount,
+            offerAsset: quote.route.offerAsset,
+            offerAmount: quote.offerAmount,
             receiveTime: uint64(block.timestamp)
         });
 
-        if (route.destEID == thisChainEID) {
+        if (quote.route.destEID == thisChainEID) {
             _pushOrder(order);
         } else {
-            _sendOrder(route.destEID, order);
+            _sendOrder(quote.route.destEID, order);
         }
 
-        emit OrderSubmitted(uuid, route, order, msg.sender);
+        emit OrderSubmitted(uuid, quote.route, order, msg.sender);
     }
 
-    function _validateAndCollect(
-        Route calldata route,
-        uint256 amount,
-        address receiver,
-        uint256 feFeePercentBps,
-        bytes32 salt,
-        bytes calldata signature
-    )
-        internal
-        returns (uint256 net)
-    {
-        (string memory policy, address signer) =
-            _resolvePolicy(route, amount, receiver, feFeePercentBps, salt, signature);
+    function _verifyAndCollect(Quote calldata quote, bytes calldata signature) internal {
+        if (block.timestamp > quote.deadline) revert QuoteExpired();
+        if (msg.sender != quote.payer) revert NotQuotePayer();
+        if (!_isRouteApproved(quote.route)) revert RouteNotApproved();
+        if (quote.fee > (quote.offerAmount * MAX_FEE_BPS) / ONE_HUNDRED_PERCENT) revert FeeTooHigh();
 
-        RouteConfig memory config = routeConfigForPolicy[policy][_routeHash(route)];
-        if (!config.isSupported) revert RouteNotSupported();
-        if (amount < config.minAmount) revert AmountBelowMin();
+        bytes32 digest = keccak256(abi.encode(block.chainid, address(this), quote));
+        address signer = _recover(digest, signature);
+        if (signer != quoteSigner) revert InvalidSigner(signer);
 
-        (uint256 signerFee, uint256 protocolFee) = _calcFees(config, feFeePercentBps, amount);
-        if (signerFee + protocolFee >= amount) revert FeesExceedAmount();
-        net = amount - signerFee - protocolFee;
+        if (usedDigests[digest]) revert SignatureAlreadyUsed();
+        usedDigests[digest] = true;
 
-        ERC20 offer = ERC20(route.offerAsset);
-        offer.safeTransferFrom(msg.sender, address(this), amount);
-        if (signerFee > 0 && signer != address(0)) offer.safeTransfer(signer, signerFee);
-        if (protocolFee > 0) offer.safeTransfer(protocolFeeRecipient, protocolFee);
+        ERC20 offer = ERC20(quote.route.offerAsset);
+        offer.safeTransferFrom(msg.sender, address(this), quote.offerAmount);
+        if (quote.fee > 0) offer.safeTransfer(protocolFeeRecipient, quote.fee);
     }
 
     function executePendingOrders(bytes32[] calldata uuids, uint256[] calldata amounts) external requiresAuth {
@@ -175,27 +158,36 @@ contract TransitStation is OAppAuth {
 
         for (uint256 i; i < uuids.length; ++i) {
             bytes32 uuid = uuids[i];
-            if (!pendingOrderIds.contains(uuid)) revert OrderNotFound();
+            if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
 
             Order storage order = pendingOrders[uuid];
             uint256 fillAmount = amounts[i];
-            if (fillAmount > order.amountDue) revert AmountExceedsDue();
+            uint256 due = order.amountDue;
+            if (fillAmount > due) revert AmountExceedsDue(uuid);
 
-            ERC20(order.wantAsset).safeTransferFrom(msg.sender, order.receiver, fillAmount);
-            order.amountDue -= fillAmount;
-            uint256 remaining = order.amountDue;
+            // Cache the fields we need before mutating/deleting the order.
+            uint256 remaining = due - fillAmount;
+            address wantAsset = order.wantAsset;
+            address receiver = order.receiver;
 
+            // Checks-effects-interactions: settle order state BEFORE paying out, so a token with a
+            // transfer hook (e.g. ERC-777) cannot reenter against a stale/unfilled order.
             if (remaining == 0) {
                 pendingOrderIds.remove(uuid);
                 delete pendingOrders[uuid];
+            } else {
+                order.amountDue = remaining;
             }
+
+            // KDD 20: pay the want asset from the station's own balance, after state is settled.
+            ERC20(wantAsset).safeTransfer(receiver, fillAmount);
 
             emit OrderExecuted(uuid, fillAmount, remaining);
         }
     }
 
     function forceRemovePendingOrder(bytes32 uuid) external requiresAuth {
-        if (!pendingOrderIds.contains(uuid)) revert OrderNotFound();
+        if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
         Order memory order = pendingOrders[uuid];
         pendingOrderIds.remove(uuid);
         delete pendingOrders[uuid];
@@ -211,42 +203,33 @@ contract TransitStation is OAppAuth {
         token.safeTransfer(owner, amount);
     }
 
-    function setPolicyRoutes(
-        string calldata policy,
-        Route[] calldata routes,
-        RouteConfig[] calldata configs
-    )
-        external
-        requiresAuth
-    {
-        if (routes.length != configs.length) revert LengthMismatch();
-        for (uint256 i; i < routes.length; ++i) {
-            routeConfigForPolicy[policy][_routeHash(routes[i])] = configs[i];
-            emit PolicyRouteSet(policy, routes[i], configs[i]);
-        }
-    }
-
-    function setSignerPolicies(address[] calldata signers, string[] calldata policies) external requiresAuth {
-        if (signers.length != policies.length) revert LengthMismatch();
-        for (uint256 i; i < signers.length; ++i) {
-            signerPolicies[signers[i]] = policies[i];
-            emit SignerPolicySet(signers[i], policies[i]);
-        }
-    }
-
     function setProtocolFeeRecipient(address recipient) external requiresAuth {
         if (recipient == address(0)) revert ZeroAddress();
         protocolFeeRecipient = recipient;
         emit ProtocolFeeRecipientSet(recipient);
     }
 
-    function setPeerChain(uint32 eid, PeerChain calldata chain) external requiresAuth {
-        selectorToChains[eid] = chain;
-        emit PeerChainSet(eid, chain);
+    function setQuoteSigner(address signer) external requiresAuth {
+        if (signer == address(0)) revert ZeroAddress();
+        quoteSigner = signer;
+        emit QuoteSignerSet(signer);
+    }
+
+    function setMessageGasLimit(uint32 eid, uint64 gasLimit) external requiresAuth {
+        messageGasLimit[eid] = gasLimit;
+        emit MessageGasLimitSet(eid, gasLimit);
+    }
+
+    function setRouteApprovals(Route[] calldata routes, bool[] calldata approved) external requiresAuth {
+        if (routes.length != approved.length) revert LengthMismatch();
+        for (uint256 i; i < routes.length; ++i) {
+            approvedRoutes[routes[i].destEID][routes[i].offerAsset][routes[i].wantAsset] = approved[i];
+            emit RouteApprovalSet(routes[i], approved[i]);
+        }
     }
 
     function _lzReceive(
-        Origin calldata _origin,
+        Origin calldata, /*_origin*/
         bytes32, /*_guid*/
         bytes calldata payload,
         address, /*executor*/
@@ -255,30 +238,33 @@ contract TransitStation is OAppAuth {
         internal
         override
     {
-        if (!selectorToChains[_origin.srcEid].allowFrom) revert ChainNotAllowedFrom(_origin.srcEid);
-
+        // Sender authenticity is already enforced upstream by OAppAuthReceiver.lzReceive (peers[srcEid]).
         Order memory order = abi.decode(payload, (Order));
+        // Independently re-validate the route on the destination: even a fully compromised backend
+        // (signer + executor) can only ever land orders for globally-approved asset pairs here. The
+        // route's destEID is this chain, since the order arrived here.
+        Route memory route = Route({ destEID: thisChainEID, offerAsset: order.offerAsset, wantAsset: order.wantAsset });
+        if (!_isRouteApproved(route)) revert RouteNotApproved();
+
         order.receiveTime = uint64(block.timestamp);
         _pushOrder(order);
     }
 
     function quoteSend(uint32 destEID, Order calldata order) external view returns (uint256) {
-        PeerChain memory chain = selectorToChains[destEID];
         bytes memory payload = abi.encode(order);
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(chain.messageGasLimit, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(messageGasLimit[destEID], 0);
         MessagingFee memory fee = _quote(destEID, payload, options, false);
         return fee.nativeFee;
     }
 
     function _sendOrder(uint32 destEID, Order memory order) internal {
-        PeerChain memory chain = selectorToChains[destEID];
-        if (!chain.allowTo) revert ChainNotAllowedTo(destEID);
-        if (chain.peerStation == address(0)) revert PeerStationNotSet();
-        if (chain.messageGasLimit == 0) revert GasOutOfBounds();
+        uint64 gasLimit = messageGasLimit[destEID];
+        if (gasLimit == 0) revert GasLimitNotSet(destEID);
 
         bytes memory payload = abi.encode(order);
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(chain.messageGasLimit, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(gasLimit, 0);
 
+        // Destination peer authenticity + existence is enforced by _lzSend -> _getPeerOrRevert(destEID).
         _lzSend(destEID, payload, options, MessagingFee(msg.value, 0), payable(msg.sender));
     }
 
@@ -288,49 +274,8 @@ contract TransitStation is OAppAuth {
         emit OrderReceived(order.uuid, order);
     }
 
-    function _resolvePolicy(
-        Route calldata route,
-        uint256 amount,
-        address receiver,
-        uint256 feFeePercentBps,
-        bytes32 salt,
-        bytes calldata signature
-    )
-        internal
-        returns (string memory policy, address signer)
-    {
-        if (signature.length == 0) return (DEFAULT_POLICY, address(0));
-
-        // salt makes each signed quote single-use: the same (route, amount, receiver, fee, sender)
-        // can be re-signed with a fresh salt for a legitimate repeat order, but a given signature
-        // can only be redeemed once.
-        bytes32 digest = keccak256(
-            abi.encode(block.chainid, address(this), route, amount, receiver, feFeePercentBps, msg.sender, salt)
-        );
-        signer = _recover(digest, signature);
-        policy = signerPolicies[signer];
-        if (bytes(policy).length == 0) revert InvalidPolicy(signer);
-
-        if (usedDigests[digest]) revert SignatureAlreadyUsed();
-        usedDigests[digest] = true;
-    }
-
-    function _calcFees(
-        RouteConfig memory config,
-        uint256 feFeePercentBps,
-        uint256 amount
-    )
-        internal
-        pure
-        returns (uint256 signerFee, uint256 protocolFee)
-    {
-        protocolFee = config.flatFeeProtocol + (amount * config.percentFeeProtocolBps) / ONE_HUNDRED_PERCENT;
-        signerFee =
-            config.flatFeeSigner + (amount * (config.percentFeeSignerBps + feFeePercentBps)) / ONE_HUNDRED_PERCENT;
-    }
-
-    function _routeHash(Route calldata route) internal pure returns (bytes32) {
-        return keccak256(abi.encode(route.destEID, route.offerAsset, route.wantAsset));
+    function _isRouteApproved(Route memory route) internal view returns (bool) {
+        return approvedRoutes[route.destEID][route.offerAsset][route.wantAsset];
     }
 
     function _newUuid(address user) internal returns (bytes32 uuid) {
@@ -353,10 +298,6 @@ contract TransitStation is OAppAuth {
         address signer = ecrecover(digest, v, r, s);
         if (signer == address(0)) revert BadSignature();
         return signer;
-    }
-
-    function getRouteConfig(string calldata policy, Route calldata route) external view returns (RouteConfig memory) {
-        return routeConfigForPolicy[policy][_routeHash(route)];
     }
 
     function getPendingOrderIds() external view returns (bytes32[] memory) {
