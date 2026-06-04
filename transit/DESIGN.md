@@ -143,9 +143,14 @@ If one order in a batch fails, revert the whole batch or skip-and-emit?
 Should the station custody tokens, or just hold approvals and send straight from the vault?
 
 **Decision:** **Custody in the station.** Token balances are easier to manage than approvals.
-Implemented: `submitOrder` pulls the offer asset into the station, and `executePendingOrders` pays the
-want asset via `safeTransfer` from the station's own pre-positioned balance (the EXECUTOR authorizes
-release but does not supply funds).
+
+**Revision (2026-06-04):** offer-asset deposits now flow to a configurable `offerReceiver` (in practice
+a BoringVault, but the contract only ERC20-transfers to it — not named/enforced as a vault), not the
+station — `submitOrder` pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`,
+and the net→`offerReceiver` straight from msg.sender. The want side still pays via `safeTransfer` from the station's own balance,
+which is **inconsistent** if the asset manager holds all liquidity. OPEN: either pre-fund the station
+with want-asset liquidity, or `executePendingOrders` pulls the want asset from a configured source
+(symmetric). Want side unchanged pending that decision.
 
 ### KDD 21: Fee Model — Server-Signed Quotes Bounded by an Onchain `MAX_FEE`
 We want per-integrator, per-route, dynamic fees. Two ways to identify the integrator:
@@ -165,6 +170,16 @@ We want per-integrator, per-route, dynamic fees. Two ways to identify the integr
 **Trust assumption:** a compromised signer can set any fee up to `MAX_FEE`. Acceptable — volume is
 bounded and we can refund — and it is the *entire* extent of trust placed in the signer. We deliberately
 do **not** extend that trust to which routes/assets are allowed (see KDD 22).
+
+**Revision (2026-06-04) — two fees:** the quote now carries TWO fees: `protocolFee` (PXL's cut, →
+`protocolFeeRecipient`, capped at `MAX_PROTOCOL_FEE_BPS = 50`) and `integratorFee` (the frontend's own
+UniswapX-style fee, → the per-quote `integratorFeeReceiver`). **`integratorFee` is uncapped on-chain**
+(decision: it's the frontend charging its own users; users are protected by seeing `amountDue` in the
+quote before submitting). Consequence: the trust assumption above weakens — a compromised signer can set
+`integratorFee` up to ~100% of `offerAmount`, so `MAX_PROTOCOL_FEE_BPS` no longer bounds total
+extraction. Backstops remain as in KDD 21 (separate EXECUTOR key, off-chain rate limits, refunds). This
+also revises the original "single fee → single recipient" intent: protocol and integrator fees are now
+distinct on-chain fields/recipients.
 
 **Note — permissionless access (V1 scope):** a separate permissionless, fixed-fee, all-onchain path was
 considered and rejected for V1 (two entry points isn't worth it; dynamic/enterprise fees need a
@@ -256,20 +271,26 @@ and route gating can't be enforced onchain anyway.
 ### Data Structures
 - `Route { uint32 destEID; address offerAsset; address wantAsset; }` — directional (KDD 22).
 - `Order { bytes32 uuid; address wantAsset; uint256 amountDue; address receiver; uint32 sourceEID;
-  address offerAsset; uint256 offerAmount; uint64 receiveTime; }` — `amountDue` is in **wantAsset units**
-  (the quote's rate).
-- `Quote { Route route; uint256 offerAmount; uint256 amountDue; address receiver; uint256 fee;
-  address payer; uint256 deadline; bytes32 salt; }` — backend-signed; `fee` is a single total in
-  offerAsset units; `payer` must equal `msg.sender`.
+  address offerAsset; uint256 offerAmount; uint64 queuedAt; }` — `amountDue` is in **wantAsset units**
+  (the quote's rate). `queuedAt` = block.timestamp the order was queued, stamped in `_pushOrder`.
+  Invariant: `queuedAt != 0` ⟺ queued in this contract; a bridged order carries `0` on the source
+  (creation time = the event's block) and gets the real time stamped on the destination.
+- `Quote { Route route; uint256 offerAmount; uint256 amountDue; address receiver; uint256 protocolFee;
+  uint256 integratorFee; address integratorFeeReceiver; uint256 deadline; bytes32 salt; }` — backend-signed.
+  Two fees (offerAsset units): `protocolFee`→`protocolFeeRecipient` (capped at `MAX_PROTOCOL_FEE_BPS`),
+  `integratorFee`→`integratorFeeReceiver` (frontend's fee, uncapped on-chain).
+  Bearer (no payer binding): anyone may submit a signed quote — they pay `offerAmount` and the want
+  asset goes to the fixed `receiver`, so reuse-by-others is only self-griefing.
 
 *(No `RouteConfig` / policy system — superseded by KDD 21. No `PeerChain` struct — pruned; per-chain
 gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 
 ### State
 - `uint32 immutable thisChainEID` — fetched from `endpoint.eid()`; tells us if a route is cross-chain.
-- `address protocolFeeRecipient` — single fee recipient (can be a splitter).
+- `address protocolFeeRecipient` — receives `protocolFee`; the integrator's cut goes to the per-quote `integratorFeeReceiver` instead.
+- `address offerReceiver` — where offer deposits (`offerAmount - fee`) are sent (owner-settable). In practice a BoringVault, but only ERC20-transferred to — role-named, not enforced as a vault.
 - `address quoteSigner` — the single trusted backend signer (KDD 21).
-- `uint256 constant MAX_FEE_BPS = 50` — hardcoded fee cap (KDD 21).
+- `uint256 constant MAX_PROTOCOL_FEE_BPS = 50` — hardcoded cap on `protocolFee` only (KDD 21); `integratorFee` uncapped.
 - `mapping(uint32 => uint64) messageGasLimit` — per-destination-EID LZ executor gas.
 - `mapping(uint32 => mapping(address => mapping(address => bool))) approvedRoutes` — global directional
   route allowlist (`destEID => offerAsset => wantAsset`); nested rather than hashed so the auto-getter
@@ -279,9 +300,9 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 - `uint256 orderNonce` — feeds UUID generation.
 
 ### Non-View Functions
-- `submitOrder(Quote quote, bytes signature) payable` — validates deadline, `msg.sender == payer`,
-  route ∈ `approvedRoutes`, `fee <= offerAmount * MAX_FEE_BPS / 10_000`, signature == `quoteSigner`, and
-  replay (`usedDigests`); collects `offerAmount`, pays `fee`, builds the Order, dispatches local or via LZ.
+- `submitOrder(Quote quote, bytes signature) payable` — validates deadline, route ∈ `approvedRoutes`,
+  `protocolFee <= offerAmount * MAX_PROTOCOL_FEE_BPS / 10_000` (`FeeTooHigh`) and `protocolFee + integratorFee < offerAmount` (`FeesExceedOffer` — net must be strictly positive), the EIP-712 signature recovers to `quoteSigner`, and replay
+  (`usedDigests`); pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`, net→`offerReceiver`, builds the Order, dispatches local or via LZ.
 - `executePendingOrders(bytes32[] uuids, uint256[] amounts) requiresAuth` — EXECUTOR fulfills by
   `safeTransfer`-ing the want asset from the station's own balance (KDD 20); subtract from `amountDue`,
   remove when 0 (KDD 8). Reverts the whole batch on any failure, with the offending `uuid` in the error
@@ -291,12 +312,16 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 - `setProtocolFeeRecipient(address)`, `setQuoteSigner(address)`, `setMessageGasLimit(uint32, uint64)`,
   `setRouteApprovals(Route[], bool[])` — all `requiresAuth`.
 - `_lzReceive(...)` — re-validates the route against `approvedRoutes` (destEID = thisChainEID), stamps
-  `receiveTime`, pushes to the pending set. Sender authenticity is enforced upstream by LZ `peers`.
+  pushes to the pending set (`_pushOrder` stamps `queuedAt`). Sender authenticity is enforced upstream by LZ `peers`.
 
-**Signatures / replay:** we need replay protection. The signed digest binds `msg.sender`, so only the
-user could "replay" — not critical but possible by mistake. We use **unordered nonces** (a used-digest
-map + a caller `salt`, i.e. checking hash collisions), since Transit requests are independent and order
-needn't be enforced. *(Implemented as `usedDigests` + `Quote.salt`; `deadline` bounds validity.)*
+**Signatures / replay:** the quote is signed by the backend (`quoteSigner`) as **EIP-712** typed data
+— domain `{name:"TransitStation", version:"1", chainId, verifyingContract}` over `hashStruct(Quote)`
+(nested `Route` sub-struct), recovered with OZ `ECDSA.recover`. The OZ `EIP712` base is NOT inherited
+(its `ShortStrings`→`StorageSlot` dep needs solc `^0.8.24`; repo pins `0.8.21`), so the domain separator
+is computed inline — equally fork-safe (chainId read live) and identical for backend `signTypedData`.
+Replay uses **unordered nonces** (a `usedDigests` map + caller `salt`, i.e. checking digest collisions),
+since Transit requests are independent and order needn't be enforced; `deadline` bounds validity. Quotes
+are bearer (no `payer`/`msg.sender` binding) — see the Data Structures note above.
 
 ### View Functions
 - `getPendingOrderIds()` / `pendingOrderCount()` — iterate the pending set.
@@ -317,7 +342,7 @@ Emit for every state change; with special care for receipts:
 
 ## 7. Security Notes
 - **Trust boundary:** the `quoteSigner` is below the contract's trust level. A compromised signer is
-  bounded to fees ≤ `MAX_FEE_BPS` and to routes already in `approvedRoutes` (KDD 21–22). **Keep the
+  bounded on `protocolFee` ≤ `MAX_PROTOCOL_FEE_BPS` and to routes in `approvedRoutes` (KDD 21–22) — but note `integratorFee` is uncapped, so a signer compromise can still extract up to ~100% via it. **Keep the
   `quoteSigner` and EXECUTOR keys separate** so one compromise can't both sign a bad quote and fulfill it.
 - **Residual risk:** the route allowlist constrains *which* assets, not `amountDue`/the rate; a
   compromised signer can still set a favorable rate within an approved route. Backstops: EXECUTOR
