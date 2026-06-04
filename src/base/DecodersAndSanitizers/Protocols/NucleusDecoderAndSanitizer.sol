@@ -169,7 +169,6 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     // @desc submit an order to the withdraw queue
     // @tag wantAsset:address:ERC20 asset being requested
-    // @tag intendedDepositor:address:depositor address
     // @tag receiver:address:receiver of the NFT receipt
     // @tag refundReceiver:address:receiver of refunds
     function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
@@ -177,8 +176,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         pure
         returns (bytes memory addressesFound)
     {
-        addressesFound =
-            abi.encodePacked(params.wantAsset, params.intendedDepositor, params.receiver, params.refundReceiver);
+        addressesFound = abi.encodePacked(params.wantAsset, params.receiver, params.refundReceiver);
     }
 
 }
