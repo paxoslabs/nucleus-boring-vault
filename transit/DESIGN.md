@@ -139,18 +139,33 @@ If one order in a batch fails, revert the whole batch or skip-and-emit?
 
 **Decision:** **Throw on errors.** Less can go wrong; rules out the state-mutating-silent-failure case.
 
-### KDD 20: Station Custody
-Should the station custody tokens, or just hold approvals and send straight from the vault?
+### KDD 20: Station Custody — SUPERSEDED by KDD 26
+Original decision was "custody in the station." **Reversed by KDD 26 (below): the station never
+custodies.** Kept here for history.
 
-**Decision:** **Custody in the station.** Token balances are easier to manage than approvals.
+### KDD 26: Offer Destinations and Station Custody
+Where do offer assets go on submit, and where do want assets come from on execute? Should the station
+ever custody assets (even multi-block)?
 
-**Revision (2026-06-04):** offer-asset deposits now flow to a configurable `offerReceiver` (in practice
-a BoringVault, but the contract only ERC20-transfers to it — not named/enforced as a vault), not the
-station — `submitOrder` pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`,
-and the net→`offerReceiver` straight from msg.sender. The want side still pays via `safeTransfer` from the station's own balance,
-which is **inconsistent** if the asset manager holds all liquidity. OPEN: either pre-fund the station
-with want-asset liquidity, or `executePendingOrders` pulls the want asset from a configured source
-(symmetric). Want side unchanged pending that decision.
+**Decision: the station never custodies funds, and a dangling approval counts as custody.**
+- Offer assets go to a configurable `offerReceiver` (in practice a BoringVault) on submit — pulled
+  user→`offerReceiver` via `transferFrom`, never resting in the station.
+- Want assets are pulled from a configurable `wantAssetSource` (the vault) straight to the receiver on
+  execute via `transferFrom` (`wantAssetSource` approves the station). The station holds nothing between blocks.
+- Rationale for the backend simplification (Dashan): order placement doesn't know at submit time whether
+  an order will be inventory vs orchestrated, so a per-order "station vs vault" toggle is unusable — keep
+  it simple, never custody.
+- **Approvals (pull) over transfers-to-station:** chosen because the contract can enforce the remaining
+  approval is 0 after execution, guaranteeing no custody. A balance==0 check is defeatable — a user can
+  donate by setting `receiver` = the station — whereas users cannot influence an approval.
+
+**Implemented (2026-06-04):** `executePendingOrders(uuids, amounts, usedTokens)` asserts
+`allowance(wantAssetSource, station) == 0` for each token in `usedTokens` after the fills
+(`ResidualApproval`). The distinct want-assets are passed by the backend rather than derived on-chain:
+on-chain dedup is O(n²) and buys no real security (the vault sets the approvals, so the check is an
+honest-operator guardrail against over-approval, not a defense against a compromised backend — that
+controls approvals regardless). **Operational cost:** the vault must approve exactly the per-token batch
+total before each `execute`, or it reverts on the residual check.
 
 ### KDD 21: Fee Model — Server-Signed Quotes Bounded by an Onchain `MAX_FEE`
 We want per-integrator, per-route, dynamic fees. Two ways to identify the integrator:
@@ -288,7 +303,8 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 ### State
 - `uint32 immutable thisChainEID` — fetched from `endpoint.eid()`; tells us if a route is cross-chain.
 - `address protocolFeeRecipient` — receives `protocolFee`; the integrator's cut goes to the per-quote `integratorFeeReceiver` instead.
-- `address offerReceiver` — where offer deposits (`offerAmount - fee`) are sent (owner-settable). In practice a BoringVault, but only ERC20-transferred to — role-named, not enforced as a vault.
+- `address offerReceiver` — where the net offer deposit is sent on submit (owner-settable). In practice a BoringVault, but only ERC20-transferred to — role-named, not enforced as a vault.
+- `address wantAssetSource` — the address `executePendingOrders` pulls the want asset FROM (via `transferFrom`) to the receiver; must approve the station (owner-settable). KDD 26: station custodies nothing.
 - `address quoteSigner` — the single trusted backend signer (KDD 21).
 - `uint256 constant MAX_PROTOCOL_FEE_BPS = 50` — hardcoded cap on `protocolFee` only (KDD 21); `integratorFee` uncapped.
 - `mapping(uint32 => uint64) messageGasLimit` — per-destination-EID LZ executor gas.
@@ -302,13 +318,19 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 ### Non-View Functions
 - `submitOrder(Quote quote, bytes signature) payable` — validates deadline, route ∈ `approvedRoutes`,
   `protocolFee <= offerAmount * MAX_PROTOCOL_FEE_BPS / 10_000` (`FeeTooHigh`) and `protocolFee + integratorFee < offerAmount` (`FeesExceedOffer` — net must be strictly positive), the EIP-712 signature recovers to `quoteSigner`, and replay
-  (`usedDigests`); pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`, net→`offerReceiver`, builds the Order, dispatches local or via LZ.
-- `executePendingOrders(bytes32[] uuids, uint256[] amounts) requiresAuth` — EXECUTOR fulfills by
-  `safeTransfer`-ing the want asset from the station's own balance (KDD 20); subtract from `amountDue`,
+  (`usedDigests`); pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`, net→`offerReceiver`, builds the Order, dispatches local or via LZ. Core logic is internal `_submitOrder`.
+- `submitOrderWithPermit(Quote quote, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 s) payable`
+  — runs EIP-2612 `permit(msg.sender, address(this), offerAmount, ...)` (try/catch → allowance fallback, `PermitFailedAndAllowanceTooLow`), then `_submitOrder`. Approve + submit in one tx, matching the Teller/OneToOneQueue pattern.
+- `executePendingOrders(bytes32[] uuids, uint256[] amounts, address[] usedTokens) requiresAuth` — EXECUTOR fulfills by
+  `safeTransferFrom`-ing the want asset from `wantAssetSource` straight to the receiver (KDD 26 — station custodies nothing); subtract from `amountDue`,
+  then asserts `allowance(wantAssetSource, this) == 0` for each `usedTokens` entry (`ResidualApproval`);
   remove when 0 (KDD 8). Reverts the whole batch on any failure, with the offending `uuid` in the error
   (KDD 19).
 - `forceRemovePendingOrder(bytes32 uuid) requiresAuth` — full removal only (KDD 16).
 - `recoverETH(uint256)` / `recoverTokens(ERC20, uint256)` `requiresAuth` — to owner (KDD 6; LZ leaves ETH).
+- `pause()` / `unpause()` `requiresAuth` — `Pausable` (`src/helper/Pausable.sol`, modified-OZ, idempotent `_pause`).
+  `whenNotPaused` gates only the permissionless entrypoints (`submitOrder`, `submitOrderWithPermit`); execute is
+  EXECUTOR-gated and `_lzReceive` is left ungated so in-flight cross-chain orders don't strand.
 - `setProtocolFeeRecipient(address)`, `setQuoteSigner(address)`, `setMessageGasLimit(uint32, uint64)`,
   `setRouteApprovals(Route[], bool[])` — all `requiresAuth`.
 - `_lzReceive(...)` — re-validates the route against `approvedRoutes` (destEID = thisChainEID), stamps

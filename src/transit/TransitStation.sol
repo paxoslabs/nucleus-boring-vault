@@ -9,8 +9,9 @@ import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import { OAppAuth, MessagingFee, Origin, MessagingReceipt } from "src/base/Roles/CrossChain/OAppAuth/OAppAuth.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import { Pausable } from "src/helper/Pausable.sol";
 
-contract TransitStation is OAppAuth {
+contract TransitStation is OAppAuth, Pausable {
 
     using SafeTransferLib for ERC20;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -59,6 +60,7 @@ contract TransitStation is OAppAuth {
     address public protocolFeeRecipient;
     address public quoteSigner;
     address public offerReceiver;
+    address public wantAssetSource;
 
     mapping(uint32 => uint64) public messageGasLimit;
     mapping(uint32 => mapping(address => mapping(address => bool))) public approvedRoutes;
@@ -76,6 +78,7 @@ contract TransitStation is OAppAuth {
     event ProtocolFeeRecipientSet(address recipient);
     event QuoteSignerSet(address indexed signer);
     event OfferReceiverSet(address offerReceiver);
+    event WantAssetSourceSet(address wantAssetSource);
     event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
     event RouteApprovalSet(Route route, bool approved);
 
@@ -90,6 +93,8 @@ contract TransitStation is OAppAuth {
     error QuoteExpired(uint256 deadline);
     error FeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
     error FeesExceedOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
+    error ResidualApproval(address token, uint256 remaining);
+    error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
 
@@ -99,52 +104,71 @@ contract TransitStation is OAppAuth {
         address _endpoint,
         address _protocolFeeRecipient,
         address _quoteSigner,
-        address _offerReceiver
+        address _offerReceiver,
+        address _wantAssetSource
     )
         Auth(_owner, _authority)
         OAppAuth(_endpoint, _owner)
     {
         if (
             _owner == address(0) || _protocolFeeRecipient == address(0) || _quoteSigner == address(0)
-                || _offerReceiver == address(0)
+                || _offerReceiver == address(0) || _wantAssetSource == address(0)
         ) {
             revert ZeroAddress();
         }
-        if (address(_authority).code.length == 0) revert NotAContract(address(_authority));
 
         thisChainEID = endpoint.eid();
         protocolFeeRecipient = _protocolFeeRecipient;
         quoteSigner = _quoteSigner;
         offerReceiver = _offerReceiver;
+        wantAssetSource = _wantAssetSource;
     }
 
     receive() external payable { }
 
-    function submitOrder(Quote calldata quote, bytes calldata signature) external payable returns (bytes32 uuid) {
-        _verifyAndCollect(quote, signature);
-
-        uuid = _newUuid(msg.sender);
-        Order memory order = Order({
-            uuid: uuid,
-            wantAsset: quote.route.wantAsset,
-            amountDue: quote.amountDue,
-            receiver: quote.receiver,
-            sourceEID: thisChainEID,
-            offerAsset: quote.route.offerAsset,
-            offerAmount: quote.offerAmount,
-            queuedAt: 0
-        });
-
-        if (quote.route.destEID == thisChainEID) {
-            _pushOrder(order);
-        } else {
-            _sendOrder(quote.route.destEID, order);
-        }
-
-        emit OrderSubmitted(uuid, quote.route, order, msg.sender);
+    function submitOrder(
+        Quote calldata quote,
+        bytes calldata signature
+    )
+        external
+        payable
+        whenNotPaused
+        returns (bytes32 uuid)
+    {
+        uuid = _submitOrder(quote, signature);
     }
 
-    function executePendingOrders(bytes32[] calldata uuids, uint256[] calldata amounts) external requiresAuth {
+    function submitOrderWithPermit(
+        Quote calldata quote,
+        bytes calldata signature,
+        uint256 permitDeadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external
+        payable
+        whenNotPaused
+        returns (bytes32 uuid)
+    {
+        ERC20 offer = ERC20(quote.route.offerAsset);
+        try offer.permit(msg.sender, address(this), quote.offerAmount, permitDeadline, v, r, s) { }
+        catch {
+            if (offer.allowance(msg.sender, address(this)) < quote.offerAmount) {
+                revert PermitFailedAndAllowanceTooLow();
+            }
+        }
+        uuid = _submitOrder(quote, signature);
+    }
+
+    function executePendingOrders(
+        bytes32[] calldata uuids,
+        uint256[] calldata amounts,
+        address[] calldata usedTokens
+    )
+        external
+        requiresAuth
+    {
         if (uuids.length != amounts.length) revert LengthMismatch(uuids.length, amounts.length);
 
         for (uint256 i; i < uuids.length; ++i) {
@@ -167,9 +191,65 @@ contract TransitStation is OAppAuth {
                 order.amountDue = remaining;
             }
 
-            ERC20(wantAsset).safeTransfer(receiver, fillAmount);
+            ERC20(wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
 
             emit OrderExecuted(uuid, fillAmount, remaining);
+        }
+
+        for (uint256 i; i < usedTokens.length; ++i) {
+            uint256 remaining = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
+            if (remaining != 0) revert ResidualApproval(usedTokens[i], remaining);
+        }
+    }
+
+    function executePendingOrders2(bytes32[] calldata uuids, uint256[] calldata amounts) external requiresAuth {
+        if (uuids.length != amounts.length) revert LengthMismatch(uuids.length, amounts.length);
+
+        address[] memory usedTokens = new address[](uuids.length);
+        uint256 usedCount;
+
+        for (uint256 i; i < uuids.length; ++i) {
+            bytes32 uuid = uuids[i];
+            if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
+
+            Order storage order = pendingOrders[uuid];
+            uint256 fillAmount = amounts[i];
+            uint256 due = order.amountDue;
+            if (fillAmount > due) revert AmountExceedsDue(uuid, fillAmount, due);
+
+            uint256 remaining = due - fillAmount;
+            address wantAsset = order.wantAsset;
+            address receiver = order.receiver;
+
+            if (remaining == 0) {
+                pendingOrderIds.remove(uuid);
+                delete pendingOrders[uuid];
+            } else {
+                order.amountDue = remaining;
+            }
+
+            ERC20(wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
+
+            bool seen;
+            for (uint256 j; j < usedCount; ++j) {
+                if (usedTokens[j] == wantAsset) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                usedTokens[usedCount] = wantAsset;
+                unchecked {
+                    ++usedCount;
+                }
+            }
+
+            emit OrderExecuted(uuid, fillAmount, remaining);
+        }
+
+        for (uint256 i; i < usedCount; ++i) {
+            uint256 remaining = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
+            if (remaining != 0) revert ResidualApproval(usedTokens[i], remaining);
         }
     }
 
@@ -190,6 +270,14 @@ contract TransitStation is OAppAuth {
         token.safeTransfer(owner, amount);
     }
 
+    function pause() external requiresAuth {
+        _pause();
+    }
+
+    function unpause() external requiresAuth {
+        _unpause();
+    }
+
     function setProtocolFeeRecipient(address recipient) external requiresAuth {
         if (recipient == address(0)) revert ZeroAddress();
         protocolFeeRecipient = recipient;
@@ -206,6 +294,12 @@ contract TransitStation is OAppAuth {
         if (newOfferReceiver == address(0)) revert ZeroAddress();
         offerReceiver = newOfferReceiver;
         emit OfferReceiverSet(newOfferReceiver);
+    }
+
+    function setWantAssetSource(address newWantAssetSource) external requiresAuth {
+        if (newWantAssetSource == address(0)) revert ZeroAddress();
+        wantAssetSource = newWantAssetSource;
+        emit WantAssetSourceSet(newWantAssetSource);
     }
 
     function setMessageGasLimit(uint32 eid, uint64 gasLimit) external requiresAuth {
@@ -236,9 +330,34 @@ contract TransitStation is OAppAuth {
         return pendingOrderIds.length();
     }
 
+    function _submitOrder(Quote calldata quote, bytes calldata signature) internal returns (bytes32 uuid) {
+        _verifyAndCollect(quote, signature);
+
+        uuid = _newUuid(msg.sender);
+        Order memory order = Order({
+            uuid: uuid,
+            wantAsset: quote.route.wantAsset,
+            amountDue: quote.amountDue,
+            receiver: quote.receiver,
+            sourceEID: thisChainEID,
+            offerAsset: quote.route.offerAsset,
+            offerAmount: quote.offerAmount,
+            queuedAt: 0
+        });
+
+        if (quote.route.destEID == thisChainEID) {
+            _pushOrder(order);
+        } else {
+            _sendOrder(quote.route.destEID, order);
+        }
+
+        emit OrderSubmitted(uuid, quote.route, order, msg.sender);
+    }
+
     function _verifyAndCollect(Quote calldata quote, bytes calldata signature) internal {
         if (block.timestamp > quote.deadline) revert QuoteExpired(quote.deadline);
         if (!_isRouteApproved(quote.route)) revert RouteNotApproved(quote.route);
+        if (quote.receiver == address(0)) revert ZeroAddress();
 
         uint256 maxProtocolFee = (quote.offerAmount * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
         if (quote.protocolFee > maxProtocolFee) revert FeeTooHigh(quote.protocolFee, maxProtocolFee);
