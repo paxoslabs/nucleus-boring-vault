@@ -171,6 +171,8 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
     // @tag wantAsset:address:ERC20 asset being requested
     // @tag receiver:address:receiver of the NFT receipt
     // @tag refundReceiver:address:receiver of refunds
+    // @tag approvalMethod:uint8:token approval mechanism
+    // @tag submitWithSignature:bool:whether order includes depositor signature
     function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
         external
         pure
