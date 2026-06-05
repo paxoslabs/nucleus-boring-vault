@@ -174,9 +174,15 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
     function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
         external
         pure
-        returns (bytes memory addressesFound)
+        returns (bytes memory argumentsFound)
     {
-        addressesFound = abi.encodePacked(params.wantAsset, params.receiver, params.refundReceiver);
+        argumentsFound = abi.encodePacked(
+            params.wantAsset,
+            params.receiver,
+            params.refundReceiver,
+            params.signatureParams.approvalMethod,
+            params.signatureParams.submitWithSignature
+        );
     }
 
 }
