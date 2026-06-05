@@ -159,13 +159,12 @@ ever custody assets (even multi-block)?
   approval is 0 after execution, guaranteeing no custody. A balance==0 check is defeatable — a user can
   donate by setting `receiver` = the station — whereas users cannot influence an approval.
 
-**Implemented (2026-06-04):** `executePendingOrders(uuids, amounts, usedTokens)` asserts
-`allowance(wantAssetSource, station) == 0` for each token in `usedTokens` after the fills
-(`ResidualApproval`). The distinct want-assets are passed by the backend rather than derived on-chain:
-on-chain dedup is O(n²) and buys no real security (the vault sets the approvals, so the check is an
-honest-operator guardrail against over-approval, not a defense against a compromised backend — that
-controls approvals regardless). **Operational cost:** the vault must approve exactly the per-token batch
-total before each `execute`, or it reverts on the residual check.
+**Implemented (2026-06-04; revised 2026-06-05):** `executePendingOrders(uuids, amounts)` derives the
+distinct want-assets touched **on-chain** (O(n²) dedup) and asserts `allowance(wantAssetSource, station)
+== 0` for each after the fills (`ResidualApproval`). Chose self-derivation over a backend-passed token
+list for a cleaner backend interface, accepting ~slightly higher gas. **Operational cost:**
+the vault must approve exactly the per-token batch total before each `execute`, or it reverts on the
+residual check.
 
 ### KDD 21: Fee Model — Server-Signed Quotes Bounded by an Onchain `MAX_FEE`
 We want per-integrator, per-route, dynamic fees. Two ways to identify the integrator:
@@ -321,9 +320,9 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
   (`usedDigests`); pulls `protocolFee`→`protocolFeeRecipient`, `integratorFee`→`integratorFeeReceiver`, net→`offerReceiver`, builds the Order, dispatches local or via LZ. Core logic is internal `_submitOrder`.
 - `submitOrderWithPermit(Quote quote, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 s) payable`
   — runs EIP-2612 `permit(msg.sender, address(this), offerAmount, ...)` (try/catch → allowance fallback, `PermitFailedAndAllowanceTooLow`), then `_submitOrder`. Approve + submit in one tx, matching the Teller/OneToOneQueue pattern.
-- `executePendingOrders(bytes32[] uuids, uint256[] amounts, address[] usedTokens) requiresAuth` — EXECUTOR fulfills by
+- `executePendingOrders(bytes32[] uuids, uint256[] amounts) requiresAuth` — EXECUTOR fulfills by
   `safeTransferFrom`-ing the want asset from `wantAssetSource` straight to the receiver (KDD 26 — station custodies nothing); subtract from `amountDue`,
-  then asserts `allowance(wantAssetSource, this) == 0` for each `usedTokens` entry (`ResidualApproval`);
+  then derives the distinct want-assets on-chain and asserts `allowance(wantAssetSource, this) == 0` for each (`ResidualApproval`);
   remove when 0 (KDD 8). Reverts the whole batch on any failure, with the offending `uuid` in the error
   (KDD 19).
 - `forceRemovePendingOrder(bytes32 uuid) requiresAuth` — full removal only (KDD 16).

@@ -6,6 +6,8 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 
+import { TransitStation } from "src/transit/TransitStation.sol";
+
 abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     error NucleusDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
@@ -163,6 +165,34 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     // @desc process orders using the one to one queue
     function processOrders(uint256 ordersToProcess) external pure returns (bytes memory addressesFound) {
+        // Nothing to decode
+    }
+
+    function submitOrder(
+        TransitStation.Quote calldata quote,
+        bytes calldata signature
+    )
+        external
+        payable
+        returns (bytes memory addressesFound)
+    {
+        addressesFound = abi.encodePacked(
+            quote.route.destEID,
+            quote.route.offerAsset,
+            quote.route.wantAsset,
+            quote.receiver,
+            quote.integratorFeeReceiver
+        );
+    }
+
+    function executePendingOrders(
+        bytes32[] calldata uuids,
+        uint256[] calldata amounts
+    )
+        external
+        payable
+        returns (bytes memory addressesFound)
+    {
         // Nothing to decode
     }
 
