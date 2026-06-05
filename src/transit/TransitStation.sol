@@ -161,48 +161,7 @@ contract TransitStation is OAppAuth, Pausable {
         uuid = _submitOrder(quote, signature);
     }
 
-    function executePendingOrders(
-        bytes32[] calldata uuids,
-        uint256[] calldata amounts,
-        address[] calldata usedTokens
-    )
-        external
-        requiresAuth
-    {
-        if (uuids.length != amounts.length) revert LengthMismatch(uuids.length, amounts.length);
-
-        for (uint256 i; i < uuids.length; ++i) {
-            bytes32 uuid = uuids[i];
-            if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
-
-            Order storage order = pendingOrders[uuid];
-            uint256 fillAmount = amounts[i];
-            uint256 due = order.amountDue;
-            if (fillAmount > due) revert AmountExceedsDue(uuid, fillAmount, due);
-
-            uint256 remaining = due - fillAmount;
-            address wantAsset = order.wantAsset;
-            address receiver = order.receiver;
-
-            if (remaining == 0) {
-                pendingOrderIds.remove(uuid);
-                delete pendingOrders[uuid];
-            } else {
-                order.amountDue = remaining;
-            }
-
-            ERC20(wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
-
-            emit OrderExecuted(uuid, fillAmount, remaining);
-        }
-
-        for (uint256 i; i < usedTokens.length; ++i) {
-            uint256 remaining = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
-            if (remaining != 0) revert ResidualApproval(usedTokens[i], remaining);
-        }
-    }
-
-    function executePendingOrders2(bytes32[] calldata uuids, uint256[] calldata amounts) external requiresAuth {
+    function executePendingOrders(bytes32[] calldata uuids, uint256[] calldata amounts) external requiresAuth {
         if (uuids.length != amounts.length) revert LengthMismatch(uuids.length, amounts.length);
 
         address[] memory usedTokens = new address[](uuids.length);
