@@ -53,7 +53,7 @@ contract DeployTransitStationTest is Test {
     address constant MULTISIG = 0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001; // Sepolia getMultisig() (test wallet)
     uint32 constant PEER_EID = 40_451; // Robinhood (peer when deploying on Sepolia)
     uint32 constant THIS_EID = 40_161; // Sepolia
-    uint64 constant MESSAGE_GAS_LIMIT = 100_000;
+    uint64 constant MESSAGE_GAS_LIMIT = 400_000;
 
     uint256 constant SIGNER_PK = 0xA11CE;
     uint256 constant AMOUNT = 1e18;
