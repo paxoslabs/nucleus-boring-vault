@@ -141,6 +141,7 @@ contract TransitStation is OAppAuth, Pausable {
     error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
+    error ZeroAmountDue();
 
     /// @param _owner Owner (bypasses auth) and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities; an EXECUTOR role is needed from day one.
@@ -468,6 +469,9 @@ contract TransitStation is OAppAuth, Pausable {
         if (!_isRouteApproved(quote.route)) revert RouteNotApproved(quote.route);
         if (quote.receiver == address(0)) revert ZeroAddress();
         if (quote.integratorFee > 0 && quote.integratorFeeReceiver == address(0)) revert ZeroAddress();
+        // An order owing 0 want would be born already "fully filled" (remaining == 0); reject it to avoid confusion in
+        // the event of a 0 order being passed in.
+        if (quote.amountDue == 0) revert ZeroAmountDue();
 
         uint256 maxProtocolFee = (quote.offerAmount * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
         if (quote.protocolFee > maxProtocolFee) revert FeeTooHigh(quote.protocolFee, maxProtocolFee);
