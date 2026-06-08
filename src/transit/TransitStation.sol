@@ -324,6 +324,7 @@ contract TransitStation is OAppAuth, Pausable {
         if (block.timestamp > quote.deadline) revert QuoteExpired(quote.deadline);
         if (!_isRouteApproved(quote.route)) revert RouteNotApproved(quote.route);
         if (quote.receiver == address(0)) revert ZeroAddress();
+        if (quote.integratorFee > 0 && quote.integratorFeeReceiver == address(0)) revert ZeroAddress();
 
         uint256 maxProtocolFee = (quote.offerAmount * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
         if (quote.protocolFee > maxProtocolFee) revert FeeTooHigh(quote.protocolFee, maxProtocolFee);
