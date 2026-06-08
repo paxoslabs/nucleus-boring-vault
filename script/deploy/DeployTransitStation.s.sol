@@ -104,6 +104,9 @@ contract DeployTransitStation is BaseScript {
         rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
         rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
 
+        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
+        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector, true);
+
         transitStation.setPeer(_peerEid(), bytes32(uint256(uint160(address(transitStation)))));
         transitStation.setMessageGasLimit(_peerEid(), MESSAGE_GAS_LIMIT);
         transitStation.setDelegate(getMultisig());

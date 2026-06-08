@@ -7,7 +7,7 @@ import { Auth, Authority } from "@solmate/auth/Auth.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-import { OAppAuth, MessagingFee, Origin, MessagingReceipt } from "src/base/Roles/CrossChain/OAppAuth/OAppAuth.sol";
+import { OAppAuth, MessagingFee, Origin } from "src/base/Roles/CrossChain/OAppAuth/OAppAuth.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import { Pausable } from "src/helper/Pausable.sol";
 
@@ -75,12 +75,12 @@ contract TransitStation is OAppAuth, Pausable {
     event OrderReceived(bytes32 indexed uuid, Order order);
     event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
     event OrderForceRemoved(bytes32 indexed uuid, Order order);
-    event ProtocolFeeRecipientSet(address recipient);
+    event ProtocolFeeRecipientSet(address indexed recipient);
     event QuoteSignerSet(address indexed signer);
-    event OfferReceiverSet(address offerReceiver);
-    event WantAssetSourceSet(address wantAssetSource);
+    event OfferReceiverSet(address indexed offerReceiver);
+    event WantAssetSourceSet(address indexed wantAssetSource);
     event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
-    event RouteApprovalSet(Route route, bool approved);
+    event RouteApprovalSet(Route route, bool indexed approved);
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
@@ -93,7 +93,7 @@ contract TransitStation is OAppAuth, Pausable {
     error QuoteExpired(uint256 deadline);
     error FeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
     error FeesExceedOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
-    error ResidualApproval(address token, uint256 remaining);
+    error ResidualApproval(address token, address wantAssetSource, uint256 remaining);
     error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
@@ -124,14 +124,13 @@ contract TransitStation is OAppAuth, Pausable {
         wantAssetSource = _wantAssetSource;
     }
 
-    receive() external payable { }
-
     function submitOrder(
         Quote calldata quote,
         bytes calldata signature
     )
         external
         payable
+        requiresAuth
         whenNotPaused
         returns (bytes32 uuid)
     {
@@ -148,6 +147,7 @@ contract TransitStation is OAppAuth, Pausable {
     )
         external
         payable
+        requiresAuth
         whenNotPaused
         returns (bytes32 uuid)
     {
@@ -190,10 +190,13 @@ contract TransitStation is OAppAuth, Pausable {
             ERC20(wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
 
             bool seen;
-            for (uint256 j; j < usedCount; ++j) {
+            for (uint256 j; j < usedCount;) {
                 if (usedTokens[j] == wantAsset) {
                     seen = true;
                     break;
+                }
+                unchecked {
+                    ++j;
                 }
             }
             if (!seen) {
@@ -207,8 +210,8 @@ contract TransitStation is OAppAuth, Pausable {
         }
 
         for (uint256 i; i < usedCount; ++i) {
-            uint256 remaining = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
-            if (remaining != 0) revert ResidualApproval(usedTokens[i], remaining);
+            uint256 remainingAllowance = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
+            if (remainingAllowance != 0) revert ResidualApproval(usedTokens[i], wantAssetSource, remainingAllowance);
         }
     }
 
@@ -281,8 +284,12 @@ contract TransitStation is OAppAuth, Pausable {
         return fee.nativeFee;
     }
 
-    function getPendingOrderIds() external view returns (bytes32[] memory) {
-        return pendingOrderIds.values();
+    function getPendingOrders() external view returns (Order[] memory orders) {
+        bytes32[] memory ids = pendingOrderIds.values();
+        orders = new Order[](ids.length);
+        for (uint256 i; i < ids.length; ++i) {
+            orders[i] = pendingOrders[ids[i]];
+        }
     }
 
     function pendingOrderCount() external view returns (uint256) {
@@ -367,9 +374,8 @@ contract TransitStation is OAppAuth, Pausable {
 
     function _newUuid(address user) internal returns (bytes32 uuid) {
         unchecked {
-            ++orderNonce;
+            uuid = keccak256(abi.encode(thisChainEID, address(this), user, ++orderNonce));
         }
-        uuid = keccak256(abi.encode(thisChainEID, address(this), user, orderNonce));
     }
 
     function _domainSeparator() internal view returns (bytes32) {
