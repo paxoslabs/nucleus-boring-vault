@@ -15,7 +15,7 @@ contract DeployTransitStation is BaseScript {
     // ---- fill these per testnet deployment ----
     address constant QUOTE_SIGNER = 0x9d08cC364da8Be1d5C54d05A0F8dc3b2046C5FdE; // staging
     address constant EXECUTOR = 0xFb7dad16c87910065859824fD53fef0f2705E91b;
-    uint64 constant MESSAGE_GAS_LIMIT = 100_000;
+    uint64 constant MESSAGE_GAS_LIMIT = 400_000;
 
     string constant NAME = "PXL Test Transit Vault";
     string constant SYMBOL = "TRANSIT";
