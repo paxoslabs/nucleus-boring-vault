@@ -16,7 +16,7 @@ import { Pausable } from "src/helper/Pausable.sol";
 ///         deposits the offer asset, and receives the want asset on the same chain or a peer chain. The actual
 ///         swap is priced off-chain and fulfilled by a privileged executor; the station does not custody funds.
 /// @dev Funds never bridge — only order data does. On submit, the net offer is pulled to `offerReceiver`; on
-///      fulfilment, the want asset is pulled from `wantAssetSource` straight to the receiver. A cross-chain order
+///      fulfillment, the want asset is pulled from `wantAssetSource` straight to the receiver. A cross-chain order
 ///      travels as a LayerZero message carrying the full `Order` to the peer station's `_lzReceive`, where it is
 ///      queued exactly as a same-chain order would be. Access control is solmate RolesAuthority (`requiresAuth`);
 ///      the public submit entrypoints are opened via `setPublicCapability` at deploy.
@@ -34,7 +34,7 @@ contract TransitStation is OAppAuth, Pausable {
         address wantAsset;
     }
 
-    /// @notice A swap queued for fulfilment on the destination chain.
+    /// @notice A swap queued for fulfillment on the destination chain.
     struct Order {
         bytes32 uuid;
         address wantAsset;
@@ -86,7 +86,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Destination for the net deposit on submit (in practice a BoringVault). The station only transfers
     ///         to it — it is not held by the station.
     address public offerReceiver;
-    /// @notice Address the executor pulls the want asset FROM on fulfilment; must approve this station. The station
+    /// @notice Address the executor pulls the want asset FROM on fulfillment; must approve this station. The station
     ///         holds nothing between blocks.
     address public wantAssetSource;
 
@@ -235,7 +235,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after
     ///      the batch we assert no approval is left dangling for any touched token (a dangling approval is custody).
     ///      The distinct touched tokens are derived on-chain (O(n^2) dedup) to keep the backend interface a plain
-    ///      list of fills. `whenNotPaused`: pausing halts fulfilment, the kill-switch for a compromised backend.
+    ///      list of fills. `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
     function executePendingOrders(
         bytes32[] calldata uuids,
         uint256[] calldata amounts
@@ -334,7 +334,7 @@ contract TransitStation is OAppAuth, Pausable {
         token.safeTransfer(owner, amount);
     }
 
-    /// @notice Emergency stop: halts both submission and fulfilment (`submitOrder`, `submitOrderWithPermit`,
+    /// @notice Emergency stop: halts both submission and fulfillment (`submitOrder`, `submitOrderWithPermit`,
     ///         `executePendingOrders`), so a compromised backend can be frozen before funds leave. `_lzReceive` is
     ///         intentionally not gated — no value moves on receive (only on execute, which is gated), and gating it
     ///         would strand in-flight cross-chain messages.
@@ -371,7 +371,7 @@ contract TransitStation is OAppAuth, Pausable {
         emit OfferReceiverSet(newOfferReceiver);
     }
 
-    /// @notice Set the address the want asset is pulled from on fulfilment.
+    /// @notice Set the address the want asset is pulled from on fulfillment.
     /// @param newWantAssetSource New want-asset source.
     function setWantAssetSource(address newWantAssetSource) external requiresAuth {
         if (newWantAssetSource == address(0)) revert ZeroAddress();

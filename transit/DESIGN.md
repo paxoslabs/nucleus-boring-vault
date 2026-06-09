@@ -330,7 +330,7 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 - `pause()` / `unpause()` `requiresAuth` — `Pausable` (`src/helper/Pausable.sol`, modified-OZ, idempotent `_pause`).
   `whenNotPaused` gates `submitOrder`, `submitOrderWithPermit`, AND `executePendingOrders` (revised 2026-06-08).
   Execute MUST halt when paused: EXECUTOR-gating alone is insufficient because the EXECUTOR key itself can be
-  compromised — pausing is the kill-switch that freezes fulfilment (the value-out step) even against a hacked
+  compromised — pausing is the kill-switch that freezes fulfillment (the value-out step) even against a hacked
   executor or a compromised backend whose malicious orders are already queued. `_lzReceive` is left ungated: no
   value moves on receive (only on execute, which is gated), and gating it would strand in-flight cross-chain
   messages.
