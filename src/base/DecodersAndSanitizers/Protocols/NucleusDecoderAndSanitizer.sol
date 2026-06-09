@@ -168,6 +168,12 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         // Nothing to decode
     }
 
+    // @desc Transit Station submit order
+    // @tag destEID:uint32:destination chain EID (LayerZero)
+    // @tag offerAsset:address:offer asset
+    // @tag wantAsset:address:want asset
+    // @tag receiver:address:receiver
+    // @tag integratorFeeReceiver:address:integrator fee receiver
     function submitOrder(
         TransitStation.Quote calldata quote,
         bytes calldata signature
@@ -185,6 +191,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         );
     }
 
+    // @desc Transit Station execute pending orders
     function executePendingOrders(
         bytes32[] calldata uuids,
         uint256[] calldata amounts

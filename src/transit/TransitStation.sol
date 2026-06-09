@@ -132,7 +132,7 @@ contract TransitStation is OAppAuth, Pausable {
     error LengthMismatch(uint256 lengthA, uint256 lengthB);
     error CallFailed();
     error ZeroAddress();
-    error NotAContract(address target);
+    error NoCode(address target);
     error SignatureAlreadyUsed(bytes32 digest);
     error QuoteExpired(uint256 deadline);
     error FeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
@@ -169,6 +169,7 @@ contract TransitStation is OAppAuth, Pausable {
         ) {
             revert ZeroAddress();
         }
+        if (_endpoint.code.length == 0) revert NoCode(_endpoint);
 
         thisChainEID = endpoint.eid();
         protocolFeeRecipient = _protocolFeeRecipient;

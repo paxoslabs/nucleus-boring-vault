@@ -140,6 +140,7 @@ contract DeployTransitStationTest is Test {
 
         assertEq(want.balanceOf(RECEIVER), AMOUNT, "want -> receiver");
         assertEq(station.pendingOrderCount(), 0, "cleared");
+        assertEq(want.allowance(address(vault), address(station)), 0, "no residual approval");
     }
 
     function test_crossChainSubmitAttemptsBridge() public {

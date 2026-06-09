@@ -328,8 +328,12 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 - `forceRemovePendingOrder(bytes32 uuid) requiresAuth` — full removal only (KDD 16).
 - `recoverETH(uint256)` / `recoverTokens(ERC20, uint256)` `requiresAuth` — to owner (KDD 6; LZ leaves ETH).
 - `pause()` / `unpause()` `requiresAuth` — `Pausable` (`src/helper/Pausable.sol`, modified-OZ, idempotent `_pause`).
-  `whenNotPaused` gates only the permissionless entrypoints (`submitOrder`, `submitOrderWithPermit`); execute is
-  EXECUTOR-gated and `_lzReceive` is left ungated so in-flight cross-chain orders don't strand.
+  `whenNotPaused` gates `submitOrder`, `submitOrderWithPermit`, AND `executePendingOrders` (revised 2026-06-08).
+  Execute MUST halt when paused: EXECUTOR-gating alone is insufficient because the EXECUTOR key itself can be
+  compromised — pausing is the kill-switch that freezes fulfilment (the value-out step) even against a hacked
+  executor or a compromised backend whose malicious orders are already queued. `_lzReceive` is left ungated: no
+  value moves on receive (only on execute, which is gated), and gating it would strand in-flight cross-chain
+  messages.
 - `setProtocolFeeRecipient(address)`, `setQuoteSigner(address)`, `setMessageGasLimit(uint32, uint64)`,
   `setRouteApprovals(Route[], bool[])` — all `requiresAuth`.
 - `_lzReceive(...)` — re-validates the route against `approvedRoutes` (destEID = thisChainEID), stamps
