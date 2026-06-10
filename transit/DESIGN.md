@@ -187,7 +187,7 @@ do **not** extend that trust to which routes/assets are allowed (see KDD 22).
 
 **Revision (2026-06-04) — two fees:** the quote now carries TWO fees: `protocolFee` (PXL's cut, →
 `protocolFeeRecipient`, capped at `MAX_PROTOCOL_FEE_BPS = 50`) and `integratorFee` (the frontend's own
-UniswapX-style fee, → the per-quote `integratorFeeReceiver`). **`integratorFee` is uncapped on-chain**
+UniswapX-style fee, → the per-quote `integratorFeeReceiver`). **`integratorFee` was uncapped on-chain**
 (original decision: it's the frontend charging its own users; users were protected by seeing `amountDue`
 in the quote before submitting). Consequence: the trust assumption above weakens — a compromised signer can
 set `integratorFee` up to ~100% of the offer amount, so `MAX_PROTOCOL_FEE_BPS` no longer bounds total
@@ -195,7 +195,7 @@ extraction. Backstops remain as in KDD 21 (separate EXECUTOR key, off-chain rate
 also revises the original "single fee → single recipient" intent: protocol and integrator fees are now
 distinct on-chain fields/recipients. **Update (2026-06-10, KDD 27):** `amountDue` is no longer in the quote
 for the user to "see", and with the rate derived on-chain an integrator-fee skim is bounded user-fund risk,
-not a vault drain — but **capping it (`MAX_INTEGRATOR_FEE_BPS`) is an open item.**
+not a vault drain — and it is now **capped (`MAX_INTEGRATOR_FEE_BPS`, KDD 28).**
 
 **Note — permissionless access (V1 scope):** a separate permissionless, fixed-fee, all-onchain path was
 considered and rejected for V1 (two entry points isn't worth it; dynamic/enterprise fees need a
@@ -312,9 +312,42 @@ offer units, `ZeroAmountDue` in `_pushOrder` if the collected value truncates to
 the latter strands a (retryable) message, so the backend must enforce a min order size. (3) Non-pegged or
 oracle-priced swaps are explicitly out of scope for this version.
 
-**Still open:** cap `integratorFee` (`MAX_INTEGRATOR_FEE_BPS`) — with `amountDue` pinned it's no longer a
-vault drain, but a compromised signer can still skim a legit user's deposit to an attacker
-`integratorFeeReceiver`.
+**Resolved follow-up:** the integrator-fee skim vector this left open is closed by KDD 28.
+
+### KDD 28: Integrator Fee Cap (2026-06-10)
+**Problem.** The integrator fee was deliberately uncapped: the explicit assumption was that the frontend can
+charge whatever it wants, and if the frontend gets phished the user can get phished anyway — a phished
+frontend means the user is already completely exposed, so an on-chain cap adds nothing against that threat.
+But the fee and its receiver are signed by the **backend**, not the frontend: a backend (`quoteSigner`)
+compromise *alone* — no frontend involvement — can set any integrator fee with any `integratorFeeReceiver`
+and steal from every user. A user could in principle catch this by noticing the fee/receiver changed before
+submitting, but that responsibility must not sit with the user.
+
+**Decision.** **Introduce an integrator fee cap**: `MAX_INTEGRATOR_FEE_BPS = 1000` (10%), hardcoded immutable
+like the protocol cap, enforced in `_verifyAndCollect` (`IntegratorFeeTooHigh(integratorFee, maxIntegratorFee)`;
+the protocol-fee error was renamed `ProtocolFeeTooHigh` to keep the two distinguishable). With both fees
+capped and the rate derived on-chain (KDD 27), a full backend compromise is now bounded to skimming
+`MAX_PROTOCOL_FEE_BPS + MAX_INTEGRATOR_FEE_BPS` (10.5%) of each deposit it can get signed — the
+`FeesExceedOffer` guard remains as defense-in-depth (and still blocks zero-offer quotes). *(The 10% value
+leaves ample room for legitimate UniswapX-style frontend fees while still bounding theft; revisit as partner
+pricing settles.)*
+
+### KDD 29: Distributor Code — Backend-Attested Flow Attribution (2026-06-10)
+**Problem.** Enterprises need to log funds as coming from them — a referral tag saying "this flow was mine."
+Different from the integrator fee: no funds move, it's pure attribution.
+
+**Decision.** Add `bytes distributorCode` to the signed `Quote` (mirroring `DistributorCodeDepositor`'s
+arbitrary-bytes referral pattern), emitted as an **indexed** field on `OrderSubmitted`.
+- **Signed, not a loose submit param:** the backend authenticates the integrator (API key) and signs the
+  quote, so attribution is backend-attested — nobody can tag volume with someone else's code, and a tampered
+  code fails signature verification (it's hashed into the EIP-712 digest, so it also feeds the order UUID).
+- **Emitted on the source only, never bridged or stored:** attribution is about where the deposit came from,
+  which is a source-chain fact; the destination has no use for it, and variable-length bytes would grow the
+  LZ payload. Cross-chain analytics join by `uuid` (identical on both chains).
+- **Indexed:** enterprises filter their flow by topic `keccak256(code)` (same as `DepositWithDistributorCode`);
+  the raw bytes aren't in the log, but each enterprise knows its own code and the backend holds the quote.
+- Empty code = unattributed flow; no validation, no length bound (backend controls what it signs; a long code
+  only costs the submitter calldata gas).
 
 ## 5. Software-Level Requirements
 
@@ -347,11 +380,13 @@ vault drain, but a compromised signer can still skim a legit user's deposit to a
   `queuedAt` at construction — no half-initialized `Order` ever exists, and wire data can never smuggle an
   `amountDue` (the wire only carries terms).
 - `Quote { Route route; uint256 offerAmountNormalized18; address receiver; uint256 protocolFeeNormalized18;
-  uint256 integratorFeeNormalized18; address integratorFeeReceiver; uint256 deadline; bytes32 salt; }` —
+  uint256 integratorFeeNormalized18; address integratorFeeReceiver; bytes distributorCode; uint256 deadline;
+  bytes32 salt; }` — `distributorCode` is a backend-attested referral tag, emitted on `OrderSubmitted` and
+  never bridged/stored (KDD 29). Otherwise:
   backend-signed; **ALL amounts normalized to 18 decimals** (KDD 27) and truncated to the offer asset's
   native units at transfer time. **No `amountDue`** — the signer doesn't state the delivered amount. Two
   fees: `protocolFeeNormalized18`→`protocolFeeRecipient` (capped at `MAX_PROTOCOL_FEE_BPS`),
-  `integratorFeeNormalized18`→`integratorFeeReceiver` (frontend's fee, uncapped on-chain — open: cap it).
+  `integratorFeeNormalized18`→`integratorFeeReceiver` (frontend's fee, capped at `MAX_INTEGRATOR_FEE_BPS`, KDD 28).
   Bearer (no payer binding): anyone may submit a signed quote — they pay the offer amount and the want
   asset goes to the fixed `receiver`, so reuse-by-others is only self-griefing.
 
@@ -364,7 +399,8 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 - `address offerReceiver` — where the net offer deposit is sent on submit (owner-settable). In practice a BoringVault, but only ERC20-transferred to — role-named, not enforced as a vault.
 - `address wantAssetSource` — the address `executePendingOrders` pulls the want asset FROM (via `transferFrom`) to the receiver; must approve the station (owner-settable). KDD 26: station custodies nothing.
 - `address quoteSigner` — the single trusted backend signer (KDD 21).
-- `uint256 constant MAX_PROTOCOL_FEE_BPS = 50` — hardcoded cap on `protocolFee` only (KDD 21); `integratorFee` uncapped.
+- `uint256 constant MAX_PROTOCOL_FEE_BPS = 50` — hardcoded cap on `protocolFee` (KDD 21).
+- `uint256 constant MAX_INTEGRATOR_FEE_BPS = 1000` — hardcoded cap on `integratorFee` (KDD 28).
 - `mapping(uint32 => uint64) messageGasLimit` — per-destination-EID LZ executor gas.
 - `mapping(uint32 => mapping(address => mapping(address => bool))) approvedRoutes` — global directional
   route allowlist (`destEID => offerAsset => wantAsset`); nested rather than hashed so the auto-getter
@@ -375,7 +411,7 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
 
 ### Non-View Functions
 - `submitOrder(Quote quote, bytes signature) payable` — validates deadline, route ∈ `approvedRoutes`,
-  the fee bounds in normalized space (`FeeTooHigh` for the protocol-fee cap; `FeesExceedOffer` — the normalized
+  the fee bounds in normalized space (`ProtocolFeeTooHigh` / `IntegratorFeeTooHigh` for the caps; `FeesExceedOffer` — the normalized
   net must be strictly positive), the EIP-712 signature recovers to `quoteSigner`, and replay (`usedDigests`);
   truncates each normalized amount to the offer asset's token units (`NetTruncatesToZero` if the net collects to
   zero) and pulls fees→recipients and net→`offerReceiver` as an exact partition of the truncated offer amount;
@@ -435,8 +471,8 @@ Emit for every state change; with special care for receipts:
 ## 7. Security Notes
 - **Trust boundary:** the `quoteSigner` is below the contract's trust level. As of KDD 27 the signer **no
   longer controls the rate** — `amountDue` is derived on-chain from the collected post-fee value, so a
-  compromised signer is bounded to: griefing fees (`protocolFee` ≤ `MAX_PROTOCOL_FEE_BPS`; `integratorFee`
-  still uncapped — **open: cap it**, it can skim a legit user's deposit) and mis-routing within
+  compromised signer is bounded to: griefing fees (`protocolFee` ≤ `MAX_PROTOCOL_FEE_BPS`; `integratorFee` ≤
+  `MAX_INTEGRATOR_FEE_BPS` — KDD 28, total skim ≤ 10.5% per deposit) and mis-routing within
   `approvedRoutes`. It can NO LONGER over-price an order to drain `wantAssetSource`. Even so, **keep the
   `quoteSigner` and EXECUTOR keys separate** and use `pause()` (which also freezes execute) as the incident
   kill-switch.
