@@ -65,7 +65,7 @@ contract TransitStation is OAppAuth, Pausable {
         uint256 offerAmountNormalized18;
         address receiver;
         uint256 protocolFeeNormalized18; // PXL's cut; capped at MAX_PROTOCOL_FEE_BPS
-        uint256 integratorFeeNormalized18; // frontend's cut; uncapped on-chain
+        uint256 integratorFeeNormalized18; // frontend's cut; capped at MAX_INTEGRATOR_FEE_BPS
         address integratorFeeReceiver;
         uint256 deadline;
         bytes32 salt; // entropy so otherwise-identical quotes get distinct digests (and thus distinct UUIDs)
@@ -76,10 +76,10 @@ contract TransitStation is OAppAuth, Pausable {
     /// @dev Quote amounts and bridged values are normalized to this many decimals; token-native amounts exist only at
     ///      the transfer boundary. Normalizing means token decimals never need to bridge.
     uint8 internal constant NORMALIZED_DECIMALS = 18;
-    /// @notice Hard cap on `protocolFee` (0.5%). Bounds what a compromised `quoteSigner` can skim as protocol fee;
-    ///         `integratorFee` is intentionally uncapped, so signer-key separation + off-chain limits remain the
-    ///         real backstop against total extraction.
+    /// @notice Hard cap on the protocol fee (0.5%). Bounds what a compromised `quoteSigner` can skim as protocol fee.
     uint256 public constant MAX_PROTOCOL_FEE_BPS = 50;
+    /// @notice Hard cap on the integrator fee (10%).
+    uint256 public constant MAX_INTEGRATOR_FEE_BPS = 1000;
 
     // EIP-712 type hashes. The domain separator is hand-rolled (OZ's EIP712 base pulls in StorageSlot which needs
     // solc >=0.8.24, and this repo pins 0.8.21) and recomputed live in `_domainSeparator`, so it is fork-safe.
@@ -148,7 +148,8 @@ contract TransitStation is OAppAuth, Pausable {
     error NoCode(address target);
     error SignatureAlreadyUsed(bytes32 digest);
     error QuoteExpired(uint256 deadline);
-    error FeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
+    error ProtocolFeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
+    error IntegratorFeeTooHigh(uint256 integratorFee, uint256 maxIntegratorFee);
     error FeesExceedOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
     error ResidualApproval(address token, address wantAssetSource, uint256 remaining);
     error PermitFailedAndAllowanceTooLow();
@@ -496,7 +497,11 @@ contract TransitStation is OAppAuth, Pausable {
 
         uint256 maxProtocolFee = (quote.offerAmountNormalized18 * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
         if (quote.protocolFeeNormalized18 > maxProtocolFee) {
-            revert FeeTooHigh(quote.protocolFeeNormalized18, maxProtocolFee);
+            revert ProtocolFeeTooHigh(quote.protocolFeeNormalized18, maxProtocolFee);
+        }
+        uint256 maxIntegratorFee = (quote.offerAmountNormalized18 * MAX_INTEGRATOR_FEE_BPS) / ONE_HUNDRED_PERCENT;
+        if (quote.integratorFeeNormalized18 > maxIntegratorFee) {
+            revert IntegratorFeeTooHigh(quote.integratorFeeNormalized18, maxIntegratorFee);
         }
         // Strict `>=`: the post-fee net must be strictly positive in normalized terms (positivity in token units is
         // enforced separately below, after truncation).
