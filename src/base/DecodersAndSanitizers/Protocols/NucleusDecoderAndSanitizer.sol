@@ -179,7 +179,6 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         bytes calldata signature
     )
         external
-        payable
         returns (bytes memory addressesFound)
     {
         addressesFound = abi.encodePacked(
@@ -197,7 +196,6 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         uint256[] calldata amounts
     )
         external
-        payable
         returns (bytes memory addressesFound)
     {
         // Nothing to decode
