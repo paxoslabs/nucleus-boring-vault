@@ -252,7 +252,7 @@ contract TransitStation is OAppAuth, Pausable {
         returns (bytes32 uuid)
     {
         ERC20 offer = ERC20(quote.route.offerAsset);
-        uint256 offerAmountTokenUnits = _toTokenUnits(quote.offerAmountNormalized18, offer.decimals());
+        uint256 offerAmountTokenUnits = _toTokenDecimals(quote.offerAmountNormalized18, offer.decimals());
         try offer.permit(msg.sender, address(this), offerAmountTokenUnits, permitDeadline, v, r, s) { }
         catch {
             if (offer.allowance(msg.sender, address(this)) < offerAmountTokenUnits) {
@@ -516,11 +516,11 @@ contract TransitStation is OAppAuth, Pausable {
 
         ERC20 offer = ERC20(quote.route.offerAsset);
         uint8 offerDecimals = offer.decimals();
-        uint256 protocolFeeTokenUnits = _toTokenUnits(quote.protocolFeeNormalized18, offerDecimals);
-        uint256 integratorFeeTokenUnits = _toTokenUnits(quote.integratorFeeNormalized18, offerDecimals);
+        uint256 protocolFeeTokenUnits = _toTokenDecimals(quote.protocolFeeNormalized18, offerDecimals);
+        uint256 integratorFeeTokenUnits = _toTokenDecimals(quote.integratorFeeNormalized18, offerDecimals);
         // Cannot underflow: truncation is superadditive (truncated parts never sum past the truncated whole), and the
         // strict fee check above guarantees the normalized whole exceeds the normalized parts.
-        uint256 netTokenUnits = _toTokenUnits(quote.offerAmountNormalized18, offerDecimals) - protocolFeeTokenUnits
+        uint256 netTokenUnits = _toTokenDecimals(quote.offerAmountNormalized18, offerDecimals) - protocolFeeTokenUnits
             - integratorFeeTokenUnits;
         // A zero token-unit net would create an order while collecting (next to) nothing for the transit system; the
         // backend's min order size keeps this from firing on legitimate quotes.
@@ -534,7 +534,7 @@ contract TransitStation is OAppAuth, Pausable {
         }
         offer.safeTransferFrom(msg.sender, offerReceiver, netTokenUnits);
 
-        offerAmountNormalized18AfterFees = _toNormalized(netTokenUnits, offerDecimals);
+        offerAmountNormalized18AfterFees = _toNormalizedDecimals(netTokenUnits, offerDecimals);
     }
 
     /// @dev Destination handler for a bridged order. Sender authenticity is already enforced by
@@ -577,7 +577,7 @@ contract TransitStation is OAppAuth, Pausable {
     function _pushOrder(OrderTerms memory terms) internal returns (Order memory) {
         Order memory order = Order({
             terms: terms,
-            amountDue: _toTokenUnits(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
+            amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
         if (order.amountDue == 0) revert ZeroAmountDue();
@@ -626,7 +626,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @dev Truncate a normalized (18-decimal) amount down into a token's native units. Rounds toward zero when the
     ///      token has fewer than 18 decimals, so a derived amount never exceeds its normalized source.
-    function _toTokenUnits(uint256 amountNormalized18, uint8 decimals) internal pure returns (uint256) {
+    function _toTokenDecimals(uint256 amountNormalized18, uint8 decimals) internal pure returns (uint256) {
         if (decimals < NORMALIZED_DECIMALS) return amountNormalized18 / (10 ** (NORMALIZED_DECIMALS - decimals));
         if (decimals > NORMALIZED_DECIMALS) return amountNormalized18 * (10 ** (decimals - NORMALIZED_DECIMALS));
         return amountNormalized18;
@@ -634,7 +634,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @dev Normalize a token-native amount to 18 decimals (exact for <=18-decimal tokens; truncates toward zero
     ///      above that, again favoring under- over over-crediting).
-    function _toNormalized(uint256 amountTokenUnits, uint8 decimals) internal pure returns (uint256) {
+    function _toNormalizedDecimals(uint256 amountTokenUnits, uint8 decimals) internal pure returns (uint256) {
         if (decimals < NORMALIZED_DECIMALS) return amountTokenUnits * (10 ** (NORMALIZED_DECIMALS - decimals));
         if (decimals > NORMALIZED_DECIMALS) return amountTokenUnits / (10 ** (decimals - NORMALIZED_DECIMALS));
         return amountTokenUnits;

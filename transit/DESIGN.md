@@ -283,14 +283,14 @@ derived on-chain**, and the decimals problem is solved by **normalizing all amou
 (`NORMALIZED_DECIMALS`) instead of bridging decimals:
 - ALL `Quote` amounts are 18-decimal-normalized (`offerAmountNormalized18`, `protocolFeeNormalized18`,
   `integratorFeeNormalized18`); the field names carry the unit so the backend cannot misread them as raw.
-- At collection (`_verifyAndCollect`), each amount is truncated down (`_toTokenUnits`) to the offer asset's
+- At collection (`_verifyAndCollect`), each amount is truncated down (`_toTokenDecimals`) to the offer asset's
   native units, and the three transfers **partition the truncated offer amount exactly** — sub-token-unit
   fee dust folds into the net (the vault's side, the party already bearing peg risk) rather than vanishing.
   A net of zero token units reverts (`NetTruncatesToZero`).
 - The order's `offerAmountNormalized18AfterFees` is **re-normalized FROM the collected token units**
-  (`_toNormalized`), never taken from the signed figure, so sub-token-unit precision the user never paid
+  (`_toNormalizedDecimals`), never taken from the signed figure, so sub-token-unit precision the user never paid
   cannot survive into the want owed.
-- On the destination, `_pushOrder` derives `amountDue = _toTokenUnits(terms.offerAmountNormalized18AfterFees,
+- On the destination, `_pushOrder` derives `amountDue = _toTokenDecimals(terms.offerAmountNormalized18AfterFees,
   wantAsset.decimals())`, truncating toward 0 (receiver never over-credited) and reverting `ZeroAmountDue`
   if it truncates to zero.
 - Decimals are read only where each token is local (offer on the source, want on the destination) and
@@ -403,7 +403,7 @@ for it (it never affected already-queued orders either); the incident response f
 - `Order { OrderTerms terms; uint256 amountDue; uint64 queuedAt; }` — the terms composed with the two
   destination-derived fields. `amountDue` is in **wantAsset token units** but is **DERIVED on-chain, not
   signed** (KDD 27). **`_pushOrder(OrderTerms)` is the only constructor of `Order` values**: it derives
-  `amountDue = _toTokenUnits(terms.offerAmountNormalized18AfterFees, wantAsset.decimals())` and stamps
+  `amountDue = _toTokenDecimals(terms.offerAmountNormalized18AfterFees, wantAsset.decimals())` and stamps
   `queuedAt` at construction — no half-initialized `Order` ever exists, and wire data can never smuggle an
   `amountDue` (the wire only carries terms).
 - `Quote { Route route; uint256 offerAmountNormalized18; address receiver; uint256 protocolFeeNormalized18;
