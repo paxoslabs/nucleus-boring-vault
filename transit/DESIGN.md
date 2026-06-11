@@ -349,6 +349,27 @@ arbitrary-bytes referral pattern), emitted as an **indexed** field on `OrderSubm
 - Empty code = unattributed flow; no validation, no length bound (backend controls what it signs; a long code
   only costs the submitter calldata gas).
 
+### KDD 30: Route Checked on Send Only — No Re-Check in `_lzReceive` (2026-06-11)
+**Problem.** `approvedRoutes` was originally enforced on both the source (`submitOrder`) and the destination
+(`_lzReceive`, reconstructing the route with `destEID = thisChainEID`). The dual check required every
+cross-chain route to be approved on BOTH stations under the same key, and a destination config mismatch
+stranded the LZ message (retryable, but an ops burden and a documented caveat).
+
+**Decision.** **Check the route on send only; do not re-check on receive.**
+- `_lzReceive` is only reachable past LZ peer authentication, so presenting an unapproved route there
+  requires an LZ-level attack — and an attacker with that power would forge **amounts** on an approved
+  route, not bother with the route. The re-check defended against nothing the attacker would actually do.
+- Even a forged route is bounded by the inventory the station may pull from (`wantAssetSource`'s exact
+  per-batch approvals), and the executor still has to choose to fill the order. Value-out was never gated by
+  the receive check — `executePendingOrders` does not consult `approvedRoutes` — so the gates are unchanged:
+  EXECUTOR role, exact approvals, `pause`.
+- Checking only on send reduces confusion and complexity for the same security surface, and routes now need
+  approval **only on the source station** — no stranded-message recovery flow, no dual-key config ceremony.
+
+**Trade-off accepted:** de-approving a route on the destination no longer filters in-flight bridged orders
+for it (it never affected already-queued orders either); the incident response for a bad route remains
+`pause()` + the executor declining to fill.
+
 ## 5. Software-Level Requirements
 
 > **Reconciled to the implemented contract (`src/transit/TransitStation.sol`).** The originally-drafted
@@ -437,10 +458,10 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
   messages.
 - `setProtocolFeeRecipient(address)`, `setQuoteSigner(address)`, `setMessageGasLimit(uint32, uint64)`,
   `setRouteApprovals(Route[], bool[])` — all `requiresAuth`.
-- `_lzReceive(...)` — re-validates the route against `approvedRoutes` (destEID = thisChainEID), then pushes to
-  the pending set (`_pushOrder` derives `amountDue` from the bridged normalized net + local `wantAsset.decimals()`
-  and stamps `queuedAt`; any wire-supplied `amountDue` is overwritten, never trusted). Sender authenticity is
-  enforced upstream by LZ `peers`.
+- `_lzReceive(...)` — decodes the bridged `OrderTerms` and pushes to the pending set (`_pushOrder` derives
+  `amountDue` from the bridged normalized net + local `wantAsset.decimals()` and stamps `queuedAt`; the wire
+  carries no `amountDue` to trust). Sender authenticity is enforced upstream by LZ `peers`; the route is NOT
+  re-checked here (validated once on the source — KDD 30).
 
 **Signatures / replay:** the quote is signed by the backend (`quoteSigner`) as **EIP-712** typed data
 — domain `{name:"TransitStation", version:"1", chainId, verifyingContract}` over `hashStruct(Quote)`

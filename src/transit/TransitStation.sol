@@ -106,9 +106,9 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Per-destination-EID gas the LZ executor supplies to the peer's `lzReceive`.
     mapping(uint32 => uint64) public messageGasLimit;
-    /// @notice Global directional route allowlist (destEID => offerAsset => wantAsset). Enforced on both the source
-    ///         (`submitOrder`) and the destination (`_lzReceive`), so a compromised backend can only ever land
-    ///         globally-approved asset pairs. Nested (not a hashed key) for free readable getters.
+    /// @notice Global directional route allowlist (destEID => offerAsset => wantAsset). Enforced once, at
+    ///         submission on the source, so a compromised backend can only ever land orders for globally-approved
+    ///         asset pairs. Nested (not a hashed key) for readable getters.
     mapping(uint32 => mapping(address => mapping(address => bool))) public approvedRoutes;
     /// @notice Spent EIP-712 digests — replay guard.
     mapping(bytes32 => bool) public usedDigests;
@@ -559,9 +559,6 @@ contract TransitStation is OAppAuth, Pausable {
         override
     {
         OrderTerms memory terms = abi.decode(payload, (OrderTerms));
-        Route memory route = Route({ destEID: thisChainEID, offerAsset: terms.offerAsset, wantAsset: terms.wantAsset });
-        if (!_isRouteApproved(route)) revert RouteNotApproved(route);
-
         Order memory stored = _pushOrder(terms);
         emit OrderBridgeReceived(stored.terms.uuid, origin.srcEid, guid, stored);
     }
