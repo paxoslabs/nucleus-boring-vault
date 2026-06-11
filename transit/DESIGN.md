@@ -295,7 +295,7 @@ derived on-chain**, and the decimals problem is solved by **normalizing all amou
   if it truncates to zero.
 - Decimals are read only where each token is local (offer on the source, want on the destination) and
   **never bridge**. The LZ payload is `OrderTerms` — everything fixed at submit time (`uuid`, assets,
-  `receiver`, `sourceEID`, the collected normalized net) — and `Order { OrderTerms terms; uint256 amountDue;
+  `receiver`, the collected normalized net) — and `Order { OrderTerms terms; uint256 amountDue;
   uint64 queuedAt; }` **composes** the terms with the two destination-derived fields, so nothing ever
   bridges empty and a half-initialized `Order` never exists outside `_pushOrder`'s input.
 
@@ -396,7 +396,7 @@ for it (it never affected already-queued orders either); the incident response f
 
 ### Data Structures
 - `Route { uint32 destEID; address offerAsset; address wantAsset; }` — directional (KDD 22).
-- `OrderTerms { bytes32 uuid; address wantAsset; address receiver; uint32 sourceEID; address offerAsset;
+- `OrderTerms { bytes32 uuid; address wantAsset; address receiver; address offerAsset;
   uint256 offerAmountNormalized18AfterFees; }` — everything fixed at submit time on the source; **the LZ
   wire format** (KDD 27). `offerAmountNormalized18AfterFees` is re-normalized from the token units actually
   collected.

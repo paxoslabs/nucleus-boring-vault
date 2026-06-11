@@ -40,7 +40,6 @@ contract TransitStation is OAppAuth, Pausable {
         bytes32 uuid;
         address wantAsset;
         address receiver;
-        uint32 sourceEID;
         address offerAsset;
         // Collected post-fee offer value, normalized to 18 decimals. The destination truncates this into
         // `Order.amountDue` (want-asset units)
@@ -129,7 +128,12 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
     event OrderSubmitted(
-        bytes32 indexed uuid, Route route, OrderTerms terms, address indexed user, bytes32 indexed distributorCode
+        bytes32 indexed uuid,
+        uint32 sourceEID,
+        Route route,
+        OrderTerms terms,
+        address indexed user,
+        bytes32 indexed distributorCode
     );
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
     ///         message `guid`, so trackers need no join: `guid` traces the message and matches the destination's
@@ -457,7 +461,6 @@ contract TransitStation is OAppAuth, Pausable {
             uuid: uuid,
             wantAsset: quote.route.wantAsset,
             receiver: quote.receiver,
-            sourceEID: thisChainEID,
             offerAsset: quote.route.offerAsset,
             offerAmountNormalized18AfterFees: offerAmountNormalized18AfterFees
         });
@@ -468,7 +471,7 @@ contract TransitStation is OAppAuth, Pausable {
             _sendOrder(quote.route.destEID, terms);
         }
 
-        emit OrderSubmitted(uuid, quote.route, terms, msg.sender, quote.distributorCode);
+        emit OrderSubmitted(uuid, thisChainEID, quote.route, terms, msg.sender, quote.distributorCode);
     }
 
     /// @dev Validates the quote, pulls the offer asset, and returns the EIP-712 digest (used as the order UUID) plus
