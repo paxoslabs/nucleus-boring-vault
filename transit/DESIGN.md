@@ -336,18 +336,21 @@ pricing settles.)*
 **Problem.** Enterprises need to log funds as coming from them — a referral tag saying "this flow was mine."
 Different from the integrator fee: no funds move, it's pure attribution.
 
-**Decision.** Add `bytes distributorCode` to the signed `Quote` (mirroring `DistributorCodeDepositor`'s
-arbitrary-bytes referral pattern), emitted as an **indexed** field on `OrderSubmitted`.
+**Decision.** Add `bytes32 distributorCode` to the signed `Quote` (the referral-code idea from
+`DistributorCodeDepositor`, but fixed-width), emitted as an **indexed** field on `OrderSubmitted`.
 - **Signed, not a loose submit param:** the backend authenticates the integrator (API key) and signs the
   quote, so attribution is backend-attested — nobody can tag volume with someone else's code, and a tampered
-  code fails signature verification (it's hashed into the EIP-712 digest, so it also feeds the order UUID).
+  code fails signature verification (it's in the EIP-712 digest, so it also feeds the order UUID).
 - **Emitted on the source only, never bridged or stored:** attribution is about where the deposit came from,
-  which is a source-chain fact; the destination has no use for it, and variable-length bytes would grow the
-  LZ payload. Cross-chain analytics join by `uuid` (identical on both chains).
-- **Indexed:** enterprises filter their flow by topic `keccak256(code)` (same as `DepositWithDistributorCode`);
-  the raw bytes aren't in the log, but each enterprise knows its own code and the backend holds the quote.
-- Empty code = unattributed flow; no validation, no length bound (backend controls what it signs; a long code
-  only costs the submitter calldata gas).
+  which is a source-chain fact; the destination has no use for it. Cross-chain analytics join by `uuid`
+  (identical on both chains).
+- **`bytes32`, not `bytes` (revised same day):** an indexed dynamic type stores only `keccak256(value)` in
+  the topic, so consumers couldn't recover the code from the log — and EIP-712 reduces a `bytes` field to its
+  32-byte hash for signing anyway. A `bytes32` is a value type: the indexed topic carries the code **itself**
+  (filterable AND readable from the log), EIP-712 encodes it atomically (no hashing wrapper in `_hashQuote`),
+  and it's cheaper (one calldata word). 32 bytes is ample for backend-assigned codes; an enterprise name
+  longer than that can be keyed by its hash off-chain.
+- `bytes32(0)` = unattributed flow; no validation (backend controls what it signs).
 
 ### KDD 30: Route Checked on Send Only — No Re-Check in `_lzReceive` (2026-06-11)
 **Problem.** `approvedRoutes` was originally enforced on both the source (`submitOrder`) and the destination
@@ -401,7 +404,7 @@ for it (it never affected already-queued orders either); the incident response f
   `queuedAt` at construction — no half-initialized `Order` ever exists, and wire data can never smuggle an
   `amountDue` (the wire only carries terms).
 - `Quote { Route route; uint256 offerAmountNormalized18; address receiver; uint256 protocolFeeNormalized18;
-  uint256 integratorFeeNormalized18; address integratorFeeReceiver; bytes distributorCode; uint256 deadline;
+  uint256 integratorFeeNormalized18; address integratorFeeReceiver; bytes32 distributorCode; uint256 deadline;
   bytes32 salt; }` — `distributorCode` is a backend-attested referral tag, emitted on `OrderSubmitted` and
   never bridged/stored (KDD 29). Otherwise:
   backend-signed; **ALL amounts normalized to 18 decimals** (KDD 27) and truncated to the offer asset's

@@ -67,7 +67,7 @@ contract TransitStation is OAppAuth, Pausable {
         uint256 protocolFeeNormalized18; // PXL's cut; capped at MAX_PROTOCOL_FEE_BPS
         uint256 integratorFeeNormalized18; // frontend's cut; capped at MAX_INTEGRATOR_FEE_BPS
         address integratorFeeReceiver;
-        bytes distributorCode; // Arbitrary code for emitting the source of funds
+        bytes32 distributorCode; // Arbitrary code for emitting the source of funds
         uint256 deadline;
         bytes32 salt; // entropy so otherwise-identical quotes get distinct digests (and thus distinct UUIDs)
     }
@@ -88,7 +88,7 @@ contract TransitStation is OAppAuth, Pausable {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 internal constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
     bytes32 internal constant QUOTE_TYPEHASH = keccak256(
-        "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
+        "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
     );
 
     /// @notice This chain's LayerZero endpoint id, read from the endpoint at deploy.
@@ -120,7 +120,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
     event OrderSubmitted(
-        bytes32 indexed uuid, Route route, OrderTerms terms, address indexed user, bytes indexed distributorCode
+        bytes32 indexed uuid, Route route, OrderTerms terms, address indexed user, bytes32 indexed distributorCode
     );
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
     ///         message `guid`, so trackers need no join: `guid` traces the message and matches the destination's
@@ -624,7 +624,7 @@ contract TransitStation is OAppAuth, Pausable {
                 quote.protocolFeeNormalized18,
                 quote.integratorFeeNormalized18,
                 quote.integratorFeeReceiver,
-                keccak256(quote.distributorCode),
+                quote.distributorCode,
                 quote.deadline,
                 quote.salt
             )
