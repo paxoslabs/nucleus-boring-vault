@@ -21,69 +21,73 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
     function _deploy(ConfigReader.Config memory config) public override broadcast returns (address) {
         // Require config Values
 
+        // NOTE NO MANAGER OR WITHDRAW QUEUE
         require(address(config.boringVault) != address(0), "boringVault must not be zero address");
-        require(address(config.manager) != address(0), "manager must not be zero address");
+        // require(address(config.manager) != address(0), "manager must not be zero address");
         require(address(config.accountant) != address(0), "accountant must not be zero address");
         require(address(config.teller) != address(0), "teller must not be zero address");
-        require(address(config.withdrawQueue) != address(0), "withdrawQueue must not be zero address");
-        require(
-            address(config.freezeListBeforeTransferHook) != address(0),
-            "freezeListBeforeTransferHook must not be zero address"
-        );
+        // require(address(config.withdrawQueue) != address(0), "withdrawQueue must not be zero address");
+        // require(
+        //     address(config.freezeListBeforeTransferHook) != address(0),
+        //     "freezeListBeforeTransferHook must not be zero address"
+        // );
 
         require(address(config.boringVault).code.length != 0, "boringVault must have code");
-        require(address(config.manager).code.length != 0, "manager must have code");
+        // require(address(config.manager).code.length != 0, "manager must have code");
         require(address(config.teller).code.length != 0, "teller must have code");
         require(address(config.accountant).code.length != 0, "accountant must have code");
-        require(address(config.withdrawQueue).code.length != 0, "withdrawQueue must have code");
+        // require(address(config.withdrawQueue).code.length != 0, "withdrawQueue must have code");
         require(config.rolesAuthority != address(0), "rolesAuthority");
         require(config.protocolAdmin != address(0), "protocolAdmin");
-        require(
-            address(config.freezeListBeforeTransferHook).code.length != 0, "freezeListBeforeTransferHook must have code"
-        );
+        // require(
+        //     address(config.freezeListBeforeTransferHook).code.length != 0, "freezeListBeforeTransferHook must have
+        // code" );
 
-        require(
-            address(WithdrawQueue(config.withdrawQueue).feeModule()) != address(0),
-            "withdrawQueue fee module must not be zero address"
-        );
-        require(
-            address(WithdrawQueue(config.withdrawQueue).feeModule()).code.length != 0,
-            "withdrawQueue fee module must have code"
-        );
+        // require(
+        //     address(WithdrawQueue(config.withdrawQueue).feeModule()) != address(0),
+        //     "withdrawQueue fee module must not be zero address"
+        // );
+        // require(
+        //     address(WithdrawQueue(config.withdrawQueue).feeModule()).code.length != 0,
+        //     "withdrawQueue fee module must have code"
+        // );
 
         // Set Authority
+        // NOTE NO MANAGER OR WITHDRAWQUEUE
         IAuthority(config.boringVault).setAuthority(config.rolesAuthority);
         IAuthority(config.accountant).setAuthority(config.rolesAuthority);
-        IAuthority(config.manager).setAuthority(config.rolesAuthority);
+        // IAuthority(config.manager).setAuthority(config.rolesAuthority);
         IAuthority(config.teller).setAuthority(config.rolesAuthority);
-        IAuthority(config.withdrawQueue).setAuthority(config.rolesAuthority);
+        // IAuthority(config.withdrawQueue).setAuthority(config.rolesAuthority);
 
         IAuthority(config.boringVault).transferOwnership(config.protocolAdmin);
-        IAuthority(config.manager).transferOwnership(config.protocolAdmin);
+        // IAuthority(config.manager).transferOwnership(config.protocolAdmin);
         IAuthority(config.accountant).transferOwnership(config.protocolAdmin);
         IAuthority(config.teller).transferOwnership(config.protocolAdmin);
-        IAuthority(config.withdrawQueue).transferOwnership(config.protocolAdmin);
+        // IAuthority(config.withdrawQueue).transferOwnership(config.protocolAdmin);
         IAuthority(config.rolesAuthority).transferOwnership(config.protocolAdmin);
 
         // If the hook was recently deployed as a part of this script, it's owner will be the broadcaster and not the
         // multisig yet. If this is the case set it's authority and owner to finish setup
-        if (IAuthority(config.freezeListBeforeTransferHook).owner() == broadcaster) {
-            IAuthority(config.freezeListBeforeTransferHook).setAuthority(config.rolesAuthority);
-            IAuthority(config.freezeListBeforeTransferHook).transferOwnership(config.protocolAdmin);
-        }
+        // NOTE NO FREEZE LIST BEFORE TRANSFER HOOK
+        // if (IAuthority(config.freezeListBeforeTransferHook).owner() == broadcaster) {
+        //     IAuthority(config.freezeListBeforeTransferHook).setAuthority(config.rolesAuthority);
+        //     IAuthority(config.freezeListBeforeTransferHook).transferOwnership(config.protocolAdmin);
+        // }
 
         // No need to transfer ownership to distributor code depositor as it is set to protocolAdmin in deployment.
 
         // Post Configuration Check
+        // NOTE NO MANAGER OR WITHDRAW QUEUE OR FREEZE LIST BEFORE TRANSFER HOOK
         require(IAuthority(config.boringVault).owner() == config.protocolAdmin, "boringVault");
-        require(IAuthority(config.manager).owner() == config.protocolAdmin, "manager");
+        // require(IAuthority(config.manager).owner() == config.protocolAdmin, "manager");
         require(IAuthority(config.accountant).owner() == config.protocolAdmin, "accountant");
         require(IAuthority(config.teller).owner() == config.protocolAdmin, "teller");
-        require(IAuthority(config.withdrawQueue).owner() == config.protocolAdmin, "withdrawQueue");
-        require(
-            IAuthority(config.freezeListBeforeTransferHook).owner() == config.protocolAdmin,
-            "freezeListBeforeTransferHook"
-        );
+        // require(IAuthority(config.withdrawQueue).owner() == config.protocolAdmin, "withdrawQueue");
+        // require(
+        //     IAuthority(config.freezeListBeforeTransferHook).owner() == config.protocolAdmin,
+        //     "freezeListBeforeTransferHook"
+        // );
         if (config.distributorCodeDepositorDeploy) {
             require(
                 IAuthority(config.distributorCodeDepositor).owner() == config.protocolAdmin, "distributorCodeDepositor"

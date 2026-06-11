@@ -81,13 +81,15 @@ contract DeployAll is BaseScript {
         config.boringVault = boringVault;
         console.log("Boring Vault: ", boringVault);
 
-        address freezeListBeforeTransferHook = new DeployFreezeListBeforeTransferHookScript().deploy(config);
-        config.freezeListBeforeTransferHook = freezeListBeforeTransferHook;
-        console.log("Freeze List Before Transfer Hook: ", freezeListBeforeTransferHook);
+        // NOTE Skip FreezeListBeforeTransferHook Deployment
+        // address freezeListBeforeTransferHook = new DeployFreezeListBeforeTransferHookScript().deploy(config);
+        // config.freezeListBeforeTransferHook = freezeListBeforeTransferHook;
+        // console.log("Freeze List Before Transfer Hook: ", freezeListBeforeTransferHook);
 
-        address manager = new DeployManagerWithMerkleVerification().deploy(config);
-        config.manager = manager;
-        console.log("Manager: ", manager);
+        // NOTE Skip Manager Deployment
+        // address manager = new DeployManagerWithMerkleVerification().deploy(config);
+        // config.manager = manager;
+        // console.log("Manager: ", manager);
 
         address accountant = new DeployAccountantWithRateProviders().deploy(config);
         config.accountant = accountant;
@@ -113,14 +115,16 @@ contract DeployAll is BaseScript {
             console.log("Distributor Code Depositor Not Deployed");
         }
 
-        config.withdrawQueue = new DeployWithdrawQueueAndFeeModule().deploy(config);
-        console.log("Withdraw Queue: ", config.withdrawQueue);
+        // NOTE Skip WithdrawQueue Deployment
+        // config.withdrawQueue = new DeployWithdrawQueueAndFeeModule().deploy(config);
+        // console.log("Withdraw Queue: ", config.withdrawQueue);
 
         new SetAuthorityAndTransferOwnerships().deploy(config);
         console.log("Set Authority And Transfer Ownerships Complete");
 
-        config.genericDecoderAndSanitizer = new DeployGenericDecoderAndSanitizer().deploy(config);
-        console.log("Generic Decoder And Sanitizer: ", config.genericDecoderAndSanitizer);
+        // NOTE Skip Decoder Deployment
+        // config.genericDecoderAndSanitizer = new DeployGenericDecoderAndSanitizer().deploy(config);
+        // console.log("Generic Decoder And Sanitizer: ", config.genericDecoderAndSanitizer);
 
         mainConfig = config;
     }

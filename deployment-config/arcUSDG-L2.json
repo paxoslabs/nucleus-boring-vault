@@ -1,0 +1,67 @@
+{
+    "nameEntropy": "arcUSDG",
+    "base": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+    "protocolAdmin": "0xDdDdF452dEc1F3877392e08810a7994c2A19A000",
+    "boringVaultAndBaseDecimals": "6",
+    "boringVault": {
+        "boringVaultName": "Arcus USDG",
+        "boringVaultSymbol": "arcUSDG",
+        "beforeTransferHookAddress": "0x0000000000000000000000000000000000000000",
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "freezeListBeforeTransferHook": {
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "manager": {
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "accountant": {
+        "payoutAddress": "0xDdDdF452dEc1F3877392e08810a7994c2A19A000",
+        "allowedExchangeRateChangeUpper": "10000",
+        "allowedExchangeRateChangeLower": "10000",
+        "minimumUpdateDelayInSeconds": "0",
+        "managementFee": "0",
+        "performanceFee": "0",
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "teller": {
+        "maxGasForPeer": 0,
+        "minGasForPeer": 0,
+        "peerEid": 0,
+        "tellerContractName": "TellerWithMultiAssetSupport",
+        "withdrawAssets": [
+            "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
+        ],
+        "depositAssets": [
+            "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
+        ],
+        "dvnIfNoDefault": {
+            "required": [],
+            "optional": [],
+            "blockConfirmationsRequiredIfNoDefault": 15,
+            "optionalThreshold": 1
+        },
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "rolesAuthority": {
+        "strategist": "0x0000000000000000000000000000000000000000",
+        "exchangeRateBot": "0x0000000000000000000000000000000000000000",
+        "address": "0x0000000000000000000000000000000000000000"
+    },
+    "distributorCodeDepositor": {
+        "note": "THIS WHOLE OBJECT MUST BE UNUSED BECAUSE DEPLOY IS FALSE",
+        "deploy": false,
+        "supplyCap": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+        "policyID": "",
+        "nativeSupported": false
+    },
+    "withdrawQueue": {
+        "note": "THIS WHOLE OBJECT MUST BE UNUSED",
+        "name": "UNUSED",
+        "symbol": "UNUSED",
+        "feeRecipient": "0xDdDdF452dEc1F3877392e08810a7994c2A19A000",
+        "minimumOrderSize": "0",
+        "processorAddress": "0x0000000000000000000000000000000000000000"
+    }
+}

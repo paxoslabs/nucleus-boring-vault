@@ -1,0 +1,15 @@
+{
+    "name": "Robinhood Mainnet",
+    "nativeWrapper": "0x0000000000000000000000000000000000000000",
+    "balancerVault": "0x0000000000000000000000000000000000000000",
+    "lzEndpoint": "0x0000000000000000000000000000000000000000",
+    "assetToRateProviderAndPriceFeed": {
+        "NOTE_0_CHAINLINK_1_REDSTONE_2_GENERIC": 0,
+        "NOTE_THESE_KEYS_MUST_NOT_BE_CHECKSUMMED": 0,
+        "maxTimeFromLastUpdate": "86400",
+        "0x5fc5360d0400a0fd4f2af552add042d716f1d168": {
+            "isPegged": true,
+            "rateProvider": "0x0000000000000000000000000000000000000000"
+        }
+    }
+  }
