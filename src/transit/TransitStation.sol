@@ -355,7 +355,7 @@ contract TransitStation is OAppAuth, Pausable {
         _pause();
     }
 
-    /// @notice Resume submissions. Only owner, the highest trust assumption, may unpause.
+    /// @notice Should be configured such that only the highest trust assumption, may unpause.
     function unpause() external requiresAuth {
         _unpause();
     }
