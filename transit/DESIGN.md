@@ -159,11 +159,14 @@ ever custody assets (even multi-block)?
   approval is 0 after execution, guaranteeing no custody. A balance==0 check is defeatable — a user can
   donate by setting `receiver` = the station — whereas users cannot influence an approval.
 
-**Implemented (2026-06-04; revised 2026-06-05):** `executePendingOrders(uuids, amounts)` derives the
-distinct want-assets touched **on-chain** (O(n²) dedup) and asserts `allowance(wantAssetSource, station)
-== 0` for each after the fills (`ResidualApproval`). Chose self-derivation over a backend-passed token
-list for a cleaner backend interface, accepting ~slightly higher gas. **Operational cost:**
-the vault must approve exactly the per-token batch total before each `execute`, or it reverts on the
+**Implemented (2026-06-04; revised 2026-06-05; reworked 2026-06-11):** `executePendingOrders(FillBatch[])`
+takes fills **grouped by want asset** (`FillBatch { wantAsset, uuids, amounts }`), asserts each order's
+`wantAsset` matches its batch (`WantAssetMismatch`), and asserts `allowance(wantAssetSource, station) == 0`
+once per batch after its fills (`ResidualApproval`). This supersedes the 2026-06-05 choice of on-chain
+token dedup over a backend-passed list — the grouped input is the backend-passed structure, accepted
+because the per-order equality check is simpler and cheaper than the O(n²) dedup it replaced, and the
+per-batch residual check forces all fills for an asset into a single batch. **Operational cost:**
+the vault must approve exactly the per-asset batch total before each `execute`, or it reverts on the
 residual check.
 
 ### KDD 21: Fee Model — Server-Signed Quotes Bounded by an Onchain `MAX_FEE`
@@ -445,11 +448,12 @@ gating comes from LZ `peers`, gas from the `messageGasLimit` mapping.)*
   — runs EIP-2612 `permit(msg.sender, address(this), <truncated token-unit offer amount>, ...)` (try/catch →
   allowance fallback, `PermitFailedAndAllowanceTooLow`), then `_submitOrder`. Approve + submit in one tx,
   matching the Teller/OneToOneQueue pattern.
-- `executePendingOrders(bytes32[] uuids, uint256[] amounts) requiresAuth` — EXECUTOR fulfills by
-  `safeTransferFrom`-ing the want asset from `wantAssetSource` straight to the receiver (KDD 26 — station custodies nothing); subtract from `amountDue`,
-  then derives the distinct want-assets on-chain and asserts `allowance(wantAssetSource, this) == 0` for each (`ResidualApproval`);
-  remove when 0 (KDD 8). Reverts the whole batch on any failure, with the offending `uuid` in the error
-  (KDD 19).
+- `executePendingOrders(FillBatch[] batches) requiresAuth` — fills grouped by want asset
+  (`FillBatch { wantAsset, uuids, amounts }`). EXECUTOR fulfills by `safeTransferFrom`-ing the want asset
+  from `wantAssetSource` straight to the receiver (KDD 26 — station custodies nothing); asserts each order's
+  `wantAsset` matches its batch (`WantAssetMismatch`), subtracts from `amountDue`, removes when 0 (KDD 8),
+  and asserts `allowance(wantAssetSource, this) == 0` once per batch (`ResidualApproval`). Reverts everything
+  on any failure, with the offending `uuid` in the error (KDD 19).
 - `forceRemovePendingOrder(bytes32 uuid) requiresAuth` — full removal only (KDD 16).
 - `recoverETH(uint256)` / `recoverTokens(ERC20, uint256)` `requiresAuth` — to owner (KDD 6; LZ leaves ETH).
 - `pause()` / `unpause()` `requiresAuth` — `Pausable` (`src/helper/Pausable.sol`, modified-OZ, idempotent `_pause`).

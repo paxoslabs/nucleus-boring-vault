@@ -72,6 +72,15 @@ contract TransitStation is OAppAuth, Pausable {
         bytes32 salt; // entropy so otherwise-identical quotes get distinct digests (and thus distinct UUIDs)
     }
 
+    /// @notice Fills for pending orders that all pay out the same want asset; `uuids` and `amounts` are
+    ///         index-aligned. Grouping by asset lets `executePendingOrders` verify the residual approval with one
+    ///         allowance read per asset
+    struct FillBatch {
+        address wantAsset;
+        bytes32[] uuids;
+        uint256[] amounts;
+    }
+
     /// @dev Basis-points denominator.
     uint256 internal constant ONE_HUNDRED_PERCENT = 10_000;
     /// @dev Quote amounts and bridged values are normalized to this many decimals; token-native amounts exist only at
@@ -145,6 +154,7 @@ contract TransitStation is OAppAuth, Pausable {
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
     error AmountExceedsDue(bytes32 uuid, uint256 requested, uint256 due);
+    error WantAssetMismatch(bytes32 uuid, address orderWantAsset, address batchWantAsset);
     error LengthMismatch(uint256 lengthA, uint256 lengthB);
     error CallFailed();
     error ZeroAddress();
@@ -249,78 +259,58 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Executor fulfils pending orders by pulling the want asset to each receiver; partial fills supported.
-    /// @param uuids Orders to fill.
-    /// @param amounts Per-order fill amount (want-asset units), index-aligned with `uuids`.
-    /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after
-    ///      the batch we assert no approval is left dangling for any touched token (a dangling approval is custody).
-    ///      The distinct touched tokens are derived on-chain (O(n^2) dedup) to keep the backend interface a plain
-    ///      list of fills. `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
-    function executePendingOrders(
-        bytes32[] calldata uuids,
-        uint256[] calldata amounts
-    )
-        external
-        requiresAuth
-        whenNotPaused
-    {
-        if (uuids.length != amounts.length) revert LengthMismatch(uuids.length, amounts.length);
-
-        address[] memory usedTokens = new address[](uuids.length);
-        uint256 usedCount;
-
-        for (uint256 i; i < uuids.length;) {
-            bytes32 uuid = uuids[i];
-            if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
-
-            Order storage order = pendingOrders[uuid];
-            uint256 fillAmount = amounts[i];
-            uint256 due = order.amountDue;
-            if (fillAmount > due) revert AmountExceedsDue(uuid, fillAmount, due);
-
-            uint256 remaining = due - fillAmount;
-            address wantAsset = order.terms.wantAsset;
-            address receiver = order.terms.receiver;
-
-            // Effects before interaction: drop or decrement the order before the external transfer.
-            if (remaining == 0) {
-                pendingOrderIds.remove(uuid);
-                delete pendingOrders[uuid];
-            } else {
-                order.amountDue = remaining;
+    /// @param batches Fills grouped by want asset; all fills for an asset must be in a single batch.
+    /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after each
+    ///      batch we assert no approval is left dangling for its asset (a dangling approval is custody).
+    ///      `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
+    function executePendingOrders(FillBatch[] calldata batches) external requiresAuth whenNotPaused {
+        for (uint256 i; i < batches.length;) {
+            FillBatch calldata batch = batches[i];
+            if (batch.uuids.length != batch.amounts.length) {
+                revert LengthMismatch(batch.uuids.length, batch.amounts.length);
             }
 
-            ERC20(wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
+            for (uint256 j; j < batch.uuids.length;) {
+                bytes32 uuid = batch.uuids[j];
+                if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
 
-            // Track distinct want tokens touched, for the post-batch residual-approval assertion below.
-            bool seen;
-            for (uint256 j; j < usedCount;) {
-                if (usedTokens[j] == wantAsset) {
-                    seen = true;
-                    break;
+                Order storage order = pendingOrders[uuid];
+                if (order.terms.wantAsset != batch.wantAsset) {
+                    revert WantAssetMismatch(uuid, order.terms.wantAsset, batch.wantAsset);
                 }
+
+                uint256 fillAmount = batch.amounts[j];
+                uint256 due = order.amountDue;
+                if (fillAmount > due) revert AmountExceedsDue(uuid, fillAmount, due);
+
+                uint256 remaining = due - fillAmount;
+                address receiver = order.terms.receiver;
+
+                // Effects before interaction: drop or decrement the order before the external transfer.
+                if (remaining == 0) {
+                    pendingOrderIds.remove(uuid);
+                    delete pendingOrders[uuid];
+                } else {
+                    order.amountDue = remaining;
+                }
+
+                ERC20(batch.wantAsset).safeTransferFrom(wantAssetSource, receiver, fillAmount);
+
+                emit OrderExecuted(uuid, fillAmount, remaining);
+
+                // unchecked: counter bounded by array length, cannot overflow.
                 unchecked {
                     ++j;
                 }
             }
-            if (!seen) {
-                usedTokens[usedCount] = wantAsset;
-                unchecked {
-                    ++usedCount;
-                }
+
+            // No approval may survive the batch — a leftover allowance would let the station pull later, i.e.
+            // custody.
+            uint256 remainingAllowance = ERC20(batch.wantAsset).allowance(wantAssetSource, address(this));
+            if (remainingAllowance != 0) {
+                revert ResidualApproval(batch.wantAsset, wantAssetSource, remainingAllowance);
             }
 
-            emit OrderExecuted(uuid, fillAmount, remaining);
-
-            // unchecked: counter bounded by array length, cannot overflow.
-            unchecked {
-                ++i;
-            }
-        }
-
-        // No approval may survive the batch — a leftover allowance would let the station pull later, i.e. custody.
-        for (uint256 i; i < usedCount;) {
-            uint256 remainingAllowance = ERC20(usedTokens[i]).allowance(wantAssetSource, address(this));
-            if (remainingAllowance != 0) revert ResidualApproval(usedTokens[i], wantAssetSource, remainingAllowance);
             unchecked {
                 ++i;
             }
