@@ -1,4 +1,4 @@
-if git cat-file commit HEAD | grep -q "^gpgsig "; then
+if git cat-file commit HEAD | sed '/^$/q' | grep -q "^gpgsig "; then
     exit 0
 fi
 
