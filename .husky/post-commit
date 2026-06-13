@@ -1,7 +1,7 @@
-sig_status=$(git log --format='%G?' -1 HEAD)
-
-if [ "$sig_status" = "N" ]; then
-    echo "Error: the commit you just created is not signed."
-    echo "Please amend it with: git commit --amend -S"
-    exit 1
+if git cat-file commit HEAD | grep -q "^gpgsig "; then
+    exit 0
 fi
+
+echo "Error: the commit you just created is not signed."
+echo "Please amend it with: git commit --amend -S"
+exit 1
