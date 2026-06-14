@@ -308,6 +308,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.startPrank(owner);
             station.setRouteApprovals(routes, approved);
             rolesAuthority.setPublicCapability(address(station), TransitStation.submitOrder.selector, true);
+            rolesAuthority.setPublicCapability(address(station), TransitStation.submitOrderWithPermit.selector, true);
             vm.stopPrank();
 
             deal(address(offerAsset), user, DEFAULT_OFFER_AMOUNT * 10);
@@ -336,6 +337,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.startPrank(owner);
             station.setRouteApprovals(routes, approved);
             rolesAuthority.setPublicCapability(address(station), TransitStation.submitOrder.selector, true);
+            rolesAuthority.setPublicCapability(address(station), TransitStation.submitOrderWithPermit.selector, true);
             vm.stopPrank();
 
             deal(address(_offerAsset), user, DEFAULT_OFFER_AMOUNT * 10);
@@ -842,6 +844,55 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Order[] memory orders = station.getPendingOrders();
             assertEq(orders.length, 0);
+        }
+
+        // ========================================= submitOrderWithPermit REVERTS =========================================
+
+        function testSubmitOrderWithPermit_RevertIf_PermitFailedAndAllowanceTooLow() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+
+            // `user` is already authorized and funded. Lower the allowance below the required offer
+            // amount. The test token does not implement EIP-2612 `permit`, so the permit call will fail
+            // and the station will fall back to an allowance check.
+            vm.prank(user);
+            offerAsset.approve(address(station), DEFAULT_OFFER_AMOUNT - 1);
+
+            vm.prank(user);
+            vm.expectRevert(TransitStation.PermitFailedAndAllowanceTooLow.selector);
+            station.submitOrderWithPermit(quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0));
+        }
+
+
+        // ========================================= lzReceive REVERTS =========================================
+
+        function testLzReceive_RevertIf_ZeroAmountDue() external {
+            ERC20 wantAsset6 = new tERC20(6);
+            TransitStation station = _deployStationWithAssets(offerAsset, wantAsset6);
+
+            vm.prank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+
+            TransitStation.OrderTerms memory terms = TransitStation.OrderTerms({
+                uuid: keccak256("test-uuid"),
+                wantAsset: address(wantAsset6),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: 1e11
+            });
+
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: DEST_EID,
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 1
+            });
+
+            vm.prank(address(endpoint));
+            vm.expectRevert(TransitStation.ZeroAmountDue.selector);
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 
     }
