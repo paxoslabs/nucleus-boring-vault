@@ -845,7 +845,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DEST_EID;
             bytes memory signature = _signQuote(station, quote);
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
 
             vm.prank(user);
             vm.deal(user, LZ_QUOTE_FEE);
