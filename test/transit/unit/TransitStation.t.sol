@@ -769,4 +769,79 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.submitOrder{ value: 0 }(quote, signature);
         }
 
+        // ========================================= submitOrder EFFECTS =========================================
+
+        function testSubmitOrder_MovesTokensCorrectly() external {
+            TransitStation station = _deployDefaultStation();
+            address integrator = makeAddr("integrator");
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.protocolFeeNormalized18 = 0.5e18;
+            quote.integratorFeeNormalized18 = 2e18;
+            quote.integratorFeeReceiver = integrator;
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 userBalanceBefore = offerAsset.balanceOf(user);
+            uint256 protocolBalanceBefore = offerAsset.balanceOf(protocolFeeRecipient);
+            uint256 integratorBalanceBefore = offerAsset.balanceOf(integrator);
+            uint256 offerReceiverBalanceBefore = offerAsset.balanceOf(offerReceiver);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(user), userBalanceBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(offerAsset.balanceOf(protocolFeeRecipient), protocolBalanceBefore + 0.5e18);
+            assertEq(offerAsset.balanceOf(integrator), integratorBalanceBefore + 2e18);
+            assertEq(
+                offerAsset.balanceOf(offerReceiver), offerReceiverBalanceBefore + (DEFAULT_OFFER_AMOUNT - 0.5e18 - 2e18)
+            );
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+        }
+
+        function testSubmitOrder_RoutesSameChainToPendingOrders() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(station.pendingOrderCount(), 1);
+
+            TransitStation.Order[] memory orders = station.getPendingOrders();
+            assertEq(orders.length, 1);
+            TransitStation.Order memory order = orders[0];
+            assertEq(order.terms.uuid, digest);
+            assertEq(order.terms.wantAsset, address(wantAsset));
+            assertEq(order.terms.receiver, user);
+            assertEq(order.terms.offerAsset, address(offerAsset));
+            assertEq(order.terms.offerAmountNormalized18AfterFees, DEFAULT_OFFER_AMOUNT);
+            assertEq(order.amountDue, DEFAULT_OFFER_AMOUNT);
+            assertEq(order.queuedAt, block.timestamp);
+        }
+
+        function testSubmitOrder_RoutesCrossChainWithoutPendingOrder() external {
+            TransitStation station = _deployDefaultStationWithCrossChainRoute();
+            vm.startPrank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+            station.setMessageGasLimit(DEST_EID, 400_000);
+            vm.stopPrank();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DEST_EID;
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            vm.prank(user);
+            vm.deal(user, LZ_QUOTE_FEE);
+            station.submitOrder{ value: LZ_QUOTE_FEE }(quote, signature);
+
+            assertEq(station.pendingOrderCount(), 0);
+
+            TransitStation.Order[] memory orders = station.getPendingOrders();
+            assertEq(orders.length, 0);
+        }
+
     }
