@@ -246,12 +246,14 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         address wantAssetSource = makeAddr("wantAssetSource");
 
         address user = makeAddr("user");
+        address executor = makeAddr("executor");
         ERC20 offerAsset;
         ERC20 wantAsset;
 
         uint256 constant DEFAULT_OFFER_AMOUNT = 100e18;
         uint32 constant DEST_EID = 2;
         uint256 constant LZ_QUOTE_FEE = 0.01 ether;
+        uint8 constant EXECUTOR_ROLE = 1;
 
         bytes32 constant DOMAIN_TYPEHASH =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -396,6 +398,36 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 offerAsset: address(offerAsset),
                 offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
             });
+        }
+
+        function _deployStationWithPendingOrder() internal returns (TransitStation station, bytes32 uuid) {
+            station = _deployDefaultStation();
+
+            vm.startPrank(owner);
+            rolesAuthority.setUserRole(executor, EXECUTOR_ROLE, true);
+            rolesAuthority.setRoleCapability(
+                EXECUTOR_ROLE, address(station), TransitStation.executePendingOrders.selector, true
+            );
+            vm.stopPrank();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            vm.prank(user);
+            uuid = station.submitOrder{ value: 0 }(quote, signature);
+
+            deal(address(wantAsset), wantAssetSource, DEFAULT_OFFER_AMOUNT * 10);
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), DEFAULT_OFFER_AMOUNT);
+        }
+
+        function _singleFillBatch(bytes32 uuid, uint256 amount) internal view returns (TransitStation.FillBatch[] memory) {
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](1);
+            amounts[0] = amount;
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantAsset), uuids: uuids, amounts: amounts });
+            return batches;
         }
 
         function _hashRoute(TransitStation.Route memory route) internal pure returns (bytes32) {
@@ -956,6 +988,101 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(address(endpoint));
             vm.expectRevert(TransitStation.ZeroAmountDue.selector);
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        // ========================================= executePendingOrders REVERTS =========================================
+
+        function testExecutePendingOrders_RevertIf_CallerNotAuthorized() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
+        }
+
+        function testExecutePendingOrders_RevertIf_Paused() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            vm.prank(owner);
+            station.pause();
+
+            vm.prank(executor);
+            vm.expectRevert(Pausable.EnforcedPause.selector);
+            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
+        }
+
+        function testExecutePendingOrders_RevertIf_LengthMismatch() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](2);
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantAsset), uuids: uuids, amounts: amounts });
+
+            vm.prank(executor);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.LengthMismatch.selector, 1, 2));
+            station.executePendingOrders(batches);
+        }
+
+        function testExecutePendingOrders_RevertIf_OrderNotFound() external {
+            (TransitStation station,) = _deployStationWithPendingOrder();
+
+            bytes32 unknownUuid = keccak256("unknown");
+
+            vm.prank(executor);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, unknownUuid));
+            station.executePendingOrders(_singleFillBatch(unknownUuid, DEFAULT_OFFER_AMOUNT));
+        }
+
+        function testExecutePendingOrders_RevertIf_WantAssetMismatch() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            ERC20 otherWantAsset = new tERC20(18);
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](1);
+            amounts[0] = DEFAULT_OFFER_AMOUNT;
+            batches[0] = TransitStation.FillBatch({
+                wantAsset: address(otherWantAsset), uuids: uuids, amounts: amounts
+            });
+
+            vm.prank(executor);
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    TransitStation.WantAssetMismatch.selector, uuid, address(wantAsset), address(otherWantAsset)
+                )
+            );
+            station.executePendingOrders(batches);
+        }
+
+        function testExecutePendingOrders_RevertIf_AmountExceedsDue() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            vm.prank(executor);
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    TransitStation.AmountExceedsDue.selector, uuid, DEFAULT_OFFER_AMOUNT + 1, DEFAULT_OFFER_AMOUNT
+                )
+            );
+            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT + 1));
+        }
+
+        function testExecutePendingOrders_RevertIf_ResidualApproval() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            // Approve one token unit more than the fill amount so a residual allowance remains.
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), DEFAULT_OFFER_AMOUNT + 1);
+
+            vm.prank(executor);
+            vm.expectRevert(
+                abi.encodeWithSelector(TransitStation.ResidualApproval.selector, address(wantAsset), wantAssetSource, 1)
+            );
+            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
         }
 
     }
