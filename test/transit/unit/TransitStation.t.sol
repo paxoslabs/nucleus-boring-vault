@@ -233,6 +233,14 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
     }
 
+    contract RevertingReceiver {
+
+        receive() external payable {
+            revert();
+        }
+
+    }
+
     contract TransitStationTest is Test {
 
         RolesAuthority rolesAuthority;
@@ -1104,6 +1112,153 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(owner);
             vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, unknownUuid));
             station.forceRemovePendingOrder(unknownUuid);
+        }
+
+        // ========================================= ADMIN & UTILITY REVERTS =========================================
+
+        function testRecoverETH_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+            vm.deal(address(station), 1 ether);
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.recoverETH(1 ether);
+        }
+
+        function testRecoverETH_RevertIf_CallFailed() external {
+            RevertingReceiver revertingOwner = new RevertingReceiver();
+            TransitStation station = _deploy(
+                address(revertingOwner),
+                protocolFeeRecipient,
+                quoteSigner,
+                offerReceiver,
+                wantAssetSource,
+                address(endpoint)
+            );
+
+            vm.deal(address(station), 1 ether);
+
+            vm.prank(address(revertingOwner));
+            vm.expectRevert(TransitStation.CallFailed.selector);
+            station.recoverETH(1 ether);
+        }
+
+        function testRecoverTokens_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+            deal(address(offerAsset), address(station), 1e18);
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.recoverTokens(offerAsset, 1e18);
+        }
+
+        function testSetProtocolFeeRecipient_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setProtocolFeeRecipient(makeAddr("newRecipient"));
+        }
+
+        function testSetProtocolFeeRecipient_RevertIf_ZeroAddress() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            vm.expectRevert(TransitStation.ZeroAddress.selector);
+            station.setProtocolFeeRecipient(address(0));
+        }
+
+        function testSetQuoteSigner_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setQuoteSigner(makeAddr("newSigner"));
+        }
+
+        function testSetQuoteSigner_RevertIf_ZeroAddress() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            vm.expectRevert(TransitStation.ZeroAddress.selector);
+            station.setQuoteSigner(address(0));
+        }
+
+        function testSetOfferReceiver_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setOfferReceiver(makeAddr("newOfferReceiver"));
+        }
+
+        function testSetOfferReceiver_RevertIf_ZeroAddress() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            vm.expectRevert(TransitStation.ZeroAddress.selector);
+            station.setOfferReceiver(address(0));
+        }
+
+        function testSetWantAssetSource_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setWantAssetSource(makeAddr("newWantAssetSource"));
+        }
+
+        function testSetWantAssetSource_RevertIf_ZeroAddress() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            vm.expectRevert(TransitStation.ZeroAddress.selector);
+            station.setWantAssetSource(address(0));
+        }
+
+        function testSetRouteApprovals_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](1);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            bool[] memory approved = new bool[](1);
+            approved[0] = true;
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setRouteApprovals(routes, approved);
+        }
+
+        function testSetRouteApprovals_RevertIf_LengthMismatch() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](1);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            bool[] memory approved = new bool[](0);
+
+            vm.prank(owner);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.LengthMismatch.selector, 1, 0));
+            station.setRouteApprovals(routes, approved);
+        }
+
+        function testSetMessageGasLimit_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setMessageGasLimit(DEST_EID, 400_000);
         }
 
     }
