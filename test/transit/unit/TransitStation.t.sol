@@ -9,6 +9,7 @@ import { Pausable } from "src/helper/Pausable.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { IOAppCore } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
+import { OAppAuthReceiver } from "src/base/Roles/CrossChain/OAppAuth/OAppAuthReceiver.sol";
 import {
     ILayerZeroEndpointV2,
     MessagingParams,
@@ -384,6 +385,16 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 distributorCode: bytes32(0),
                 deadline: block.timestamp + 1 hours,
                 salt: bytes32(0)
+            });
+        }
+
+        function _defaultOrderTerms() internal view returns (TransitStation.OrderTerms memory) {
+            return TransitStation.OrderTerms({
+                uuid: keccak256("test-uuid"),
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
             });
         }
 
@@ -865,8 +876,61 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.submitOrderWithPermit(quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0));
         }
 
-
         // ========================================= lzReceive REVERTS =========================================
+
+        function testLzReceive_RevertIf_OnlyEndpoint() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: DEST_EID,
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 1
+            });
+
+            address notEndpoint = makeAddr("notEndpoint");
+            vm.prank(notEndpoint);
+            vm.expectRevert(abi.encodeWithSelector(OAppAuthReceiver.OnlyEndpoint.selector, notEndpoint));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        function testLzReceive_RevertIf_NoPeer() external {
+            TransitStation station = _deployDefaultStation();
+            // Peer is intentionally not set for DEST_EID.
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: DEST_EID,
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 1
+            });
+
+            vm.prank(address(endpoint));
+            vm.expectRevert(abi.encodeWithSelector(IOAppCore.NoPeer.selector, DEST_EID));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        function testLzReceive_RevertIf_OnlyPeer() external {
+            TransitStation station = _deployDefaultStation();
+
+            bytes32 registeredPeer = bytes32(uint256(uint160(address(station))));
+            vm.prank(owner);
+            station.setPeer(DEST_EID, registeredPeer);
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            bytes32 actualSender = bytes32(uint256(1));
+            Origin memory origin = Origin({ srcEid: DEST_EID, sender: actualSender, nonce: 1 });
+
+            vm.prank(address(endpoint));
+            vm.expectRevert(abi.encodeWithSelector(IOAppCore.OnlyPeer.selector, DEST_EID, actualSender));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
 
         function testLzReceive_RevertIf_ZeroAmountDue() external {
             ERC20 wantAsset6 = new tERC20(6);
