@@ -1085,4 +1085,25 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
         }
 
+        // ========================================= forceRemovePendingOrder REVERTS =========================================
+
+        function testForceRemovePendingOrder_RevertIf_CallerNotAuthorized() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            // `executor` is only authorized for `executePendingOrders`, not `forceRemovePendingOrder`.
+            vm.prank(executor);
+            vm.expectRevert("UNAUTHORIZED");
+            station.forceRemovePendingOrder(uuid);
+        }
+
+        function testForceRemovePendingOrder_RevertIf_OrderNotFound() external {
+            (TransitStation station,) = _deployStationWithPendingOrder();
+
+            bytes32 unknownUuid = keccak256("unknown");
+
+            vm.prank(owner);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, unknownUuid));
+            station.forceRemovePendingOrder(unknownUuid);
+        }
+
     }
