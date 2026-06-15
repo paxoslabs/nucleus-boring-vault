@@ -1261,4 +1261,24 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.setMessageGasLimit(DEST_EID, 400_000);
         }
 
+        // ========================================= OAppAuth REVERTS =========================================
+
+        function testSetPeer_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+        }
+
+        function testSetDelegate_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.setDelegate(makeAddr("newDelegate"));
+        }
+
     }
