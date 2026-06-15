@@ -280,6 +280,26 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
         );
 
+        // Events re-declared here so `vm.expectEmit` can match them without needing an external emitter.
+        event OrderSubmitted(
+            bytes32 indexed uuid,
+            uint32 sourceEID,
+            TransitStation.Route route,
+            TransitStation.OrderTerms terms,
+            address indexed user,
+            bytes32 indexed distributorCode
+        );
+        event OrderReceived(bytes32 indexed uuid, TransitStation.Order order);
+        event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, TransitStation.OrderTerms terms);
+        event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, TransitStation.Order order);
+        event OrderForceRemoved(bytes32 indexed uuid, TransitStation.Order order);
+        event ProtocolFeeRecipientSet(address indexed recipient);
+        event QuoteSignerSet(address indexed signer);
+        event OfferReceiverSet(address indexed offerReceiver);
+        event WantAssetSourceSet(address indexed wantAssetSource);
+        event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
+        event RouteApprovalSet(TransitStation.Route route, bool indexed approved);
+
         function setUp() public {
             rolesAuthority = new RolesAuthority(owner, Authority(address(0)));
             endpoint = new MockEndpoint(1);
@@ -1763,6 +1783,233 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             uint256 fee = station.quoteSend(DEST_EID, terms);
             assertEq(fee, LZ_QUOTE_FEE);
+        }
+
+        // ========================================= EVENT TESTS =========================================
+
+        function testSubmitOrder_EmitsOrderSubmitted_SameChain() external {
+            TransitStation station = _deployDefaultStation();
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
+                uuid: uuid,
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
+            });
+
+            vm.expectEmit(true, true, true, true);
+            emit OrderSubmitted(uuid, endpoint.eid(), quote.route, expectedTerms, user, bytes32(0));
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+        }
+
+        function testSubmitOrder_EmitsOrderSubmitted_CrossChain() external {
+            TransitStation station = _deployDefaultStationWithCrossChainRoute();
+
+            vm.startPrank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+            station.setMessageGasLimit(DEST_EID, 400_000);
+            vm.stopPrank();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DEST_EID;
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
+                uuid: uuid,
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
+            });
+
+            vm.deal(user, LZ_QUOTE_FEE);
+
+            vm.expectEmit(true, true, true, true);
+            emit OrderSubmitted(uuid, endpoint.eid(), quote.route, expectedTerms, user, bytes32(0));
+
+            vm.prank(user);
+            station.submitOrder{ value: LZ_QUOTE_FEE }(quote, signature);
+        }
+
+        function testSubmitOrder_EmitsOrderReceived() external {
+            TransitStation station = _deployDefaultStation();
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
+                uuid: uuid,
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
+            });
+            TransitStation.Order memory expectedOrder = TransitStation.Order({
+                terms: expectedTerms,
+                amountDue: DEFAULT_OFFER_AMOUNT,
+                queuedAt: uint64(block.timestamp)
+            });
+
+            vm.expectEmit(true, false, false, true);
+            emit OrderReceived(uuid, expectedOrder);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+        }
+
+        function testSubmitOrder_EmitsOrderBridged() external {
+            TransitStation station = _deployDefaultStationWithCrossChainRoute();
+
+            vm.startPrank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+            station.setMessageGasLimit(DEST_EID, 400_000);
+            vm.stopPrank();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DEST_EID;
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
+                uuid: uuid,
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
+            });
+
+            vm.deal(user, LZ_QUOTE_FEE);
+
+            vm.expectEmit(true, true, false, true);
+            emit OrderBridged(uuid, DEST_EID, bytes32(0), expectedTerms);
+
+            vm.prank(user);
+            station.submitOrder{ value: LZ_QUOTE_FEE }(quote, signature);
+        }
+
+        function testLzReceive_EmitsOrderBridgeReceived() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+
+            TransitStation.OrderTerms memory terms = TransitStation.OrderTerms({
+                uuid: keccak256("test-uuid"),
+                wantAsset: address(wantAsset),
+                receiver: user,
+                offerAsset: address(offerAsset),
+                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT
+            });
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: DEST_EID,
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 1
+            });
+            bytes32 guid = bytes32(uint256(1));
+
+            TransitStation.Order memory expectedOrder = TransitStation.Order({
+                terms: terms,
+                amountDue: DEFAULT_OFFER_AMOUNT,
+                queuedAt: uint64(block.timestamp)
+            });
+
+            vm.expectEmit(true, true, false, true);
+            emit OrderBridgeReceived(terms.uuid, DEST_EID, guid, expectedOrder);
+
+            vm.prank(address(endpoint));
+            station.lzReceive(origin, guid, payload, address(0), "");
+        }
+
+        function testForceRemovePendingOrder_EmitsOrderForceRemoved() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+
+            vm.expectEmit(true, false, false, true);
+            emit OrderForceRemoved(uuid, order);
+
+            vm.prank(owner);
+            station.forceRemovePendingOrder(uuid);
+        }
+
+        function testSetProtocolFeeRecipient_EmitsProtocolFeeRecipientSet() external {
+            TransitStation station = _deployDefaultStation();
+            address newRecipient = makeAddr("newRecipient");
+
+            vm.expectEmit(true, false, false, true);
+            emit ProtocolFeeRecipientSet(newRecipient);
+
+            vm.prank(owner);
+            station.setProtocolFeeRecipient(newRecipient);
+        }
+
+        function testSetQuoteSigner_EmitsQuoteSignerSet() external {
+            TransitStation station = _deployDefaultStation();
+            address newSigner = makeAddr("newSigner");
+
+            vm.expectEmit(true, false, false, true);
+            emit QuoteSignerSet(newSigner);
+
+            vm.prank(owner);
+            station.setQuoteSigner(newSigner);
+        }
+
+        function testSetOfferReceiver_EmitsOfferReceiverSet() external {
+            TransitStation station = _deployDefaultStation();
+            address newOfferReceiver = makeAddr("newOfferReceiver");
+
+            vm.expectEmit(true, false, false, true);
+            emit OfferReceiverSet(newOfferReceiver);
+
+            vm.prank(owner);
+            station.setOfferReceiver(newOfferReceiver);
+        }
+
+        function testSetWantAssetSource_EmitsWantAssetSourceSet() external {
+            TransitStation station = _deployDefaultStation();
+            address newWantAssetSource = makeAddr("newWantAssetSource");
+
+            vm.expectEmit(true, false, false, true);
+            emit WantAssetSourceSet(newWantAssetSource);
+
+            vm.prank(owner);
+            station.setWantAssetSource(newWantAssetSource);
+        }
+
+        function testSetMessageGasLimit_EmitsMessageGasLimitSet() external {
+            TransitStation station = _deployDefaultStation();
+            uint64 gasLimit = 400_000;
+
+            vm.expectEmit(true, false, false, true);
+            emit MessageGasLimitSet(DEST_EID, gasLimit);
+
+            vm.prank(owner);
+            station.setMessageGasLimit(DEST_EID, gasLimit);
+        }
+
+        function testSetRouteApprovals_EmitsRouteApprovalSet() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](1);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            bool[] memory approved = new bool[](1);
+            approved[0] = true;
+
+            vm.expectEmit(true, false, false, true);
+            emit RouteApprovalSet(routes[0], true);
+
+            vm.prank(owner);
+            station.setRouteApprovals(routes, approved);
         }
 
     }
