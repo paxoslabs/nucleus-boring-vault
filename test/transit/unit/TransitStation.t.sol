@@ -293,6 +293,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, TransitStation.OrderTerms terms);
         event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, TransitStation.Order order);
         event OrderForceRemoved(bytes32 indexed uuid, TransitStation.Order order);
+        event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
         event ProtocolFeeRecipientSet(address indexed recipient);
         event QuoteSignerSet(address indexed signer);
         event OfferReceiverSet(address indexed offerReceiver);
@@ -1376,6 +1377,55 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         // ========================================= executePendingOrders EFFECTS =========================================
 
+        function testExecutePendingOrders_FillsSingleOrder() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            uint256 userWantBefore = wantAsset.balanceOf(user);
+            uint256 sourceWantBefore = wantAsset.balanceOf(wantAssetSource);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
+
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(wantAsset.balanceOf(user), userWantBefore + DEFAULT_OFFER_AMOUNT);
+            assertEq(wantAsset.balanceOf(wantAssetSource), sourceWantBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+        }
+
+        function testExecutePendingOrders_PartialFill() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            uint256 fillAmount = DEFAULT_OFFER_AMOUNT / 2;
+            uint256 remaining = DEFAULT_OFFER_AMOUNT - fillAmount;
+
+            // Approve only the partial fill amount so no residual allowance remains.
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), fillAmount);
+
+            uint256 userWantBefore = wantAsset.balanceOf(user);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, fillAmount));
+
+            assertEq(station.pendingOrderCount(), 1);
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.amountDue, remaining);
+            assertEq(wantAsset.balanceOf(user), userWantBefore + fillAmount);
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+        }
+
+        function testExecutePendingOrders_EmitsOrderExecuted() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            vm.expectEmit(true, false, false, true);
+            emit OrderExecuted(uuid, DEFAULT_OFFER_AMOUNT, 0);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
+
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+        }
+
         function testExecutePendingOrders_FillsMultipleBatches() external {
             ERC20 wantAsset6 = new tERC20(6);
             TransitStation station = _deployStationWithAssets(offerAsset, wantAsset6);
@@ -1432,6 +1482,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(station.pendingOrderCount(), 0);
             assertEq(wantAsset.balanceOf(user) - userWant18Before, DEFAULT_OFFER_AMOUNT);
             assertEq(wantAsset6.balanceOf(user), amountDue6);
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+            assertEq(wantAsset6.allowance(wantAssetSource, address(station)), 0);
         }
 
         // ========================================= forceRemovePendingOrder REVERTS =========================================
