@@ -522,8 +522,31 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         // ========================================= submitOrder REVERTS =========================================
 
         function testSubmitOrder_RevertIf_CallerNotAuthorized() external {
-            // TODO: ...
-            vm.skip(true);
+            // Deploy without making `submitOrder` public so the only failure is auth.
+            TransitStation station = _deploy(
+                owner, protocolFeeRecipient, quoteSigner, offerReceiver, wantAssetSource, address(endpoint)
+            );
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](1);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            bool[] memory approved = new bool[](1);
+            approved[0] = true;
+            vm.prank(owner);
+            station.setRouteApprovals(routes, approved);
+
+            deal(address(offerAsset), user, DEFAULT_OFFER_AMOUNT * 10);
+            vm.prank(user);
+            offerAsset.approve(address(station), type(uint256).max);
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.submitOrder(quote, signature);
         }
 
         function testSubmitOrder_RevertIf_Paused() external {
