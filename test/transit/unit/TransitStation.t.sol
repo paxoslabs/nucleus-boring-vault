@@ -241,6 +241,16 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
     }
 
+    contract tERC20Permit is ERC20 {
+
+        constructor(uint8 _decimals) ERC20("test", "TEST", _decimals) { }
+
+        function mint(address to, uint256 amount) external {
+            _mint(to, amount);
+        }
+
+    }
+
     contract TransitStationTest is Test {
 
         RolesAuthority rolesAuthority;
@@ -428,13 +438,21 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             wantAsset.approve(address(station), DEFAULT_OFFER_AMOUNT);
         }
 
-        function _singleFillBatch(bytes32 uuid, uint256 amount) internal view returns (TransitStation.FillBatch[] memory) {
+        function _singleFillBatch(
+            address wantAsset_,
+            bytes32 uuid,
+            uint256 amount
+        )
+            internal
+            pure
+            returns (TransitStation.FillBatch[] memory)
+        {
             TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
             bytes32[] memory uuids = new bytes32[](1);
             uuids[0] = uuid;
             uint256[] memory amounts = new uint256[](1);
             amounts[0] = amount;
-            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantAsset), uuids: uuids, amounts: amounts });
+            batches[0] = TransitStation.FillBatch({ wantAsset: wantAsset_, uuids: uuids, amounts: amounts });
             return batches;
         }
 
@@ -484,6 +502,26 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             return abi.encodePacked(r, s, v);
         }
 
+        function _getPermitSignature(
+            tERC20Permit token,
+            uint256 ownerKey,
+            address spender,
+            uint256 value,
+            uint256 deadline
+        )
+            internal
+            view
+            returns (uint8 v, bytes32 r, bytes32 s)
+        {
+            address permitOwner = vm.addr(ownerKey);
+            bytes32 permitTypehash =
+                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+            bytes32 structHash =
+                keccak256(abi.encode(permitTypehash, permitOwner, spender, value, token.nonces(permitOwner), deadline));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", token.DOMAIN_SEPARATOR(), structHash));
+            (v, r, s) = vm.sign(ownerKey, digest);
+        }
+
         // ========================================= CONSTRUCTOR REVERTS =========================================
 
         function testConstructor_RevertIf_OwnerIsZeroAddress() external {
@@ -523,9 +561,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         function testSubmitOrder_RevertIf_CallerNotAuthorized() external {
             // Deploy without making `submitOrder` public so the only failure is auth.
-            TransitStation station = _deploy(
-                owner, protocolFeeRecipient, quoteSigner, offerReceiver, wantAssetSource, address(endpoint)
-            );
+            TransitStation station =
+                _deploy(owner, protocolFeeRecipient, quoteSigner, offerReceiver, wantAssetSource, address(endpoint));
 
             TransitStation.Route[] memory routes = new TransitStation.Route[](1);
             routes[0] = TransitStation.Route({
@@ -729,8 +766,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.submitOrder(quote, signature);
         }
 
-        // ========================================= CROSS-CHAIN DISPATCH REVERTS
-        // =========================================
+        // ========================================= CROSS-CHAIN DISPATCH REVERTS =========================================
 
         function testSubmitOrder_RevertIf_GasLimitNotSet() external {
             TransitStation station = _deployDefaultStationWithCrossChainRoute();
@@ -898,6 +934,111 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(order.queuedAt, block.timestamp);
         }
 
+        function testSubmitOrder_WithProtocolFee() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.protocolFeeNormalized18 = 0.5e18;
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 userBalanceBefore = offerAsset.balanceOf(user);
+            uint256 protocolBalanceBefore = offerAsset.balanceOf(protocolFeeRecipient);
+            uint256 offerReceiverBalanceBefore = offerAsset.balanceOf(offerReceiver);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(user), userBalanceBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(offerAsset.balanceOf(protocolFeeRecipient), protocolBalanceBefore + 0.5e18);
+            assertEq(offerAsset.balanceOf(offerReceiver), offerReceiverBalanceBefore + (DEFAULT_OFFER_AMOUNT - 0.5e18));
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.terms.offerAmountNormalized18AfterFees, DEFAULT_OFFER_AMOUNT - 0.5e18);
+        }
+
+        function testSubmitOrder_WithIntegratorFee() external {
+            TransitStation station = _deployDefaultStation();
+            address integrator = makeAddr("integrator");
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.integratorFeeNormalized18 = 2e18;
+            quote.integratorFeeReceiver = integrator;
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 userBalanceBefore = offerAsset.balanceOf(user);
+            uint256 integratorBalanceBefore = offerAsset.balanceOf(integrator);
+            uint256 offerReceiverBalanceBefore = offerAsset.balanceOf(offerReceiver);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(user), userBalanceBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(offerAsset.balanceOf(integrator), integratorBalanceBefore + 2e18);
+            assertEq(offerAsset.balanceOf(offerReceiver), offerReceiverBalanceBefore + (DEFAULT_OFFER_AMOUNT - 2e18));
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.terms.offerAmountNormalized18AfterFees, DEFAULT_OFFER_AMOUNT - 2e18);
+        }
+
+        function testSubmitOrder_WithProtocolAndIntegratorFees() external {
+            TransitStation station = _deployDefaultStation();
+            address integrator = makeAddr("integrator");
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.protocolFeeNormalized18 = 0.5e18;
+            quote.integratorFeeNormalized18 = 2e18;
+            quote.integratorFeeReceiver = integrator;
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 userBalanceBefore = offerAsset.balanceOf(user);
+            uint256 protocolBalanceBefore = offerAsset.balanceOf(protocolFeeRecipient);
+            uint256 integratorBalanceBefore = offerAsset.balanceOf(integrator);
+            uint256 offerReceiverBalanceBefore = offerAsset.balanceOf(offerReceiver);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(user), userBalanceBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(offerAsset.balanceOf(protocolFeeRecipient), protocolBalanceBefore + 0.5e18);
+            assertEq(offerAsset.balanceOf(integrator), integratorBalanceBefore + 2e18);
+            assertEq(
+                offerAsset.balanceOf(offerReceiver), offerReceiverBalanceBefore + (DEFAULT_OFFER_AMOUNT - 0.5e18 - 2e18)
+            );
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.terms.offerAmountNormalized18AfterFees, DEFAULT_OFFER_AMOUNT - 0.5e18 - 2e18);
+        }
+
+        function testSubmitOrder_SubmitterIsNotReceiver() external {
+            TransitStation station = _deployDefaultStation();
+            address receiver = makeAddr("receiver");
+            address submitter = makeAddr("submitter");
+
+            deal(address(offerAsset), submitter, DEFAULT_OFFER_AMOUNT * 10);
+            vm.prank(submitter);
+            offerAsset.approve(address(station), DEFAULT_OFFER_AMOUNT);
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.receiver = receiver;
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 submitterBalanceBefore = offerAsset.balanceOf(submitter);
+            uint256 offerReceiverBalanceBefore = offerAsset.balanceOf(offerReceiver);
+
+            vm.prank(submitter);
+            bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(submitter), submitterBalanceBefore - DEFAULT_OFFER_AMOUNT);
+            assertEq(offerAsset.balanceOf(offerReceiver), offerReceiverBalanceBefore + DEFAULT_OFFER_AMOUNT);
+
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.terms.uuid, uuid);
+            assertEq(order.terms.receiver, receiver);
+        }
+
         function testSubmitOrder_RoutesCrossChainWithoutPendingOrder() external {
             TransitStation station = _deployDefaultStationWithCrossChainRoute();
             vm.startPrank(owner);
@@ -938,6 +1079,93 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.submitOrderWithPermit(quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0));
         }
 
+        // ========================================= submitOrderWithPermit EFFECTS =========================================
+
+        function testSubmitOrderWithPermit_PermitGrantsAllowanceWhenNoneExists() external {
+            tERC20Permit offerPermit = new tERC20Permit(18);
+            TransitStation station = _deployStationWithAssets(ERC20(address(offerPermit)), wantAsset);
+
+            uint256 permitUserKey = 0xABCD;
+            address permitUser = vm.addr(permitUserKey);
+            offerPermit.mint(permitUser, DEFAULT_OFFER_AMOUNT * 10);
+
+            TransitStation.Quote memory quote = TransitStation.Quote({
+                route: TransitStation.Route({
+                    destEID: endpoint.eid(), offerAsset: address(offerPermit), wantAsset: address(wantAsset)
+                }),
+                offerAmountNormalized18: DEFAULT_OFFER_AMOUNT,
+                receiver: permitUser,
+                protocolFeeNormalized18: 0,
+                integratorFeeNormalized18: 0,
+                integratorFeeReceiver: address(0),
+                distributorCode: bytes32(0),
+                deadline: block.timestamp + 1 hours,
+                salt: bytes32(0)
+            });
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 deadline = block.timestamp + 1 hours;
+            (uint8 v, bytes32 r, bytes32 s) =
+                _getPermitSignature(offerPermit, permitUserKey, address(station), DEFAULT_OFFER_AMOUNT, deadline);
+
+            assertEq(offerPermit.allowance(permitUser, address(station)), 0);
+
+            vm.prank(permitUser);
+            bytes32 uuid = station.submitOrderWithPermit{ value: 0 }(quote, signature, deadline, v, r, s);
+
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(station.pendingOrderCount(), 1);
+            assertEq(offerPermit.allowance(permitUser, address(station)), 0);
+            assertEq(offerPermit.balanceOf(offerReceiver), DEFAULT_OFFER_AMOUNT);
+        }
+
+        function testSubmitOrderWithPermit_FrontRunPermitLeavesAllowanceForOrder() external {
+            tERC20Permit offerPermit = new tERC20Permit(18);
+            TransitStation station = _deployStationWithAssets(ERC20(address(offerPermit)), wantAsset);
+
+            uint256 permitUserKey = 0xBCDE;
+            address permitUser = vm.addr(permitUserKey);
+            offerPermit.mint(permitUser, DEFAULT_OFFER_AMOUNT * 10);
+
+            TransitStation.Quote memory quote = TransitStation.Quote({
+                route: TransitStation.Route({
+                    destEID: endpoint.eid(), offerAsset: address(offerPermit), wantAsset: address(wantAsset)
+                }),
+                offerAmountNormalized18: DEFAULT_OFFER_AMOUNT,
+                receiver: permitUser,
+                protocolFeeNormalized18: 0,
+                integratorFeeNormalized18: 0,
+                integratorFeeReceiver: address(0),
+                distributorCode: bytes32(0),
+                deadline: block.timestamp + 1 hours,
+                salt: bytes32(0)
+            });
+            bytes memory signature = _signQuote(station, quote);
+
+            uint256 deadline = block.timestamp + 1 hours;
+            (uint8 v, bytes32 r, bytes32 s) =
+                _getPermitSignature(offerPermit, permitUserKey, address(station), DEFAULT_OFFER_AMOUNT, deadline);
+
+            assertEq(offerPermit.allowance(permitUser, address(station)), 0);
+
+            // A front-runner executes the permit first, consuming the nonce and setting the allowance.
+            address frontRunner = makeAddr("frontRunner");
+            vm.prank(frontRunner);
+            offerPermit.permit(permitUser, address(station), DEFAULT_OFFER_AMOUNT, deadline, v, r, s);
+
+            assertEq(offerPermit.allowance(permitUser, address(station)), DEFAULT_OFFER_AMOUNT);
+
+            // `submitOrderWithPermit` now sees an invalid/reused permit nonce, but the existing allowance
+            // from the front-run is sufficient for the order to succeed.
+            vm.prank(permitUser);
+            bytes32 uuid = station.submitOrderWithPermit{ value: 0 }(quote, signature, deadline, v, r, s);
+
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(station.pendingOrderCount(), 1);
+            assertEq(offerPermit.allowance(permitUser, address(station)), 0);
+            assertEq(offerPermit.balanceOf(offerReceiver), DEFAULT_OFFER_AMOUNT);
+        }
+
         // ========================================= lzReceive REVERTS =========================================
 
         function testLzReceive_RevertIf_OnlyEndpoint() external {
@@ -948,11 +1176,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.OrderTerms memory terms = _defaultOrderTerms();
             bytes memory payload = abi.encode(terms);
-            Origin memory origin = Origin({
-                srcEid: DEST_EID,
-                sender: bytes32(uint256(uint160(address(station)))),
-                nonce: 1
-            });
+            Origin memory origin =
+                Origin({ srcEid: DEST_EID, sender: bytes32(uint256(uint160(address(station)))), nonce: 1 });
 
             address notEndpoint = makeAddr("notEndpoint");
             vm.prank(notEndpoint);
@@ -966,11 +1191,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.OrderTerms memory terms = _defaultOrderTerms();
             bytes memory payload = abi.encode(terms);
-            Origin memory origin = Origin({
-                srcEid: DEST_EID,
-                sender: bytes32(uint256(uint160(address(station)))),
-                nonce: 1
-            });
+            Origin memory origin =
+                Origin({ srcEid: DEST_EID, sender: bytes32(uint256(uint160(address(station)))), nonce: 1 });
 
             vm.prank(address(endpoint));
             vm.expectRevert(abi.encodeWithSelector(IOAppCore.NoPeer.selector, DEST_EID));
@@ -1010,11 +1232,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             });
 
             bytes memory payload = abi.encode(terms);
-            Origin memory origin = Origin({
-                srcEid: DEST_EID,
-                sender: bytes32(uint256(uint160(address(station)))),
-                nonce: 1
-            });
+            Origin memory origin =
+                Origin({ srcEid: DEST_EID, sender: bytes32(uint256(uint160(address(station)))), nonce: 1 });
 
             vm.prank(address(endpoint));
             vm.expectRevert(TransitStation.ZeroAmountDue.selector);
@@ -1029,11 +1248,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.OrderTerms memory terms = _defaultOrderTerms();
             bytes memory payload = abi.encode(terms);
-            Origin memory origin = Origin({
-                srcEid: DEST_EID,
-                sender: bytes32(uint256(uint160(address(station)))),
-                nonce: 1
-            });
+            Origin memory origin =
+                Origin({ srcEid: DEST_EID, sender: bytes32(uint256(uint160(address(station)))), nonce: 1 });
 
             assertEq(station.pendingOrderCount(), 0);
 
@@ -1051,7 +1267,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             address unauthorized = makeAddr("unauthorized");
             vm.prank(unauthorized);
             vm.expectRevert("UNAUTHORIZED");
-            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
         }
 
         function testExecutePendingOrders_RevertIf_Paused() external {
@@ -1062,7 +1278,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             vm.prank(executor);
             vm.expectRevert(Pausable.EnforcedPause.selector);
-            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
         }
 
         function testExecutePendingOrders_RevertIf_LengthMismatch() external {
@@ -1086,7 +1302,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             vm.prank(executor);
             vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, unknownUuid));
-            station.executePendingOrders(_singleFillBatch(unknownUuid, DEFAULT_OFFER_AMOUNT));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), unknownUuid, DEFAULT_OFFER_AMOUNT));
         }
 
         function testExecutePendingOrders_RevertIf_WantAssetMismatch() external {
@@ -1121,7 +1337,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                     TransitStation.AmountExceedsDue.selector, uuid, DEFAULT_OFFER_AMOUNT + 1, DEFAULT_OFFER_AMOUNT
                 )
             );
-            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT + 1));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT + 1));
         }
 
         function testExecutePendingOrders_RevertIf_ResidualApproval() external {
@@ -1135,7 +1351,67 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.expectRevert(
                 abi.encodeWithSelector(TransitStation.ResidualApproval.selector, address(wantAsset), wantAssetSource, 1)
             );
-            station.executePendingOrders(_singleFillBatch(uuid, DEFAULT_OFFER_AMOUNT));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
+        }
+
+        // ========================================= executePendingOrders EFFECTS =========================================
+
+        function testExecutePendingOrders_FillsMultipleBatches() external {
+            ERC20 wantAsset6 = new tERC20(6);
+            TransitStation station = _deployStationWithAssets(offerAsset, wantAsset6);
+
+            vm.startPrank(owner);
+            rolesAuthority.setUserRole(executor, EXECUTOR_ROLE, true);
+            rolesAuthority.setRoleCapability(
+                EXECUTOR_ROLE, address(station), TransitStation.executePendingOrders.selector, true
+            );
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](2);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            routes[1] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset6)
+            });
+            bool[] memory approved = new bool[](2);
+            approved[0] = true;
+            approved[1] = true;
+            station.setRouteApprovals(routes, approved);
+            vm.stopPrank();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.wantAsset = address(wantAsset);
+            bytes memory signature = _signQuote(station, quote);
+            vm.prank(user);
+            bytes32 uuid1 = station.submitOrder{ value: 0 }(quote, signature);
+
+            quote.route.wantAsset = address(wantAsset6);
+            quote.salt = bytes32(uint256(1));
+            signature = _signQuote(station, quote);
+            vm.prank(user);
+            bytes32 uuid2 = station.submitOrder{ value: 0 }(quote, signature);
+
+            uint256 amountDue6 = DEFAULT_OFFER_AMOUNT / 1e12;
+
+            deal(address(wantAsset), wantAssetSource, DEFAULT_OFFER_AMOUNT * 10);
+            deal(address(wantAsset6), wantAssetSource, amountDue6 * 10);
+            vm.startPrank(wantAssetSource);
+            wantAsset.approve(address(station), DEFAULT_OFFER_AMOUNT);
+            wantAsset6.approve(address(station), amountDue6);
+            vm.stopPrank();
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](2);
+            batches[0] = _singleFillBatch(address(wantAsset), uuid1, DEFAULT_OFFER_AMOUNT)[0];
+            batches[1] = _singleFillBatch(address(wantAsset6), uuid2, amountDue6)[0];
+
+            uint256 userWant18Before = wantAsset.balanceOf(user);
+
+            vm.prank(executor);
+            station.executePendingOrders(batches);
+
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(wantAsset.balanceOf(user) - userWant18Before, DEFAULT_OFFER_AMOUNT);
+            assertEq(wantAsset6.balanceOf(user), amountDue6);
         }
 
         // ========================================= forceRemovePendingOrder REVERTS =========================================
@@ -1411,8 +1687,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 expectedUuid =
-                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
 
             vm.prank(user);
             bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
@@ -1425,13 +1700,11 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 expectedUuid =
-                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
 
             vm.prank(user);
-            bytes32 uuid = station.submitOrderWithPermit(
-                quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0)
-            );
+            bytes32 uuid =
+                station.submitOrderWithPermit(quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0));
 
             assertEq(uuid, expectedUuid);
         }
@@ -1441,8 +1714,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 expectedUuid =
-                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
 
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature);
