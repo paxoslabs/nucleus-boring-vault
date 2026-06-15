@@ -32,30 +32,41 @@ contract DeploySmartDeposit is BaseScript {
         // Can call upgradeTo() to upgrade SDA implementation
         address smartDepositFactoryBeaconOwner; // ethereum protocol owner multisig
 
+        address smartDepositForwarder;
+
         // Receiver of sanctioned funds
-        address recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
+        address recoveryAccount;
 
-        // SmartDepositOwnerAndForwarder: Can call methods on SDA instances (e.g. depositAndForward)
-        // Should be a 1/1 Safe to allow for easy key rotation + transaction batching.
+        // SmartDepositForwarder: Can call methods on SDA instances (e.g. depositAndForward)
+        // Should be a 1/1 Safe where the owner maps to a key in a KMS to allow for easy key rotation.
 
-        // Staging Safe
-        address stagingSmartDepositOwnerAndForwarder = 0xBEFf07A518C51CD98DE81Ce4546c88BEBB120d7E;
+        // Staging Safe SmartDepositForwarder
+        address stagingSmartDepositForwarder = 0xBEFf07A518C51CD98DE81Ce4546c88BEBB120d7E;
 
-        // Prod Safe
-        address prodSmartDepositOwnerAndForwarder = 0x5e4ff2d30A9f1Dd7E6ef666cF774841295c3b5D1;
+        // Prod Safe SmartDepositForwarder
+        address prodSmartDepositForwarder = 0x7d77F3f150348a2b4b2a0AED07Ed96ee84172D57;
 
-        address smartDepositOwnerAndForwarder = stagingSmartDepositOwnerAndForwarder;
-
+        // Set FactoryBeaconOwner per chain
         if (block.chainid == 11_155_111) {
             dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843; // Sepolia test DCD address
 
-            // Use same owner for smartDepositFactoryBeacon as implementation contract since it's
-            // just testnet. live chains should use a multi-signer multisig reuiqirng 3/5
-            // quorum or more to upgrade implementation.
-            smartDepositFactoryBeaconOwner = smartDepositOwnerAndForwarder;
+            // ONLY allow same owner for smartDepositFactoryBeacon as owner of implementation contract on
+            // testnet.
+            // Live chains should re-use the protocol multisig for given production chain (which should have a
+            // multi-signer quorum of at least 3/5, and can be found via the address-book-tui.) This is to limit the
+            // risk of a vulnerability allowing an attacker to upgrade to a malicious implementation contract,
+            // compromising any forwarded user funds.
+            smartDepositFactoryBeaconOwner = smartDepositForwarder;
+            smartDepositForwarder = stagingSmartDepositForwarder;
+            recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
         } else if (block.chainid == 1) {
-            // Only allow protocol multi-sig owner to upgrade implementations on mainnet
-            smartDepositFactoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F;
+            smartDepositFactoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F; // mainnet protocol multisig
+            recoveryAccount = 0x0000000000417626Ef34D62C4DC189b021603f2F;
+            smartDepositForwarder = prodSmartDepositForwarder;
+        } else if (block.chainid == 8453) {
+            smartDepositFactoryBeaconOwner = 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E; // base protocol multisig
+            recoveryAccount = 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E;
+            smartDepositForwarder = prodSmartDepositForwarder;
         } else {
             revert("unsupported chain; set dcdAddress and smartDepositFactoryBeaconOwner for this chainid");
         }
@@ -80,8 +91,7 @@ contract DeploySmartDeposit is BaseScript {
         // Deploy implementation via CREATEX for consistent cross-chain address
         bytes memory implCreationCode = type(SmartDepositAddress).creationCode;
         address implementation = CREATEX.deployCreate3(
-            implSalt,
-            abi.encodePacked(implCreationCode, abi.encode(dcdAddress, smartDepositOwnerAndForwarder, recoveryAccount))
+            implSalt, abi.encodePacked(implCreationCode, abi.encode(dcdAddress, smartDepositForwarder, recoveryAccount))
         );
 
         // Deploy SmartDepositFactoryBeacon via CREATEX for consistent cross-chain address
@@ -104,7 +114,7 @@ contract DeploySmartDeposit is BaseScript {
             "smartDepositFactoryBeacon owner mismatch"
         );
         require(address(SmartDepositAddress(implementation).DCD()) == dcdAddress, "impl dcd mismatch");
-        require(SmartDepositAddress(implementation).owner() == smartDepositOwnerAndForwarder, "impl owner mismatch");
+        require(SmartDepositAddress(implementation).owner() == smartDepositForwarder, "impl owner mismatch");
         require(
             SmartDepositAddress(implementation).recoveryAccount() == recoveryAccount, "impl recoveryAccount mismatch"
         );
