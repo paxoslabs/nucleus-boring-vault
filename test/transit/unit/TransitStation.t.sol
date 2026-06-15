@@ -1304,4 +1304,82 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.setDelegate(makeAddr("newDelegate"));
         }
 
+        // ========================================= GETTER TESTS =========================================
+
+        function testProtocolFeeRecipient_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            address newRecipient = makeAddr("newRecipient");
+
+            vm.prank(owner);
+            station.setProtocolFeeRecipient(newRecipient);
+
+            assertEq(station.protocolFeeRecipient(), newRecipient);
+        }
+
+        function testQuoteSigner_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            address newSigner = makeAddr("newSigner");
+
+            vm.prank(owner);
+            station.setQuoteSigner(newSigner);
+
+            assertEq(station.quoteSigner(), newSigner);
+        }
+
+        function testOfferReceiver_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            address newOfferReceiver = makeAddr("newOfferReceiver");
+
+            vm.prank(owner);
+            station.setOfferReceiver(newOfferReceiver);
+
+            assertEq(station.offerReceiver(), newOfferReceiver);
+        }
+
+        function testWantAssetSource_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            address newWantAssetSource = makeAddr("newWantAssetSource");
+
+            vm.prank(owner);
+            station.setWantAssetSource(newWantAssetSource);
+
+            assertEq(station.wantAssetSource(), newWantAssetSource);
+        }
+
+        function testMessageGasLimit_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            uint64 gasLimit = 400_000;
+
+            vm.prank(owner);
+            station.setMessageGasLimit(DEST_EID, gasLimit);
+
+            assertEq(station.messageGasLimit(DEST_EID), gasLimit);
+        }
+
+        function testApprovedRoutes_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Route[] memory routes = new TransitStation.Route[](1);
+            routes[0] = TransitStation.Route({
+                destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
+            });
+            bool[] memory approved = new bool[](1);
+            approved[0] = true;
+
+            vm.prank(owner);
+            station.setRouteApprovals(routes, approved);
+
+            assertTrue(station.approvedRoutes(endpoint.eid(), address(offerAsset), address(wantAsset)));
+        }
+
+        function testPeers_GetterAfterSetter() external {
+            TransitStation station = _deployDefaultStation();
+            bytes32 peer = bytes32(uint256(uint160(address(station))));
+
+            vm.prank(owner);
+            station.setPeer(DEST_EID, peer);
+
+            assertEq(station.peers(DEST_EID), peer);
+        }
+
     }
