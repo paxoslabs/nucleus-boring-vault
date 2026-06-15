@@ -931,6 +931,18 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(offerAsset.balanceOf(address(station)), 0);
         }
 
+        function testSubmitOrder_LeavesZeroOfferTokenBalanceInStation() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+        }
+
         function testSubmitOrder_RoutesSameChainToPendingOrders() external {
             TransitStation station = _deployDefaultStation();
 
