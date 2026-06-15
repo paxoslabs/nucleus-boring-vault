@@ -52,7 +52,7 @@ contract DeploySmartDeposit is BaseScript {
 
             // ONLY allow same owner for smartDepositFactoryBeacon as owner of implementation contract on
             // testnet.
-            // Live chains should re-use the protocol multisig for given production chain (which should have a
+            // Live chains should reuse the protocol multisig for given production chain (which should have a
             // multi-signer quorum of at least 3/5, and can be found via the address-book-tui.) This is to limit the
             // risk of a vulnerability allowing an attacker to upgrade to a malicious implementation contract,
             // compromising any forwarded user funds.
