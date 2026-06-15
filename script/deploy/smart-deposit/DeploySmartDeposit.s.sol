@@ -64,12 +64,18 @@ contract DeploySmartDeposit is BaseScript {
             recoveryAccount = 0x0000000000417626Ef34D62C4DC189b021603f2F;
             smartDepositForwarder = prodSmartDepositForwarder;
         } else if (block.chainid == 8453) {
+            dcdAddress = 0xd0E5D3542f9E5A72F39E0245b953c5134E876c1B; // bkey prod vault dcd
             smartDepositFactoryBeaconOwner = 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E; // base protocol multisig
             recoveryAccount = 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E;
             smartDepositForwarder = prodSmartDepositForwarder;
         } else {
             revert("unsupported chain; set dcdAddress and smartDepositFactoryBeaconOwner for this chainid");
         }
+
+        require(dcdAddress != address(0), "DCD address empty");
+        require(smartDepositFactoryBeaconOwner != address(0), "smartDepositFactoryBeaconOwner address empty");
+        require(recoveryAccount != address(0), "recovery address empty");
+        require(smartDepositForwarder != address(0), "smartDepositForwarder address empty");
 
         bytes32 implSalt;
         bytes32 smartDepositFactoryBeaconSalt;
