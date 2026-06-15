@@ -1021,6 +1021,28 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 
+        function testLzReceive_IncrementsPendingOrderCount() external {
+            TransitStation station = _deployDefaultStation();
+
+            vm.prank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: DEST_EID,
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 1
+            });
+
+            assertEq(station.pendingOrderCount(), 0);
+
+            vm.prank(address(endpoint));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+
+            assertEq(station.pendingOrderCount(), 1);
+        }
+
         // ========================================= executePendingOrders REVERTS =========================================
 
         function testExecutePendingOrders_RevertIf_CallerNotAuthorized() external {
@@ -1380,6 +1402,95 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.setPeer(DEST_EID, peer);
 
             assertEq(station.peers(DEST_EID), peer);
+        }
+
+        // ========================================= RETURN VALUE TESTS =========================================
+
+        function testSubmitOrder_ReturnsUuid() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 expectedUuid =
+                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            vm.prank(user);
+            bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
+
+            assertEq(uuid, expectedUuid);
+        }
+
+        function testSubmitOrderWithPermit_ReturnsUuid() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 expectedUuid =
+                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            vm.prank(user);
+            bytes32 uuid = station.submitOrderWithPermit(
+                quote, signature, block.timestamp + 1 hours, 27, bytes32(0), bytes32(0)
+            );
+
+            assertEq(uuid, expectedUuid);
+        }
+
+        function testGetPendingOrders_ReturnsCorrectOrder() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 expectedUuid =
+                keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            TransitStation.Order[] memory orders = station.getPendingOrders();
+            assertEq(orders.length, 1);
+
+            TransitStation.Order memory order = orders[0];
+            assertEq(order.terms.uuid, expectedUuid);
+            assertEq(order.terms.wantAsset, address(wantAsset));
+            assertEq(order.terms.receiver, user);
+            assertEq(order.terms.offerAsset, address(offerAsset));
+            assertEq(order.terms.offerAmountNormalized18AfterFees, DEFAULT_OFFER_AMOUNT);
+            assertEq(order.amountDue, DEFAULT_OFFER_AMOUNT);
+            assertEq(order.queuedAt, block.timestamp);
+        }
+
+        function testPendingOrderCount_ReturnsCorrectCount() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+
+            assertEq(station.pendingOrderCount(), 0);
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+            assertEq(station.pendingOrderCount(), 1);
+
+            quote.salt = bytes32(uint256(1));
+            signature = _signQuote(station, quote);
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+            assertEq(station.pendingOrderCount(), 2);
+        }
+
+        function testQuoteSend_ReturnsNativeFee() external {
+            TransitStation station = _deployDefaultStationWithCrossChainRoute();
+
+            vm.startPrank(owner);
+            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
+            station.setMessageGasLimit(DEST_EID, 400_000);
+            vm.stopPrank();
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+
+            uint256 fee = station.quoteSend(DEST_EID, terms);
+            assertEq(fee, LZ_QUOTE_FEE);
         }
 
     }
