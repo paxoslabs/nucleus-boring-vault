@@ -8,10 +8,12 @@ full NatSpec + dense inline comments, and a passing Foundry suite (`test/transit
 9 tests — deploy script, single-chain submit→execute, cross-chain bridge attempt, decimal-scaling both
 directions, sub-dust reverts, fee-dust partition, distributor-code attribution). Testnet deployments (Sepolia 11155111, Robinhood 46630,
 via `script/deploy/DeployTransitStation.s.sol`) are **pre-redesign bytecode** (old `Quote` shape — redeploy
-needed before backend integration). Source-of-truth design is `transit/DESIGN.md` (KDDs).
+needed before backend integration). The source-of-truth design doc ("Transit Stations Design Doc", KDDs)
+lives in **Google Docs** — the repo copy (`transit/DESIGN.md`) was removed 2026-06-12; the KDD quick
+reference below indexes it, and the Decisions Log here carries the full on-repo history.
 
-**IMPORTANT — `DESIGN.md`/KDDs are dev scaffolding only.** Never reference them (or "KDD N") in source
-comments; a code reader/auditor won't have them. Code comments must be self-contained — state the
+**IMPORTANT — this file and the KDDs are dev scaffolding only.** Never reference them (or "KDD N") in
+source comments; a code reader/auditor won't have them. Code comments must be self-contained — state the
 _why_ inline. (Decisions Log 2026-06-06.)
 
 ## Architecture: server-approved quotes (current)
@@ -210,22 +212,35 @@ The repo already has a production LZ pattern in `src/base/Roles/CrossChain/`. We
 | `BridgeData.messageGas` / `OptionsBuilder`                | Same — required because destination payload size is larger, so gas limits matter more                                                                                                               |
 | `requiresAuth` on `bridge()`                              | On Transit, `submitOrder` is `requiresAuth` but opened to the public via `setPublicCapability` at deploy (revoke kill-switch); `executePendingOrders` is `requiresAuth` (EXECUTOR role, not public) |
 
-## Key Design Decisions (Quick Reference — see DESIGN.md for full context)
+## Key Design Decisions (Quick Reference — full context in the "Transit Stations Design Doc" on Google Docs)
 
 - KDD 1: Per-chain mapping config, **no merkle root**.
 - KDD 2: `EnumerableSet<bytes32>` of UUIDs + `mapping(bytes32 => Order)`. **No swap-and-pop** (breaks batch processing).
 - KDD 3: Bridge **full** order data, not hashes.
-- KDD 4: **LZ** over CCIP.
+- KDD 4: **LZ** over CCIP (configurable confirmations/latency; delivery ≈ `(srcBlockTime × confirmations) + (destBlockTime × (2 + numDVNs))`).
 - KDD 5: **Not upgradeable** — new versions are new deployments.
-- KDD 6/7: **No on-chain refunds** (user or protocol-initiated); admin force-remove only.
+- KDD 6/7: **No on-chain refunds** (user or protocol-initiated); admin force-remove only; vault keeps custody/refund authority.
 - KDD 8: **Partial fills allowed** at smart-contract level; min applies per order, not per fill.
-- KDD 9: **No on-chain max size**; rate limits live off-chain.
-- KDD 10: **Per-route minimum** order size.
-- KDD 11: **No expiry**.
+- KDD 9: **No on-chain max size**; rate limits live off-chain (LZ reorg risk managed there).
+- KDD 10: **Per-route minimum** order size (still off-chain only — open question #12).
+- KDD 11: **No expiry** (expiry reintroduces liquidity-tracking/refund problems; refund manually if needed).
 - KDD 12: Single-chain **and** cross-chain in the same contract.
-- KDD A: **Privileged execution only** (EXECUTOR role).
-- KDD B/C/E: **Additive flat + percent fees**, per route.
-- KDD D: No partial force-remove.
+- KDD 13: **Privileged execution only** (EXECUTOR role) — users never decide when liquidity leaves.
+- KDD 14/17: **Additive flat + percent fees** (flat + % of principal — industry/PXL standard).
+- KDD 15: Min amount configured **per route**.
+- KDD 16: **No partial force-remove** (partial fill + removal already covers it).
+- KDD 18: LZ confirmations count is per-deployment config (formula above).
+- KDD 19: Batch execute **throws on any error** (no skip-and-emit — rules out state-mutating silent failures).
+- KDD 20: superseded by KDD 26.
+- KDD 21: **Server-signed quotes** with on-chain fee caps as the only on-chain fee guard; no unsigned/default path.
+- KDD 22: **Directional route allowlist on-chain** (`(destEID, offer, want)`), NOT asset whitelist — direction matters (a depegged USDG→USDC route must be blockable while USDC→USDG stays open); signer authority stops at fees.
+- KDD 23: Route config as **on-chain mapping, not merkle** (transparent multisig updates beat proof infra; swappable later).
+- KDD 24: Routes are **universal on-chain**; per-enterprise subsetting happens off-chain in signing (an on-chain enterprise→route map adds nothing — a compromised backend can impersonate any enterprise).
+- KDD 26: **Station never custodies** — offer user→`offerReceiver` on submit, want `wantAssetSource`→receiver on execute; a dangling approval counts as custody (residual-approval check).
+- KDD 27: **`amountDue` derived on-chain from normalized-18 amounts** — definitively a 1:1 stable swap supporting differing decimals; decimals never bridge (see Decisions Log 2026-06-10).
+- KDD 28: **Both fees capped** (`MAX_PROTOCOL_FEE_BPS` 0.5%, `MAX_INTEGRATOR_FEE_BPS` 10%) — fee+receiver are backend-signed, so a backend hack alone could otherwise skim from any user (Decisions Log 2026-06-10).
+- KDD 29: **`distributorCode` (bytes32)** in the signed quote — backend-attested attribution, emitted indexed on `OrderSubmitted`, never bridged/stored (Decisions Log 2026-06-10/11).
+- KDD 30: **Route checked on send only** — no re-check in `_lzReceive` (Decisions Log 2026-06-11).
 
 ## Policy System — REMOVED (superseded 2026-06-02)
 
