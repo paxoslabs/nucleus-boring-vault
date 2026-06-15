@@ -128,9 +128,7 @@ abstract contract BaseScript is Script {
         } else if (block.chainid == 10) {
             return 0x124A134C0A60FdA03f594C641F8D7d44D4c6d6d3;
         } else if (block.chainid == 4663) {
-            // TODO THIS IS TEMPORARY FOR THE SIMULATION NOT THE ACTUAL SAFE MUST BE CHANGED LATER
-            // ONCE SAFE IS ACTUALLY DEPLOYED ON MAINNET
-            return 0xDdDdF452dEc1F3877392e08810a7994c2A19A000;
+            return 0x049BE09017dEff9bCf81793E0278c07671FD3C82;
         } else {
             revert("Base Script getMultisig: bad chain id");
         }

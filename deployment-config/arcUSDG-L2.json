@@ -1,7 +1,7 @@
 {
     "nameEntropy": "arcUSDG",
     "base": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
-    "protocolAdmin": "0xDdDdF452dEc1F3877392e08810a7994c2A19A000",
+    "protocolAdmin": "0x049BE09017dEff9bCf81793E0278c07671FD3C82",
     "boringVaultAndBaseDecimals": "6",
     "boringVault": {
         "boringVaultName": "Arcus USDG",
@@ -16,7 +16,7 @@
         "address": "0x0000000000000000000000000000000000000000"
     },
     "accountant": {
-        "payoutAddress": "0xDdDdF452dEc1F3877392e08810a7994c2A19A000",
+        "payoutAddress": "0x049BE09017dEff9bCf81793E0278c07671FD3C82",
         "allowedExchangeRateChangeUpper": "10000",
         "allowedExchangeRateChangeLower": "10000",
         "minimumUpdateDelayInSeconds": "0",
