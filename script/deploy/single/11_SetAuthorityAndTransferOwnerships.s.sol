@@ -37,6 +37,8 @@ contract SetAuthorityAndTransferOwnerships is BaseScript {
         require(address(config.teller).code.length != 0, "teller must have code");
         require(address(config.accountant).code.length != 0, "accountant must have code");
         // require(address(config.withdrawQueue).code.length != 0, "withdrawQueue must have code");
+
+        require(address(config.rolesAuthority).code.length != 0, "rolesAuthority must have code");
         require(config.rolesAuthority != address(0), "rolesAuthority");
         require(config.protocolAdmin != address(0), "protocolAdmin");
         // require(
