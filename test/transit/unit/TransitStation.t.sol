@@ -1507,6 +1507,20 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.forceRemovePendingOrder(unknownUuid);
         }
 
+        // ========================================= forceRemovePendingOrder EFFECTS =========================================
+
+        function testForceRemovePendingOrder_RemovesOrder() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            assertEq(station.pendingOrderCount(), 1);
+
+            vm.prank(owner);
+            station.forceRemovePendingOrder(uuid);
+
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(station.getPendingOrders().length, 0);
+        }
+
         // ========================================= ADMIN & UTILITY REVERTS =========================================
 
         function testRecoverETH_RevertIf_CallerNotAuthorized() external {
@@ -1545,6 +1559,34 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(unauthorized);
             vm.expectRevert("UNAUTHORIZED");
             station.recoverTokens(offerAsset, 1e18);
+        }
+
+        // ========================================= ADMIN & UTILITY EFFECTS =========================================
+
+        function testRecoverETH_RecoversFunds() external {
+            TransitStation station = _deployDefaultStation();
+            vm.deal(address(station), 1 ether);
+
+            uint256 ownerBalanceBefore = owner.balance;
+
+            vm.prank(owner);
+            station.recoverETH(1 ether);
+
+            assertEq(address(station).balance, 0);
+            assertEq(owner.balance, ownerBalanceBefore + 1 ether);
+        }
+
+        function testRecoverTokens_RecoversTokens() external {
+            TransitStation station = _deployDefaultStation();
+            deal(address(offerAsset), address(station), 1e18);
+
+            uint256 ownerBalanceBefore = offerAsset.balanceOf(owner);
+
+            vm.prank(owner);
+            station.recoverTokens(offerAsset, 1e18);
+
+            assertEq(offerAsset.balanceOf(address(station)), 0);
+            assertEq(offerAsset.balanceOf(owner), ownerBalanceBefore + 1e18);
         }
 
         function testSetProtocolFeeRecipient_RevertIf_CallerNotAuthorized() external {
