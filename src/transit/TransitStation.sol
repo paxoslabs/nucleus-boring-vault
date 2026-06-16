@@ -19,7 +19,7 @@ import { Pausable } from "src/helper/Pausable.sol";
 ///      fulfillment, the want asset is pulled from `wantAssetSource` straight to the receiver. A cross-chain order
 ///      travels as a LayerZero message carrying its `OrderTerms`; the peer station's `_lzReceive` expands them into
 ///      an `Order` and queues it exactly as a same-chain order would be. All quote amounts and bridged values are
-///      normalized to 18 decimals; token-native units exist only at the transfer boundary.
+///      normalized to 18 decimals;
 contract TransitStation is OAppAuth, Pausable {
 
     using SafeTransferLib for ERC20;
@@ -56,14 +56,14 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Backend-priced swap terms, EIP-712 signed by `quoteSigner`. Bearer instrument: anyone may submit a
-    ///         valid quote (they pay the offer amount; the want asset goes to the fixed `receiver`, so reuse only
-    ///         self-griefs). ALL amounts are normalized to 18 decimals regardless of the token's own decimals and are
+    ///         valid quote (they pay the offer amount; the want asset goes to the fixed `receiver`).
+    ///         ALL amounts are normalized to 18 decimals regardless of the token's own decimals and are
     ///         truncated down to the offer asset's native units at transfer time.
     struct Quote {
         Route route;
         uint256 offerAmountNormalized18;
         address receiver;
-        uint256 protocolFeeNormalized18; // PXL's cut; capped at MAX_PROTOCOL_FEE_BPS
+        uint256 protocolFeeNormalized18; // capped at MAX_PROTOCOL_FEE_BPS
         uint256 integratorFeeNormalized18; // frontend's cut; capped at MAX_INTEGRATOR_FEE_BPS
         address integratorFeeReceiver;
         bytes32 distributorCode; // Arbitrary code for emitting the source of funds
@@ -91,7 +91,7 @@ contract TransitStation is OAppAuth, Pausable {
     uint256 public constant MAX_INTEGRATOR_FEE_BPS = 1000;
 
     // EIP-712 type hashes. The domain separator is hand-rolled (OZ's EIP712 base pulls in StorageSlot which needs
-    // solc >=0.8.24, and this repo pins 0.8.21) and recomputed live in `_domainSeparator`, so it is fork-safe.
+    // solc >=0.8.24, and this repo pins 0.8.21). Recomputed live in `_domainSeparator`, so it is fork-safe.
     bytes32 internal constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 internal constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
@@ -105,11 +105,10 @@ contract TransitStation is OAppAuth, Pausable {
     address public protocolFeeRecipient;
     /// @notice Trusted backend key; every `Quote` must carry its EIP-712 signature.
     address public quoteSigner;
-    /// @notice Destination for the net deposit on submit (in practice a BoringVault). The station only transfers
+    /// @notice Destination for the net deposit on submit. The station only transfers
     ///         to it — it is not held by the station.
     address public offerReceiver;
-    /// @notice Address the executor pulls the want asset FROM on fulfillment; must approve this station. The station
-    ///         holds nothing between blocks.
+    /// @notice Address the executor pulls the want asset FROM on fulfillment; must approve this station
     address public wantAssetSource;
 
     /// @notice Per-destination-EID gas the LZ executor supplies to the peer's `lzReceive`.
@@ -136,17 +135,16 @@ contract TransitStation is OAppAuth, Pausable {
         bytes32 indexed distributorCode
     );
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
-    ///         message `guid`, so trackers need no join: `guid` traces the message and matches the destination's
-    ///         `OrderBridgeReceived`.
+    ///         message `guid`
     event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, OrderTerms terms);
-    /// @notice Emitted when an order enters a pending set (local submit or cross-chain receive).
+    /// @notice Emitted when an order enters a pending set (local submit or cross-chain receive)
     event OrderReceived(bytes32 indexed uuid, Order order);
     /// @notice Emitted when a bridged order arrives via LayerZero. Carries the full (now-queued) order plus the
     ///         `guid`, which matches the source's `OrderBridged`.
     event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, Order order);
-    /// @notice Emitted per fill; `remaining` is the want still owed after this fill (0 == fully filled).
+    /// @notice Emitted per fill; `remaining` is the want still owed after this fill (0 == fully filled)
     event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
-    /// @notice Emitted when the admin force-removes a pending order (no on-chain refund).
+    /// @notice Emitted when the admin force-removes a pending order
     event OrderForceRemoved(bytes32 indexed uuid, Order order);
     event ProtocolFeeRecipientSet(address indexed recipient);
     event QuoteSignerSet(address indexed signer);
@@ -176,7 +174,7 @@ contract TransitStation is OAppAuth, Pausable {
     error NetTruncatesToZero(uint256 offerAmountNormalized18, uint8 offerDecimals);
 
     /// @param _owner Owner (bypasses auth) and initial LZ delegate.
-    /// @param _authority RolesAuthority granting `requiresAuth` capabilities; an EXECUTOR role is needed from day one.
+    /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
     /// @param _endpoint LayerZero endpoint for this chain.
     /// @param _protocolFeeRecipient Initial `protocolFeeRecipient`.
     /// @param _quoteSigner Initial trusted `quoteSigner`.
@@ -265,7 +263,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Executor fulfils pending orders by pulling the want asset to each receiver; partial fills supported.
     /// @param batches Fills grouped by want asset; all fills for an asset must be in a single batch.
     /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after each
-    ///      batch we assert no approval is left dangling for its asset (a dangling approval is custody).
+    ///      batch we assert no approval is left dangling for its asset.
     ///      `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
     function executePendingOrders(FillBatch[] calldata batches) external requiresAuth whenNotPaused {
         for (uint256 i; i < batches.length;) {
@@ -308,8 +306,7 @@ contract TransitStation is OAppAuth, Pausable {
                 }
             }
 
-            // No approval may survive the batch — a leftover allowance would let the station pull later, i.e.
-            // custody.
+            // No approval may survive the batch — a leftover allowance would let the station pull later
             uint256 remainingAllowance = ERC20(batch.wantAsset).allowance(wantAssetSource, address(this));
             if (remainingAllowance != 0) {
                 revert ResidualApproval(batch.wantAsset, wantAssetSource, remainingAllowance);
@@ -321,9 +318,8 @@ contract TransitStation is OAppAuth, Pausable {
         }
     }
 
-    /// @notice Admin removal of a pending order (full only). No on-chain refund — the source-side deposit is
-    ///         refundable off-chain by the vault holding it.
-    /// @param uuid Order to remove.
+    /// @notice Admin removal of a pending order (full only). No on-chain refund — the admin may manually refund if
+    /// necessary @param uuid Order to remove.
     function forceRemovePendingOrder(bytes32 uuid) external requiresAuth {
         if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
         Order memory order = pendingOrders[uuid];
@@ -341,7 +337,8 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Sweep stray tokens to the owner. The station is not meant to hold tokens so these are assumed to be sent
-    /// by mistake. @param token Token to sweep.
+    /// by mistake.
+    /// @param token Token to sweep.
     /// @param amount Amount to send.
     function recoverTokens(ERC20 token, uint256 amount) external requiresAuth {
         token.safeTransfer(owner, amount);
@@ -538,9 +535,9 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @dev Destination handler for a bridged order. Sender authenticity is already enforced by
-    ///      `OAppAuthReceiver.lzReceive` (LZ `peers`); here we re-check the route against this chain's allowlist
-    ///      (`destEID = thisChainEID`). A revert here is safe: delivery is unordered, so the message simply stays
-    ///      retryable on the endpoint until the route is (re-)approved — nothing is consumed.
+    ///      `OAppAuthReceiver.lzReceive` (LZ `peers`); the route was validated on the source at submission.
+    ///      A revert here is safe: delivery is unordered, so the message simply stays
+    ///      retryable on the endpoint — nothing is consumed.
     function _lzReceive(
         Origin calldata origin,
         bytes32 guid,
