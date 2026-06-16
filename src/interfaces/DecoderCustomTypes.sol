@@ -109,6 +109,56 @@ contract DecoderCustomTypes {
         uint256 amountOutMinimum;
     }
 
+    // ========================================= UNISWAP V4 =========================================
+    // Mirrors Uniswap v4-periphery encodings. `Currency` and `IHooks` are address-wide, so they are
+    // represented as `address` here for ABI decoding.
+
+    struct V4PoolKey {
+        address currency0;
+        address currency1;
+        uint24 fee;
+        int24 tickSpacing;
+        address hooks;
+    }
+
+    struct V4PathKey {
+        address intermediateCurrency;
+        uint24 fee;
+        int24 tickSpacing;
+        address hooks;
+        bytes hookData;
+    }
+
+    struct V4ExactInputSingleParams {
+        V4PoolKey poolKey;
+        bool zeroForOne;
+        uint128 amountIn;
+        uint128 amountOutMinimum;
+        bytes hookData;
+    }
+
+    struct V4ExactInputParams {
+        address currencyIn;
+        V4PathKey[] path;
+        uint128 amountIn;
+        uint128 amountOutMinimum;
+    }
+
+    struct V4ExactOutputSingleParams {
+        V4PoolKey poolKey;
+        bool zeroForOne;
+        uint128 amountOut;
+        uint128 amountInMaximum;
+        bytes hookData;
+    }
+
+    struct V4ExactOutputParams {
+        address currencyOut;
+        V4PathKey[] path;
+        uint128 amountOut;
+        uint128 amountInMaximum;
+    }
+
     // ========================================= MORPHO BLUE =========================================
 
     struct MarketParams {
