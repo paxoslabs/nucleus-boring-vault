@@ -12,14 +12,14 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 import { Pausable } from "src/helper/Pausable.sol";
 
 /// @title TransitStation
-/// @notice Per-chain entrypoint for Paxos Labs Transit. A user submits a backend-signed `Quote`,
-///         deposits the offer asset, and receives the want asset on the same chain or a peer chain. The actual
-///         swap is priced off-chain and fulfilled by a privileged executor; the station does not custody funds.
+/// @notice Per-chain entrypoint for Transit. A user submits a backend-signed `Quote`,
+///         deposits the offer asset, and receives the want asset on the same chain or a peer chain. The 1:1 swap
+///         fee is priced off-chain and fulfilled by a privileged executor; the station does not custody funds.
 /// @dev Funds never bridge — only order data does. On submit, the net offer is pulled to `offerReceiver`; on
 ///      fulfillment, the want asset is pulled from `wantAssetSource` straight to the receiver. A cross-chain order
 ///      travels as a LayerZero message carrying its `OrderTerms`; the peer station's `_lzReceive` expands them into
 ///      an `Order` and queues it exactly as a same-chain order would be. All quote amounts and bridged values are
-///      normalized to 18 decimals;
+///      normalized to 18 decimals. When executing orders amounts are specificed in want asset decimals;
 contract TransitStation is OAppAuth, Pausable {
 
     using SafeTransferLib for ERC20;
@@ -47,8 +47,7 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice A swap queued for fulfillment on the destination chain: the source-attested terms plus the two fields
-    ///         only the destination can fill (the want asset — and so its decimals — is local there, not on the
-    ///         source).
+    ///         only the destination can fill
     struct Order {
         OrderTerms terms;
         uint256 amountDue; // want owed (want-asset units); derived in `_pushOrder`, decremented on partial fills
@@ -81,12 +80,15 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @dev Basis-points denominator.
-    uint256 internal constant ONE_HUNDRED_PERCENT = 10_000;
+    uint256 public constant ONE_HUNDRED_PERCENT = 10_000;
+
     /// @dev Quote amounts and bridged values are normalized to this many decimals; token-native amounts exist only at
     ///      the transfer boundary. Normalizing means token decimals never need to bridge.
     uint8 internal constant NORMALIZED_DECIMALS = 18;
+
     /// @notice Hard cap on the protocol fee (0.5%). Bounds what a compromised `quoteSigner` can skim as protocol fee.
     uint256 public constant MAX_PROTOCOL_FEE_BPS = 50;
+
     /// @notice Hard cap on the integrator fee (10%).
     uint256 public constant MAX_INTEGRATOR_FEE_BPS = 1000;
 
@@ -101,28 +103,35 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice This chain's LayerZero endpoint id, read from the endpoint at deploy.
     uint32 public immutable thisChainEID;
+
     /// @notice Receives `protocolFee` on every submit.
     address public protocolFeeRecipient;
+
     /// @notice Trusted backend key; every `Quote` must carry its EIP-712 signature.
     address public quoteSigner;
+
     /// @notice Destination for the net deposit on submit. The station only transfers
     ///         to it — it is not held by the station.
     address public offerReceiver;
+
     /// @notice Address the executor pulls the want asset FROM on fulfillment; must approve this station
     address public wantAssetSource;
 
     /// @notice Per-destination-EID gas the LZ executor supplies to the peer's `lzReceive`.
     mapping(uint32 => uint64) public messageGasLimit;
+
     /// @notice Global directional route allowlist (destEID => offerAsset => wantAsset). Enforced once, at
     ///         submission on the source, so a compromised backend can only ever land orders for globally-approved
     ///         asset pairs. Nested (not a hashed key) for readable getters.
-    mapping(uint32 => mapping(address => mapping(address => bool))) public approvedRoutes;
+    mapping(uint32 destEID => mapping(address offerAsset => mapping(address => bool))) public approvedRoutes;
+
     /// @notice Spent EIP-712 digests — replay guard.
     mapping(bytes32 => bool) public usedDigests;
 
     /// @dev Pending orders, addressed by UUID: an enumerable set of ids plus a UUID-keyed data mapping. Because the
     ///      executor references orders by UUID (not by position), removing one never disturbs another mid-batch.
-    EnumerableSet.Bytes32Set internal pendingOrderIds;
+    EnumerableSet.Bytes32Set public pendingOrderIds;
+
     mapping(bytes32 => Order) public pendingOrders;
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
@@ -134,18 +143,24 @@ contract TransitStation is OAppAuth, Pausable {
         address indexed user,
         bytes32 indexed distributorCode
     );
+
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
     ///         message `guid`
     event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, OrderTerms terms);
+
     /// @notice Emitted when an order enters a pending set (local submit or cross-chain receive)
     event OrderReceived(bytes32 indexed uuid, Order order);
+
     /// @notice Emitted when a bridged order arrives via LayerZero. Carries the full (now-queued) order plus the
     ///         `guid`, which matches the source's `OrderBridged`.
     event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, Order order);
+
     /// @notice Emitted per fill; `remaining` is the want still owed after this fill (0 == fully filled)
     event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
+
     /// @notice Emitted when the admin force-removes a pending order
     event OrderForceRemoved(bytes32 indexed uuid, Order order);
+
     event ProtocolFeeRecipientSet(address indexed recipient);
     event QuoteSignerSet(address indexed signer);
     event OfferReceiverSet(address indexed offerReceiver);
@@ -173,7 +188,7 @@ contract TransitStation is OAppAuth, Pausable {
     error ZeroAmountDue();
     error NetTruncatesToZero(uint256 offerAmountNormalized18, uint8 offerDecimals);
 
-    /// @param _owner Owner (bypasses auth) and initial LZ delegate.
+    /// @param _owner Owner and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
     /// @param _endpoint LayerZero endpoint for this chain.
     /// @param _protocolFeeRecipient Initial `protocolFeeRecipient`.
@@ -319,7 +334,8 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Admin removal of a pending order (full only). No on-chain refund — the admin may manually refund if
-    /// necessary @param uuid Order to remove.
+    /// necessary
+    /// @param uuid Order to remove.
     function forceRemovePendingOrder(bytes32 uuid) external requiresAuth {
         if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
         Order memory order = pendingOrders[uuid];
@@ -352,7 +368,7 @@ contract TransitStation is OAppAuth, Pausable {
         _pause();
     }
 
-    /// @notice Should be configured such that only the highest trust assumption, may unpause.
+    /// @notice Should be configured such that only the highest trust role, may unpause.
     function unpause() external requiresAuth {
         _unpause();
     }
@@ -445,8 +461,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @dev Shared submit core (reused by both entrypoints).
     ///      Verifies + collects, then either queues locally or bridges. The UUID is the quote's EIP-712 digest, so it
-    ///      is fully determined by the signed quote — identical no matter who submits it or in what order — and
-    /// unique
+    ///      is fully determined by the signed quote — identical no matter who submits it or in what order — unique
     ///      per source station/chain (the domain separator binds both). Only the terms exist at this point: the
     ///      queued state (`amountDue`, `queuedAt`) is filled by `_pushOrder` on the order's destination chain, where
     ///      the want asset is local.
@@ -492,10 +507,12 @@ contract TransitStation is OAppAuth, Pausable {
         if (quote.protocolFeeNormalized18 > maxProtocolFee) {
             revert ProtocolFeeTooHigh(quote.protocolFeeNormalized18, maxProtocolFee);
         }
+
         uint256 maxIntegratorFee = (quote.offerAmountNormalized18 * MAX_INTEGRATOR_FEE_BPS) / ONE_HUNDRED_PERCENT;
         if (quote.integratorFeeNormalized18 > maxIntegratorFee) {
             revert IntegratorFeeTooHigh(quote.integratorFeeNormalized18, maxIntegratorFee);
         }
+
         // Strict `>=`: the post-fee net must be strictly positive in normalized terms (positivity in token units is
         // enforced separately below, after truncation).
         if (quote.protocolFeeNormalized18 + quote.integratorFeeNormalized18 >= quote.offerAmountNormalized18) {
@@ -515,12 +532,13 @@ contract TransitStation is OAppAuth, Pausable {
         uint8 offerDecimals = offer.decimals();
         uint256 protocolFeeTokenUnits = _toTokenDecimals(quote.protocolFeeNormalized18, offerDecimals);
         uint256 integratorFeeTokenUnits = _toTokenDecimals(quote.integratorFeeNormalized18, offerDecimals);
+
         // Cannot underflow: truncation is superadditive (truncated parts never sum past the truncated whole), and the
         // strict fee check above guarantees the normalized whole exceeds the normalized parts.
         uint256 netTokenUnits = _toTokenDecimals(quote.offerAmountNormalized18, offerDecimals) - protocolFeeTokenUnits
             - integratorFeeTokenUnits;
-        // A zero token-unit net would create an order while collecting (next to) nothing for the transit system; the
-        // backend's min order size keeps this from firing on legitimate quotes.
+
+        // A zero token-unit net would create an order while collecting (next to) nothing for the Transit system
         if (netTokenUnits == 0) revert NetTruncatesToZero(quote.offerAmountNormalized18, offerDecimals);
 
         if (protocolFeeTokenUnits > 0) {
