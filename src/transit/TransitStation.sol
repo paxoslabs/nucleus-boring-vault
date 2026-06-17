@@ -232,8 +232,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param signature EIP-712 signature over `quote` by `quoteSigner`.
     /// @return uuid Identifier of the created order.
     /// @dev `payable` to fund the LZ native fee on cross-chain orders (unused/refundable for same-chain).
-    /// @custom:access PUBLIC should be authorized — the entrypoint to submit orders; the caller funds their own offer
-    ///         and the want goes to the quote's fixed `receiver`, so misuse only self-griefs.
+    /// @custom:access PUBLIC capability should be granted — the entrypoint to submit orders; the caller funds their
+    /// own offer and the want goes to the quote's fixed `receiver`, so misuse only self-griefs.
     function submitOrder(
         Quote calldata quote,
         bytes calldata signature
@@ -256,7 +256,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param s Permit signature component.
     /// @return uuid Identifier of the created order.
     /// @dev A failed permit (already approved / front-run) falls back to an allowance check rather than reverting.
-    /// @custom:access PUBLIC should be authorized — `submitOrder` plus an EIP-2612 permit; identical trust profile.
+    /// @custom:access PUBLIC capability should be granted — `submitOrder` plus an EIP-2612 permit; identical trust
+    /// profile.
     function submitOrderWithPermit(
         Quote calldata quote,
         bytes calldata signature,
@@ -286,8 +287,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after each
     ///      batch we assert no approval is left dangling for its asset.
     ///      `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
-    /// @custom:access TRANSIT_EXECUTOR_ROLE should be authorized — a privileged fulfillment bot; it can only settle
-    ///         existing orders to their fixed receivers within the vault's approval, never redirect funds.
+    /// @custom:access TRANSIT_EXECUTOR_ROLE should be granted authority — a privileged fulfillment bot; it can only
+    /// settle existing orders to their fixed receivers within the vault's approval, never redirect funds.
     function executePendingOrders(FillBatch[] calldata batches) external requiresAuth whenNotPaused {
         for (uint256 i; i < batches.length;) {
             FillBatch calldata batch = batches[i];
@@ -344,8 +345,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Admin removal of a pending order (full only). No on-chain refund — the admin may manually refund if
     /// necessary
     /// @param uuid Order to remove.
-    /// @custom:access OWNER should be authorized — drops any queued order; the deposit is refunded off-chain and no
-    ///         funds move on-chain.
+    /// @custom:access OWNER should be granted authority — drops any queued order; the deposit is refunded off-chain
+    /// and no funds move on-chain.
     function forceRemovePendingOrder(bytes32 uuid) external requiresAuth {
         if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
         Order memory order = pendingOrders[uuid];
@@ -357,7 +358,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Sweep stray ETH to the owner (the station is not meant to hold ETH between txs).
     /// @param amount Wei to send.
     /// @dev Owner is trusted, so the low-level call is not reentrancy-guarded.
-    /// @custom:access OWNER should be authorized — sweeps stray ETH, and only ever to `owner`.
+    /// @custom:access OWNER should be granted authority — sweeps stray ETH, and only ever to `owner`.
     function recoverETH(uint256 amount) external requiresAuth {
         (bool success,) = owner.call{ value: amount }("");
         if (!success) revert CallFailed();
@@ -367,7 +368,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// by mistake.
     /// @param token Token to sweep.
     /// @param amount Amount to send.
-    /// @custom:access OWNER should be authorized — sweeps stray tokens, and only ever to `owner`.
+    /// @custom:access OWNER should be granted authority — sweeps stray tokens, and only ever to `owner`.
     function recoverTokens(ERC20 token, uint256 amount) external requiresAuth {
         token.safeTransfer(owner, amount);
     }
@@ -376,14 +377,15 @@ contract TransitStation is OAppAuth, Pausable {
     ///         `executePendingOrders`), so a compromised backend can be frozen before funds leave. `_lzReceive` is
     ///         intentionally not gated — no value moves on receive (only on execute, which is gated), and gating it
     ///         would strand in-flight cross-chain messages.
-    /// @custom:access PAUSER_ROLE should be authorized — halts submit + execute; denial-of-service at worst and no
-    ///         fund movement, so a lower-trust role is acceptable.
+    /// @custom:access PAUSER_ROLE should be granted authority — halts submit + execute; denial-of-service at worst
+    /// and no fund movement, so a lower-trust role is acceptable.
     function pause() external requiresAuth {
         _pause();
     }
 
     /// @notice Resume submission and fulfillment after a pause.
-    /// @custom:access OWNER should be authorized — lifts the kill-switch; higher-stakes than pausing, so not the
+    /// @custom:access OWNER should be granted authority — lifts the kill-switch; higher-stakes than pausing, so not
+    /// the
     ///         pauser.
     function unpause() external requiresAuth {
         _unpause();
@@ -391,8 +393,8 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Set the protocol fee recipient.
     /// @param recipient New recipient.
-    /// @custom:access OWNER should be authorized — redirects protocol fees (bounded by `MAX_PROTOCOL_FEE_BPS`), never
-    ///         principal.
+    /// @custom:access OWNER should be granted authority — redirects protocol fees (bounded by
+    /// `MAX_PROTOCOL_FEE_BPS`), never principal.
     function setProtocolFeeRecipient(address recipient) external requiresAuth {
         if (recipient == address(0)) revert ZeroAddress();
         protocolFeeRecipient = recipient;
@@ -401,8 +403,8 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Rotate the trusted quote signer
     /// @param signer New signer.
-    /// @custom:access OWNER should be authorized — replaces the trusted signer, i.e. total control over valid quotes;
-    ///         highest-stakes setter.
+    /// @custom:access OWNER should be granted authority — replaces the trusted signer, i.e. total control over valid
+    /// quotes; highest-stakes setter.
     function setQuoteSigner(address signer) external requiresAuth {
         if (signer == address(0)) revert ZeroAddress();
         quoteSigner = signer;
@@ -411,7 +413,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Set where the net offer deposit is sent on submit.
     /// @param newOfferReceiver New offer receiver.
-    /// @custom:access OWNER should be authorized — redirects where every future deposit's net is sent.
+    /// @custom:access OWNER should be granted authority — redirects where every future deposit's net is sent.
     function setOfferReceiver(address newOfferReceiver) external requiresAuth {
         if (newOfferReceiver == address(0)) revert ZeroAddress();
         offerReceiver = newOfferReceiver;
@@ -420,7 +422,8 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Set the address the want asset is pulled from on fulfillment.
     /// @param newWantAssetSource New want-asset source.
-    /// @custom:access OWNER should be authorized — changes where fills are pulled from; effective only with that
+    /// @custom:access OWNER should be granted authority — changes where fills are pulled from; effective only with
+    /// that
     ///         address's approval, so worst case is bricked fulfillment.
     function setWantAssetSource(address newWantAssetSource) external requiresAuth {
         if (newWantAssetSource == address(0)) revert ZeroAddress();
@@ -431,7 +434,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Set the LZ executor gas for the peer's `lzReceive` on a given destination EID.
     /// @param eid Destination endpoint id.
     /// @param gasLimit Gas to supply (must be enough for `_lzReceive`, else delivery reverts and the message stalls).
-    /// @custom:access OWNER should be authorized — per-EID LZ gas; a bad value only stalls or over-pays bridging.
+    /// @custom:access OWNER should be granted authority — per-EID LZ gas; a bad value only stalls or over-pays
+    /// bridging.
     function setMessageGasLimit(uint32 eid, uint64 gasLimit) external requiresAuth {
         messageGasLimit[eid] = gasLimit;
         emit MessageGasLimitSet(eid, gasLimit);
@@ -440,8 +444,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Batch-set the global route allowlist.
     /// @param routes Routes to toggle.
     /// @param approved Index-aligned approval flags.
-    /// @custom:access OWNER should be authorized — the route allowlist + 1:1-peg attestation; approving unlike assets
-    ///         means vault loss.
+    /// @custom:access OWNER should be granted authority — the route allowlist + 1:1-peg attestation; approving unlike
+    /// assets means vault loss.
     function setRouteApprovals(Route[] calldata routes, bool[] calldata approved) external requiresAuth {
         if (routes.length != approved.length) revert LengthMismatch(routes.length, approved.length);
         for (uint256 i; i < routes.length;) {
