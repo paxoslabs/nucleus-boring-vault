@@ -496,7 +496,8 @@ contract TransitStation is OAppAuth, Pausable {
         returns (bytes32 digest, uint256 offerAmountNormalized18AfterFees)
     {
         if (block.timestamp > quote.deadline) revert QuoteExpired(quote.deadline);
-        if (!_isRouteApproved(quote.route)) revert RouteNotApproved(quote.route);
+        Route calldata route = quote.route;
+        if (!approvedRoutes[route.destEID][route.offerAsset][route.wantAsset]) revert RouteNotApproved(route);
         if (quote.receiver == address(0)) revert ZeroAddress();
         if (quote.integratorFee > 0 && quote.integratorFeeReceiver == address(0)) revert ZeroAddress();
 
@@ -587,11 +588,6 @@ contract TransitStation is OAppAuth, Pausable {
                 DOMAIN_TYPEHASH, keccak256(bytes("TransitStation")), keccak256(bytes("1")), block.chainid, address(this)
             )
         );
-    }
-
-    /// @dev Allowlist lookup for a route.
-    function _isRouteApproved(Route memory route) internal view returns (bool) {
-        return approvedRoutes[route.destEID][route.offerAsset][route.wantAsset];
     }
 
     /// @dev EIP-712 hashStruct of the nested `Route`.
