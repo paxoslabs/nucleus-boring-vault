@@ -2,6 +2,7 @@
 pragma solidity 0.8.21;
 
 import { Test } from "forge-std/Test.sol";
+import { Vm } from "forge-std/Vm.sol";
 import { TransitStation } from "src/transit/TransitStation.sol";
 import { Authority } from "@solmate/auth/Auth.sol";
 import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
@@ -238,6 +239,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         RolesAuthority rolesAuthority;
         MockEndpoint endpoint;
+        MockEndpoint endpoint2;
 
         address owner = makeAddr("owner");
         address protocolFeeRecipient = makeAddr("protocolFeeRecipient");
@@ -254,10 +256,13 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         tERC20 wantToken18;
 
         TransitStation station;
+        TransitStation dstStation;
 
         uint256 constant OFFER_AMOUNT = 100e6; // 100 tokens, 6 decimals
         uint256 constant OFFER_AMOUNT_18 = 100e18; // 100 tokens, 18 decimals
         uint256 constant OFFER_AMOUNT_NORMALIZED = 100e18;
+        uint256 constant LZ_FEE = 0.01 ether;
+        uint32 constant DST_EID = 2;
         uint8 constant EXECUTOR_ROLE = 1;
 
         address integratorFeeRecipient = makeAddr("integratorFeeRecipient");
@@ -271,7 +276,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             (quoteSigner, quoteSignerPk) = makeAddrAndKey("quoteSigner");
 
             endpoint = new MockEndpoint(1);
-            endpoint.setQuoteFee(0.01 ether);
+            endpoint.setQuoteFee(LZ_FEE);
+            endpoint2 = new MockEndpoint(DST_EID);
 
             rolesAuthority = new RolesAuthority(owner, Authority(address(0)));
 
@@ -290,6 +296,16 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 wantAssetSource
             );
 
+            dstStation = new TransitStation(
+                owner,
+                Authority(address(rolesAuthority)),
+                address(endpoint2),
+                protocolFeeRecipient,
+                quoteSigner,
+                offerReceiver,
+                wantAssetSource
+            );
+
             // Authorize public submission and executor fulfillment.
             vm.startPrank(owner);
             rolesAuthority.setPublicCapability(address(station), TransitStation.submitOrder.selector, true);
@@ -298,10 +314,17 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             rolesAuthority.setRoleCapability(
                 EXECUTOR_ROLE, address(station), TransitStation.executePendingOrders.selector, true
             );
-            vm.stopPrank();
+            rolesAuthority.setRoleCapability(
+                EXECUTOR_ROLE, address(dstStation), TransitStation.executePendingOrders.selector, true
+            );
 
-            // Approve same-chain routes for 6/6, 6/18, and 18/6 decimal pairs.
-            TransitStation.Route[] memory routes = new TransitStation.Route[](3);
+            // Wire the two stations as LayerZero peers.
+            station.setPeer(DST_EID, bytes32(uint256(uint160(address(dstStation)))));
+            dstStation.setPeer(uint32(endpoint.eid()), bytes32(uint256(uint160(address(station)))));
+            station.setMessageGasLimit(DST_EID, 400_000);
+
+            // Approve same-chain and cross-chain routes for 6/6, 6/18, and 18/6 decimal pairs.
+            TransitStation.Route[] memory routes = new TransitStation.Route[](6);
             routes[0] = TransitStation.Route({
                 destEID: endpoint.eid(), offerAsset: address(offerToken), wantAsset: address(wantToken)
             });
@@ -311,12 +334,24 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             routes[2] = TransitStation.Route({
                 destEID: endpoint.eid(), offerAsset: address(offerToken18), wantAsset: address(wantToken)
             });
-            bool[] memory approved = new bool[](3);
+            routes[3] = TransitStation.Route({
+                destEID: DST_EID, offerAsset: address(offerToken), wantAsset: address(wantToken)
+            });
+            routes[4] = TransitStation.Route({
+                destEID: DST_EID, offerAsset: address(offerToken), wantAsset: address(wantToken18)
+            });
+            routes[5] = TransitStation.Route({
+                destEID: DST_EID, offerAsset: address(offerToken18), wantAsset: address(wantToken)
+            });
+            bool[] memory approved = new bool[](6);
             approved[0] = true;
             approved[1] = true;
             approved[2] = true;
-            vm.prank(owner);
+            approved[3] = true;
+            approved[4] = true;
+            approved[5] = true;
             station.setRouteApprovals(routes, approved);
+            vm.stopPrank();
         }
 
         function _domainSeparator(TransitStation _station) internal view returns (bytes32) {
@@ -372,6 +407,43 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 deadline: block.timestamp + 1 hours,
                 salt: bytes32(0)
             });
+        }
+
+        /// @dev Manually deliver the bridged `OrderTerms` to the destination station as its local endpoint would.
+        function _simulateLzReceive(TransitStation.OrderTerms memory terms) internal {
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({
+                srcEid: uint32(endpoint.eid()),
+                sender: bytes32(uint256(uint160(address(station)))),
+                nonce: 0
+            });
+
+            vm.prank(address(endpoint2));
+            dstStation.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        /// @dev Submit a cross-chain quote on the source station and extract the bridged `OrderTerms` from the
+        ///      `OrderBridged` event so tests do not have to reconstruct it.
+        function _submitCrossChainAndGetTerms(TransitStation.Quote memory quote)
+            internal
+            returns (bytes32 uuid, TransitStation.OrderTerms memory terms)
+        {
+            vm.recordLogs();
+            uuid = station.submitOrder{ value: LZ_FEE }(quote, _signQuote(quote));
+
+            bytes32 eventSig =
+                keccak256("OrderBridged(bytes32,uint32,bytes32,(bytes32,address,address,address,uint256))");
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length;) {
+                if (logs[i].topics[0] == eventSig) {
+                    (, terms) = abi.decode(logs[i].data, (bytes32, TransitStation.OrderTerms));
+                    return (uuid, terms);
+                }
+                unchecked {
+                    ++i;
+                }
+            }
+            revert("OrderBridged event not found");
         }
 
         function testFullSameChainOrder_6DecimalsTo6Decimals() external {
@@ -596,6 +668,186 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             // Order should no longer be pending.
             assertEq(station.pendingOrderCount(), 0);
             assertEq(station.getPendingOrders().length, 0);
+        }
+
+        function testFullCrossChainOrder_6DecimalsTo6Decimals() external {
+            offerToken.mint(user, OFFER_AMOUNT * 10);
+            vm.deal(user, 1 ether);
+            vm.prank(user);
+            offerToken.approve(address(station), OFFER_AMOUNT);
+
+            uint256 protocolFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 50) / 10_000;
+            uint256 integratorFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 100) / 10_000;
+            uint256 protocolFeeTokenUnits = protocolFeeNormalized18 / 10 ** (18 - 6);
+            uint256 integratorFeeTokenUnits = integratorFeeNormalized18 / 10 ** (18 - 6);
+            uint256 netTokenUnits = OFFER_AMOUNT - protocolFeeTokenUnits - integratorFeeTokenUnits;
+            uint256 netNormalized18 = OFFER_AMOUNT_NORMALIZED - protocolFeeNormalized18 - integratorFeeNormalized18;
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DST_EID;
+            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
+            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.integratorFeeReceiver = integratorFeeRecipient;
+
+            vm.prank(user);
+            (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
+
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(offerToken.balanceOf(user), OFFER_AMOUNT * 9);
+            assertEq(offerToken.balanceOf(protocolFeeRecipient), protocolFeeTokenUnits);
+            assertEq(offerToken.balanceOf(integratorFeeRecipient), integratorFeeTokenUnits);
+            assertEq(offerToken.balanceOf(offerReceiver), netTokenUnits);
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(terms.offerAmountNormalized18AfterFees, netNormalized18);
+
+            _simulateLzReceive(terms);
+
+            assertEq(dstStation.pendingOrderCount(), 1);
+            assertEq(dstStation.getPendingOrders()[0].terms.uuid, uuid);
+            assertEq(dstStation.getPendingOrders()[0].terms.wantAsset, address(wantToken));
+            assertEq(dstStation.getPendingOrders()[0].terms.receiver, user);
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAsset, address(offerToken));
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netNormalized18);
+            assertEq(dstStation.getPendingOrders()[0].amountDue, netTokenUnits);
+
+            wantToken.mint(wantAssetSource, netTokenUnits * 10);
+            vm.prank(wantAssetSource);
+            wantToken.approve(address(dstStation), netTokenUnits);
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](1);
+            amounts[0] = netTokenUnits;
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantToken), uuids: uuids, amounts: amounts });
+
+            vm.prank(executor);
+            dstStation.executePendingOrders(batches);
+
+            assertEq(wantToken.balanceOf(user), netTokenUnits);
+            assertEq(wantToken.balanceOf(wantAssetSource), netTokenUnits * 9);
+            assertEq(dstStation.pendingOrderCount(), 0);
+            assertEq(dstStation.getPendingOrders().length, 0);
+        }
+
+        function testFullCrossChainOrder_6DecimalsTo18Decimals() external {
+            offerToken.mint(user, OFFER_AMOUNT * 10);
+            vm.deal(user, 1 ether);
+            vm.prank(user);
+            offerToken.approve(address(station), OFFER_AMOUNT);
+
+            uint256 protocolFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 50) / 10_000;
+            uint256 integratorFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 100) / 10_000;
+            uint256 protocolFeeTokenUnits = protocolFeeNormalized18 / 10 ** (18 - 6);
+            uint256 integratorFeeTokenUnits = integratorFeeNormalized18 / 10 ** (18 - 6);
+            uint256 netOfferTokenUnits = OFFER_AMOUNT - protocolFeeTokenUnits - integratorFeeTokenUnits;
+            uint256 netNormalized18 = OFFER_AMOUNT_NORMALIZED - protocolFeeNormalized18 - integratorFeeNormalized18;
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DST_EID;
+            quote.route.wantAsset = address(wantToken18);
+            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
+            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.integratorFeeReceiver = integratorFeeRecipient;
+
+            vm.prank(user);
+            (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
+
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(offerToken.balanceOf(user), OFFER_AMOUNT * 9);
+            assertEq(offerToken.balanceOf(protocolFeeRecipient), protocolFeeTokenUnits);
+            assertEq(offerToken.balanceOf(integratorFeeRecipient), integratorFeeTokenUnits);
+            assertEq(offerToken.balanceOf(offerReceiver), netOfferTokenUnits);
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(terms.offerAmountNormalized18AfterFees, netNormalized18);
+
+            _simulateLzReceive(terms);
+
+            assertEq(dstStation.pendingOrderCount(), 1);
+            assertEq(dstStation.getPendingOrders()[0].terms.uuid, uuid);
+            assertEq(dstStation.getPendingOrders()[0].terms.wantAsset, address(wantToken18));
+            assertEq(dstStation.getPendingOrders()[0].terms.receiver, user);
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAsset, address(offerToken));
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netNormalized18);
+            assertEq(dstStation.getPendingOrders()[0].amountDue, netNormalized18);
+
+            wantToken18.mint(wantAssetSource, netNormalized18 * 10);
+            vm.prank(wantAssetSource);
+            wantToken18.approve(address(dstStation), netNormalized18);
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](1);
+            amounts[0] = netNormalized18;
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantToken18), uuids: uuids, amounts: amounts });
+
+            vm.prank(executor);
+            dstStation.executePendingOrders(batches);
+
+            assertEq(wantToken18.balanceOf(user), netNormalized18);
+            assertEq(wantToken18.balanceOf(wantAssetSource), netNormalized18 * 9);
+            assertEq(dstStation.pendingOrderCount(), 0);
+            assertEq(dstStation.getPendingOrders().length, 0);
+        }
+
+        function testFullCrossChainOrder_18DecimalsTo6Decimals() external {
+            offerToken18.mint(user, OFFER_AMOUNT_18 * 10);
+            vm.deal(user, 1 ether);
+            vm.prank(user);
+            offerToken18.approve(address(station), OFFER_AMOUNT_18);
+
+            uint256 protocolFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 50) / 10_000;
+            uint256 integratorFeeNormalized18 = (OFFER_AMOUNT_NORMALIZED * 100) / 10_000;
+            uint256 netOfferTokenUnits = OFFER_AMOUNT_18 - protocolFeeNormalized18 - integratorFeeNormalized18;
+            uint256 netWantTokenUnits = netOfferTokenUnits / 10 ** (18 - 6);
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            quote.route.destEID = DST_EID;
+            quote.route.offerAsset = address(offerToken18);
+            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
+            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.integratorFeeReceiver = integratorFeeRecipient;
+
+            vm.prank(user);
+            (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
+
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(offerToken18.balanceOf(user), OFFER_AMOUNT_18 * 9);
+            assertEq(offerToken18.balanceOf(protocolFeeRecipient), protocolFeeNormalized18);
+            assertEq(offerToken18.balanceOf(integratorFeeRecipient), integratorFeeNormalized18);
+            assertEq(offerToken18.balanceOf(offerReceiver), netOfferTokenUnits);
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(terms.offerAmountNormalized18AfterFees, netOfferTokenUnits);
+
+            _simulateLzReceive(terms);
+
+            assertEq(dstStation.pendingOrderCount(), 1);
+            assertEq(dstStation.getPendingOrders()[0].terms.uuid, uuid);
+            assertEq(dstStation.getPendingOrders()[0].terms.wantAsset, address(wantToken));
+            assertEq(dstStation.getPendingOrders()[0].terms.receiver, user);
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAsset, address(offerToken18));
+            assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netOfferTokenUnits);
+            assertEq(dstStation.getPendingOrders()[0].amountDue, netWantTokenUnits);
+
+            wantToken.mint(wantAssetSource, netWantTokenUnits * 10);
+            vm.prank(wantAssetSource);
+            wantToken.approve(address(dstStation), netWantTokenUnits);
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](1);
+            uuids[0] = uuid;
+            uint256[] memory amounts = new uint256[](1);
+            amounts[0] = netWantTokenUnits;
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantToken), uuids: uuids, amounts: amounts });
+
+            vm.prank(executor);
+            dstStation.executePendingOrders(batches);
+
+            assertEq(wantToken.balanceOf(user), netWantTokenUnits);
+            assertEq(wantToken.balanceOf(wantAssetSource), netWantTokenUnits * 9);
+            assertEq(dstStation.pendingOrderCount(), 0);
+            assertEq(dstStation.getPendingOrders().length, 0);
         }
 
     }
