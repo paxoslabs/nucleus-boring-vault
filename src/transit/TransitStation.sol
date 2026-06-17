@@ -220,6 +220,11 @@ contract TransitStation is OAppAuth, Pausable {
         quoteSigner = _quoteSigner;
         offerReceiver = _offerReceiver;
         wantAssetSource = _wantAssetSource;
+
+        emit ProtocolFeeRecipientSet(_protocolFeeRecipient);
+        emit QuoteSignerSet(_quoteSigner);
+        emit OfferReceiverSet(_offerReceiver);
+        emit WantAssetSourceSet(_wantAssetSource);
     }
 
     /// @notice Submit a backend-signed quote: collects the offer asset, then queues (same-chain) or bridges the order.
