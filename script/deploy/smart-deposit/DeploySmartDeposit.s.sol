@@ -48,7 +48,7 @@ contract DeploySmartDeposit is BaseScript {
 
         // Set FactoryBeaconOwner per chain
         if (block.chainid == 11_155_111) {
-            dcdAddress = 0x6c5642bE66014d45A8E2Abf2A0F59455DB1b7843; // Sepolia test DCD address
+            dcdAddress = 0x28F90aD3B55b3C483ED55EC015657524600383fE; // Sepolia test DCD address
 
             // ONLY allow same owner for smartDepositFactoryBeacon as owner of implementation contract on
             // testnet.
@@ -56,9 +56,9 @@ contract DeploySmartDeposit is BaseScript {
             // multi-signer quorum of at least 3/5, and can be found via the address-book-tui.) This is to limit the
             // risk of a vulnerability allowing an attacker to upgrade to a malicious implementation contract,
             // compromising any forwarded user funds.
-            smartDepositFactoryBeaconOwner = smartDepositForwarder;
             smartDepositForwarder = stagingSmartDepositForwarder;
-            recoveryAccount = 0xa9bEBCdc3ac382d74bEeA7fbddd9485A610f3aBf;
+            smartDepositFactoryBeaconOwner = smartDepositForwarder;
+            recoveryAccount = smartDepositForwarder;
         } else if (block.chainid == 1) {
             smartDepositFactoryBeaconOwner = 0x0000000000417626Ef34D62C4DC189b021603f2F; // mainnet protocol multisig
             recoveryAccount = 0x0000000000417626Ef34D62C4DC189b021603f2F;
