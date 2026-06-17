@@ -245,10 +245,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         constructor(uint8 _decimals) ERC20("test", "TEST", _decimals) { }
 
-        function mint(address to, uint256 amount) external {
-            _mint(to, amount);
-        }
-
     }
 
     contract TransitStationTest is Test {
@@ -1122,7 +1118,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             uint256 permitUserKey = 0xABCD;
             address permitUser = vm.addr(permitUserKey);
-            offerPermit.mint(permitUser, DEFAULT_OFFER_AMOUNT_NORMALIZED * 10);
+            deal(address(offerPermit), permitUser, DEFAULT_OFFER_AMOUNT_NORMALIZED * 10);
 
             TransitStation.Quote memory quote = TransitStation.Quote({
                 route: TransitStation.Route({
@@ -1160,7 +1156,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             uint256 permitUserKey = 0xBCDE;
             address permitUser = vm.addr(permitUserKey);
-            offerPermit.mint(permitUser, DEFAULT_OFFER_AMOUNT_NORMALIZED * 10);
+            deal(address(offerPermit), permitUser, DEFAULT_OFFER_AMOUNT_NORMALIZED * 10);
 
             TransitStation.Quote memory quote = TransitStation.Quote({
                 route: TransitStation.Route({

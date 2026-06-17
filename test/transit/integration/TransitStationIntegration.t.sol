@@ -229,10 +229,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         constructor(uint8 _decimals) ERC20("test", "TEST", _decimals) { }
 
-        function mint(address to, uint256 amount) external {
-            _mint(to, amount);
-        }
-
     }
 
     contract TransitStationIntegrationTest is Test {
@@ -448,7 +444,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         function testFullSameChainOrder_6DecimalsTo6Decimals() external {
             // Fund the user and approve the station for the full offer amount.
-            offerToken.mint(user, OFFER_AMOUNT * 10);
+            deal(address(offerToken), user, OFFER_AMOUNT * 10);
             vm.prank(user);
             offerToken.approve(address(station), OFFER_AMOUNT);
 
@@ -496,7 +492,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(orders[0].amountDue, netTokenUnits); // 6-decimal want token
 
             // Fund the want-asset source and fulfill the order for the post-fee amount.
-            wantToken.mint(wantAssetSource, netTokenUnits * 10);
+            deal(address(wantToken), wantAssetSource, netTokenUnits * 10);
             vm.prank(wantAssetSource);
             wantToken.approve(address(station), netTokenUnits);
 
@@ -524,7 +520,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         function testFullSameChainOrder_6DecimalsTo18Decimals() external {
             // Fund the user and approve the station for the full 6-decimal offer amount.
-            offerToken.mint(user, OFFER_AMOUNT * 10);
+            deal(address(offerToken), user, OFFER_AMOUNT * 10);
             vm.prank(user);
             offerToken.approve(address(station), OFFER_AMOUNT);
 
@@ -571,7 +567,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(orders[0].amountDue, netNormalized18);
 
             // Fund the 18-decimal want-asset source and fulfill the order.
-            wantToken18.mint(wantAssetSource, netNormalized18 * 10);
+            deal(address(wantToken18), wantAssetSource, netNormalized18 * 10);
             vm.prank(wantAssetSource);
             wantToken18.approve(address(station), netNormalized18);
 
@@ -599,7 +595,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         function testFullSameChainOrder_18DecimalsTo6Decimals() external {
             // Fund the user and approve the station for the full 18-decimal offer amount.
-            offerToken18.mint(user, OFFER_AMOUNT_18 * 10);
+            deal(address(offerToken18), user, OFFER_AMOUNT_18 * 10);
             vm.prank(user);
             offerToken18.approve(address(station), OFFER_AMOUNT_18);
 
@@ -644,7 +640,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(orders[0].amountDue, netWantTokenUnits);
 
             // Fund the 6-decimal want-asset source and fulfill the order.
-            wantToken.mint(wantAssetSource, netWantTokenUnits * 10);
+            deal(address(wantToken), wantAssetSource, netWantTokenUnits * 10);
             vm.prank(wantAssetSource);
             wantToken.approve(address(station), netWantTokenUnits);
 
@@ -671,7 +667,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         }
 
         function testFullCrossChainOrder_6DecimalsTo6Decimals() external {
-            offerToken.mint(user, OFFER_AMOUNT * 10);
+            deal(address(offerToken), user, OFFER_AMOUNT * 10);
             vm.deal(user, 1 ether);
             vm.prank(user);
             offerToken.approve(address(station), OFFER_AMOUNT);
@@ -710,7 +706,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netNormalized18);
             assertEq(dstStation.getPendingOrders()[0].amountDue, netTokenUnits);
 
-            wantToken.mint(wantAssetSource, netTokenUnits * 10);
+            deal(address(wantToken), wantAssetSource, netTokenUnits * 10);
             vm.prank(wantAssetSource);
             wantToken.approve(address(dstStation), netTokenUnits);
 
@@ -731,7 +727,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         }
 
         function testFullCrossChainOrder_6DecimalsTo18Decimals() external {
-            offerToken.mint(user, OFFER_AMOUNT * 10);
+            deal(address(offerToken), user, OFFER_AMOUNT * 10);
             vm.deal(user, 1 ether);
             vm.prank(user);
             offerToken.approve(address(station), OFFER_AMOUNT);
@@ -771,7 +767,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netNormalized18);
             assertEq(dstStation.getPendingOrders()[0].amountDue, netNormalized18);
 
-            wantToken18.mint(wantAssetSource, netNormalized18 * 10);
+            deal(address(wantToken18), wantAssetSource, netNormalized18 * 10);
             vm.prank(wantAssetSource);
             wantToken18.approve(address(dstStation), netNormalized18);
 
@@ -792,7 +788,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         }
 
         function testFullCrossChainOrder_18DecimalsTo6Decimals() external {
-            offerToken18.mint(user, OFFER_AMOUNT_18 * 10);
+            deal(address(offerToken18), user, OFFER_AMOUNT_18 * 10);
             vm.deal(user, 1 ether);
             vm.prank(user);
             offerToken18.approve(address(station), OFFER_AMOUNT_18);
@@ -830,7 +826,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(dstStation.getPendingOrders()[0].terms.offerAmountNormalized18AfterFees, netOfferTokenUnits);
             assertEq(dstStation.getPendingOrders()[0].amountDue, netWantTokenUnits);
 
-            wantToken.mint(wantAssetSource, netWantTokenUnits * 10);
+            deal(address(wantToken), wantAssetSource, netWantTokenUnits * 10);
             vm.prank(wantAssetSource);
             wantToken.approve(address(dstStation), netWantTokenUnits);
 
