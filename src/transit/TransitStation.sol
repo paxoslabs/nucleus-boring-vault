@@ -180,12 +180,11 @@ contract TransitStation is OAppAuth, Pausable {
     error QuoteExpired(uint256 deadline);
     error ProtocolFeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
     error IntegratorFeeTooHigh(uint256 integratorFee, uint256 maxIntegratorFee);
-    error FeesExceedOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
+    error FeesExceedOrEqualOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
     error ResidualApproval(address token, address wantAssetSource, uint256 remaining);
     error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
-    error ZeroAmountDue();
 
     /// @param _owner Owner and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
@@ -465,7 +464,8 @@ contract TransitStation is OAppAuth, Pausable {
     function quoteSend(uint32 destEID, OrderTerms calldata terms) external view returns (uint256) {
         bytes memory payload = abi.encode(terms);
         bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(messageGasLimit[destEID], 0);
-        MessagingFee memory fee = _quote(destEID, payload, options, false);
+        MessagingFee memory fee = _quote(destEID, payload, options, false); // The boolean here indicates usage of
+        // LayerZero token for fees. We do not want to support this, only native ETH
         return fee.nativeFee;
     }
 
@@ -484,9 +484,39 @@ contract TransitStation is OAppAuth, Pausable {
         }
     }
 
+    /// @notice Getter for all pending order IDs in the enumerable set
+    function getPendingOrderIds() external view returns (bytes32[] memory) {
+        return pendingOrderIds.values();
+    }
+
+    /// @notice Getter for pending order IDs. Returns true if the provided uuid is in the enumerable set
+    function pendingOrderIdsContains(bytes32 uuid) external view returns (bool) {
+        return pendingOrderIds.contains(uuid);
+    }
+
     /// @notice Number of pending orders.
     function pendingOrderCount() external view returns (uint256) {
         return pendingOrderIds.length();
+    }
+
+    /// @dev EIP-712 hashStruct of `Quote` (the `route` member is encoded as its own hashStruct, per the spec).
+    function hashQuote(Quote calldata quote) public pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                QUOTE_TYPEHASH,
+                keccak256(
+                    abi.encode(ROUTE_TYPEHASH, quote.route.destEID, quote.route.offerAsset, quote.route.wantAsset)
+                ),
+                quote.offerAmount,
+                quote.receiver,
+                quote.protocolFee,
+                quote.integratorFee,
+                quote.integratorFeeReceiver,
+                quote.distributorCode,
+                quote.deadline,
+                quote.salt
+            )
+        );
     }
 
     /// @dev Shared submit core (reused by both entrypoints).
@@ -541,10 +571,10 @@ contract TransitStation is OAppAuth, Pausable {
 
         // Strict `>=` guarantees the net pulled to `offerReceiver` is at least one token unit.
         if (quote.protocolFee + quote.integratorFee >= quote.offerAmount) {
-            revert FeesExceedOffer(quote.protocolFee, quote.integratorFee, quote.offerAmount);
+            revert FeesExceedOrEqualOffer(quote.protocolFee, quote.integratorFee, quote.offerAmount);
         }
 
-        digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(), _hashQuote(quote)));
+        digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(), hashQuote(quote)));
         address signer = ECDSA.recover(digest, signature);
         if (signer != quoteSigner) revert InvalidSigner(signer);
 
@@ -566,7 +596,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @dev Destination handler for a bridged order. Sender authenticity is already enforced by
     ///      `OAppAuthReceiver.lzReceive` (LZ `peers`); the route was validated on the source at submission.
     ///      A revert here is safe: delivery is unordered, so the message simply stays
-    ///      retryable on the endpoint — nothing is consumed.
+    ///      retryable on the endpoint
     function _lzReceive(
         Origin calldata origin,
         bytes32 guid,
@@ -606,7 +636,6 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
-        if (order.amountDue == 0) revert ZeroAmountDue();
         pendingOrderIds.add(terms.uuid);
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
@@ -618,29 +647,6 @@ contract TransitStation is OAppAuth, Pausable {
         return keccak256(
             abi.encode(
                 DOMAIN_TYPEHASH, keccak256(bytes("TransitStation")), keccak256(bytes("1")), block.chainid, address(this)
-            )
-        );
-    }
-
-    /// @dev EIP-712 hashStruct of the nested `Route`.
-    function _hashRoute(Route calldata route) internal pure returns (bytes32) {
-        return keccak256(abi.encode(ROUTE_TYPEHASH, route.destEID, route.offerAsset, route.wantAsset));
-    }
-
-    /// @dev EIP-712 hashStruct of `Quote` (the `route` member is encoded as its own hashStruct, per the spec).
-    function _hashQuote(Quote calldata quote) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                QUOTE_TYPEHASH,
-                _hashRoute(quote.route),
-                quote.offerAmount,
-                quote.receiver,
-                quote.protocolFee,
-                quote.integratorFee,
-                quote.integratorFeeReceiver,
-                quote.distributorCode,
-                quote.deadline,
-                quote.salt
             )
         );
     }
