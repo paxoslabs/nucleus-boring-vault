@@ -167,6 +167,8 @@ contract TransitStation is OAppAuth, Pausable {
     event WantAssetSourceSet(address indexed wantAssetSource);
     event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
     event RouteApprovalSet(Route route, bool indexed approved);
+    event TokensRecovered(ERC20 token, uint256 amount);
+    event ETHRecovered(uint256 amount);
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
@@ -362,6 +364,7 @@ contract TransitStation is OAppAuth, Pausable {
     function recoverETH(uint256 amount) external requiresAuth {
         (bool success,) = owner.call{ value: amount }("");
         if (!success) revert CallFailed();
+        emit ETHRecovered(amount);
     }
 
     /// @notice Sweep stray tokens to the owner. The station is not meant to hold tokens so these are assumed to be sent
@@ -371,6 +374,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @custom:access OWNER should be granted authority — sweeps stray tokens, and only ever to `owner`.
     function recoverTokens(ERC20 token, uint256 amount) external requiresAuth {
         token.safeTransfer(owner, amount);
+        emit TokensRecovered(token, amount);
     }
 
     /// @notice Emergency stop: halts both submission and fulfillment (`submitOrder`, `submitOrderWithPermit`,
