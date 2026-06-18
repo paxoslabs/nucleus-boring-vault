@@ -188,6 +188,7 @@ contract TransitStation is OAppAuth, Pausable {
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
     error SameChainOrdersRequireNoValue();
+    error DuplicatePushAttempt();
 
     /// @param _owner Owner and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
@@ -642,6 +643,7 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
+        if (pendingOrderIds.contains(terms.uuid)) revert DuplicatePushAttempt();
         pendingOrderIds.add(terms.uuid);
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
