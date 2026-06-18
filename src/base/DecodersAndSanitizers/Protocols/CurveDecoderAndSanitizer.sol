@@ -1,43 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { GranularityDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/GranularityDecoderAndSanitizer.sol";
+import { BaseDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/BaseDecoderAndSanitizer.sol";
 
-abstract contract CurveDecoderAndSanitizer is GranularityDecoderAndSanitizer {
+abstract contract CurveDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     //============================== CURVE ===============================
 
-    // @desc exchange on curve; commits the min_dy slippage floor at `_granularity()` resolution
-    // @tag granularity:uint256:slippage protection bound
-    function exchange(
-        int128,
-        int128,
-        uint256,
-        uint256 min_dy
-    )
-        external
-        view
-        virtual
-        returns (bytes memory addressesFound)
-    {
-        addressesFound = _bound(min_dy);
+    // @desc exchange on curve
+    function exchange(int128, int128, uint256, uint256) external pure virtual returns (bytes memory addressesFound) {
+        // Nothing to sanitize or return
+        return addressesFound;
     }
 
-    // @desc add liquidity on curve; commits the min_mint_amount slippage floor at `_granularity()` resolution
-    // @tag granularity:uint256:slippage protection bound
-    function add_liquidity(
-        uint256[] calldata,
-        uint256 min_mint_amount
-    )
-        external
-        view
-        virtual
-        returns (bytes memory addressesFound)
-    {
-        addressesFound = _bound(min_mint_amount);
+    // @desc add liquidity on curve
+    function add_liquidity(uint256[] calldata, uint256) external pure virtual returns (bytes memory addressesFound) {
+        // Nothing to sanitize or return
+        return addressesFound;
     }
 
     // @desc remove liquidity on curve
+    // @tag user:address:the address of the user receiving rewards
     function remove_liquidity(uint256, uint256[] calldata) external pure virtual returns (bytes memory addressesFound) {
         // Nothing to sanitize or return
         return addressesFound;

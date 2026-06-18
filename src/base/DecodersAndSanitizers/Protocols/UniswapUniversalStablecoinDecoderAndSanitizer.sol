@@ -1,38 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { DecoderCustomTypes } from "src/base/DecodersAndSanitizers/BaseDecoderAndSanitizer.sol";
-import { GranularityDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/GranularityDecoderAndSanitizer.sol";
+import {
+    BaseDecoderAndSanitizer,
+    DecoderCustomTypes
+} from "src/base/DecodersAndSanitizers/BaseDecoderAndSanitizer.sol";
 
-/// @notice Decodes the Uniswap Universal Router surface needed to perform a swap: the Permit2 `approve` that funds the
-///         router, the V2/V3/V4 swap commands inside `execute`, and the `SWEEP` that returns any leftover to the
-///         vault. `execute` reverts unless the command program contains a SWEEP, so a swap can never leave sweepable
-///         funds stranded in the router. Position management and every other command are out of scope — route those
-///         through the dedicated manager decoders.
-abstract contract UniversalRouterDecoderAndSanitizer is GranularityDecoderAndSanitizer {
+/// @notice Decodes the Uniswap Universal Router surface needed to perform a stablecoin swap: the Permit2 `approve`
+///         that funds the router, the V2/V3/V4 swap commands inside `execute`, and the `SWEEP` that returns any
+///         leftover to the vault. Each swap commits its minimum output (exact-in `amountOutMinimum`, exact-out
+///         `amountInMaximum`) so the merkle leaf pins the worst price the strategist may accept. `execute` reverts
+///         unless the command program contains a SWEEP, so a swap can never leave sweepable funds stranded in the
+///         router. Position management and every other command are out of scope — route those through the dedicated
+///         manager decoders.
+abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     //============================== ERRORS ===============================
 
-    error UniversalRouterDecoderAndSanitizer__LengthMismatch();
-    error UniversalRouterDecoderAndSanitizer__BadV3PathFormat();
-    error UniversalRouterDecoderAndSanitizer__UnsupportedCommand(uint256 command);
-    error UniversalRouterDecoderAndSanitizer__UnsupportedAction(uint256 action);
-    error UniversalRouterDecoderAndSanitizer__MissingSweep();
-
-    //============================== GRANULARITY ===============================
-
-    /**
-     * @notice Resolution at which a swap's slippage bound (exact-in `amountOutMinimum`, exact-out `amountInMaximum`)
-     *         is committed to the merkle leaf, as `bound / granularity` plus a `bound % granularity == 0` flag. A
-     *         band of `granularity` adjacent values maps to one leaf, so the strategist can move the bound within
-     *         that band without a new leaf while the leaf still pins a floor/cap it cannot escape.
-     * @dev A value of 0 omits the bound entirely, allowing any value. Set per deployment.
-     */
-    uint256 internal immutable granularity;
-
-    constructor(uint256 _granularity) {
-        granularity = _granularity;
-    }
+    error UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__BadV3PathFormat();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedCommand(uint256 command);
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(uint256 action);
+    error UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
 
     //============================== COMMAND IDS (Uniswap Commands.sol, modern V4 router)
     // =============================== A command byte's low 7 bits (0x7f) are the type; the high bit (0x80) is the
@@ -119,7 +108,7 @@ abstract contract UniversalRouterDecoderAndSanitizer is GranularityDecoderAndSan
         view
         returns (bytes memory addressesFound)
     {
-        if (commands.length != inputs.length) revert UniversalRouterDecoderAndSanitizer__LengthMismatch();
+        if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
         bool sweepFound;
         for (uint256 i; i < commands.length; ++i) {
             bytes1 command = commands[i] & COMMAND_TYPE_MASK;
@@ -127,62 +116,61 @@ abstract contract UniversalRouterDecoderAndSanitizer is GranularityDecoderAndSan
             addressesFound = abi.encodePacked(addressesFound, _handleCommand(command, inputs[i]));
         }
         // A swap that does not sweep can leave the swapped-out funds sitting in the router for anyone to take.
-        if (!sweepFound) revert UniversalRouterDecoderAndSanitizer__MissingSweep();
+        if (!sweepFound) revert UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
     }
 
-    function _handleCommand(bytes1 command, bytes calldata input) internal view returns (bytes memory) {
+    function _handleCommand(bytes1 command, bytes calldata input) internal pure returns (bytes memory) {
         if (command == V4_SWAP) return _handleV4Swap(input);
 
         if (command == V3_SWAP_EXACT_IN || command == V3_SWAP_EXACT_OUT) {
-            // input = abi.encode(address recipient, uint256 amount, uint256 slippageBound, bytes path, bool
-            // payerIsUser)
-            (address recipient,, uint256 slippageBound) = abi.decode(input, (address, uint256, uint256));
+            // input = abi.encode(address recipient, uint256 amount, uint256 minPrice, bytes path, bool payerIsUser)
+            (address recipient,, uint256 minPrice) = abi.decode(input, (address, uint256, uint256));
             // The path is the 4th argument: word 3 holds its byte offset within the args, then [length][data].
             uint256 pathOffset = abi.decode(input[96:128], (uint256));
             uint256 pathLength = abi.decode(input[pathOffset:pathOffset + 32], (uint256));
             bytes calldata path = input[pathOffset + 32:pathOffset + 32 + pathLength];
-            return abi.encodePacked(recipient, _extractV3PathAddresses(path), _bound(slippageBound));
+            return abi.encodePacked(recipient, _extractV3PathAddresses(path), minPrice);
         }
         if (command == V2_SWAP_EXACT_IN || command == V2_SWAP_EXACT_OUT) {
-            // (address recipient, uint256 amount, uint256 slippageBound, address[] path, bool payerIsUser)
-            (address recipient,, uint256 slippageBound, address[] memory path,) =
+            // (address recipient, uint256 amount, uint256 minPrice, address[] path, bool payerIsUser)
+            (address recipient,, uint256 minPrice, address[] memory path,) =
                 abi.decode(input, (address, uint256, uint256, address[], bool));
             bytes memory pathAddresses;
             for (uint256 i; i < path.length; ++i) {
                 pathAddresses = abi.encodePacked(pathAddresses, path[i]);
             }
-            return abi.encodePacked(recipient, pathAddresses, _bound(slippageBound));
+            return abi.encodePacked(recipient, pathAddresses, minPrice);
         }
         if (command == COMMAND_SWEEP) {
             // (address token, address recipient, uint256 amountMin)
             (address token, address recipient,) = abi.decode(input, (address, address, uint256));
             return abi.encodePacked(token, recipient);
         }
-        revert UniversalRouterDecoderAndSanitizer__UnsupportedCommand(uint256(uint8(command)));
+        revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedCommand(uint256(uint8(command)));
     }
 
     //============================== V4 SWAP ACTION DISPATCH ===============================
 
     /// @dev The V4_SWAP input is `(bytes actions, bytes[] params)`: each byte of `actions` is an action id with a
     ///      parallel `params` entry.
-    function _handleV4Swap(bytes calldata input) internal view returns (bytes memory addressesFound) {
+    function _handleV4Swap(bytes calldata input) internal pure returns (bytes memory addressesFound) {
         (bytes memory actions, bytes[] memory params) = abi.decode(input, (bytes, bytes[]));
-        if (actions.length != params.length) revert UniversalRouterDecoderAndSanitizer__LengthMismatch();
+        if (actions.length != params.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
         for (uint256 i; i < actions.length; ++i) {
             addressesFound = abi.encodePacked(addressesFound, _handleV4Action(uint8(actions[i]), params[i]));
         }
     }
 
-    function _handleV4Action(uint256 action, bytes memory param) internal view returns (bytes memory) {
+    function _handleV4Action(uint256 action, bytes memory param) internal pure returns (bytes memory) {
         if (action == SWAP_EXACT_IN_SINGLE) {
             DecoderCustomTypes.V4ExactInputSingleParams memory p =
                 abi.decode(param, (DecoderCustomTypes.V4ExactInputSingleParams));
-            return abi.encodePacked(_poolKey(p.poolKey), p.zeroForOne, _bound(p.amountOutMinimum));
+            return abi.encodePacked(_poolKey(p.poolKey), p.zeroForOne, uint256(p.amountOutMinimum));
         }
         if (action == SWAP_EXACT_OUT_SINGLE) {
             DecoderCustomTypes.V4ExactOutputSingleParams memory p =
                 abi.decode(param, (DecoderCustomTypes.V4ExactOutputSingleParams));
-            return abi.encodePacked(_poolKey(p.poolKey), p.zeroForOne, _bound(p.amountInMaximum));
+            return abi.encodePacked(_poolKey(p.poolKey), p.zeroForOne, uint256(p.amountInMaximum));
         }
         if (action == SETTLE) {
             (address currency,,) = abi.decode(param, (address, uint256, bool));
@@ -199,13 +187,13 @@ abstract contract UniversalRouterDecoderAndSanitizer is GranularityDecoderAndSan
         // The supported set mirrors the V4 swap router (`V4Router._handleAction`): swap singles plus
         // SETTLE/SETTLE_ALL/TAKE/TAKE_ALL/TAKE_PORTION settlement. SWAP_EXACT_IN / SWAP_EXACT_OUT (multi-hop) carry
         // PathKey[] structs whose layout differs across v4-periphery versions, so they stay gated until pinned.
-        revert UniversalRouterDecoderAndSanitizer__UnsupportedAction(action);
+        revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action);
     }
 
     //============================== HELPERS ===============================
 
     /// @dev Pool identity is pinned exactly: both currencies, the fee/tickSpacing that select the pool, and the
-    ///      hooks contract (arbitrary code, so it must be an approved address, never granular).
+    ///      hooks contract (arbitrary code, so it must be an approved address).
     function _poolKey(DecoderCustomTypes.V4PoolKey memory key) internal pure returns (bytes memory) {
         return abi.encodePacked(key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks);
     }
@@ -216,17 +204,13 @@ abstract contract UniversalRouterDecoderAndSanitizer is GranularityDecoderAndSan
     function _extractV3PathAddresses(bytes calldata path) internal pure returns (bytes memory addressesFound) {
         uint256 chunkSize = 23; // 3 bytes for the uint24 fee, 20 bytes for the token address
         uint256 pathLength = path.length;
-        if (pathLength % chunkSize != 20) revert UniversalRouterDecoderAndSanitizer__BadV3PathFormat();
+        if (pathLength % chunkSize != 20) revert UniswapUniversalStablecoinDecoderAndSanitizer__BadV3PathFormat();
         uint256 pathAddressLength = 1 + (pathLength / chunkSize);
         uint256 pathIndex;
         for (uint256 i; i < pathAddressLength; ++i) {
             addressesFound = abi.encodePacked(addressesFound, path[pathIndex:pathIndex + 20]);
             pathIndex += chunkSize;
         }
-    }
-
-    function _granularity() internal view virtual override returns (uint256) {
-        return granularity;
     }
 
 }
