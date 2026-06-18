@@ -185,6 +185,7 @@ contract TransitStation is OAppAuth, Pausable {
     error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
+    error SameChainOrdersRequireNoValue();
 
     /// @param _owner Owner and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
@@ -538,6 +539,7 @@ contract TransitStation is OAppAuth, Pausable {
         });
 
         if (quote.route.destEID == thisChainEID) {
+            if (msg.value != 0) revert SameChainOrdersRequireNoValue();
             _pushOrder(terms);
         } else {
             _sendOrder(quote.route.destEID, terms);
