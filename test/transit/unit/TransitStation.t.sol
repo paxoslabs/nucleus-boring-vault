@@ -1597,6 +1597,27 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(station.getPendingOrders().length, 0);
         }
 
+        function testForceRemovePendingOrder_AfterPartialFill() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            uint256 fillAmount = DEFAULT_OFFER_AMOUNT / 2;
+
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), fillAmount);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, fillAmount));
+
+            assertEq(station.pendingOrderCount(), 1);
+            assertEq(station.getPendingOrders()[0].amountDue, DEFAULT_OFFER_AMOUNT - fillAmount);
+
+            vm.prank(owner);
+            station.forceRemovePendingOrder(uuid);
+
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(station.getPendingOrders().length, 0);
+        }
+
         // ========================================= ADMIN & UTILITY REVERTS =========================================
 
         function testRecoverETH_RevertIf_CallerNotAuthorized() external {
