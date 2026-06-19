@@ -1458,6 +1458,36 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
         }
 
+        function testExecutePendingOrders_RevertIf_ExecutedTwice() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
+
+            assertEq(station.pendingOrderCount(), 0);
+
+            vm.prank(executor);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, uuid));
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, DEFAULT_OFFER_AMOUNT));
+        }
+
+        function testExecutePendingOrders_RevertIf_DuplicateUuidInBatch() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            TransitStation.FillBatch[] memory batches = new TransitStation.FillBatch[](1);
+            bytes32[] memory uuids = new bytes32[](2);
+            uuids[0] = uuid;
+            uuids[1] = uuid;
+            uint256[] memory amounts = new uint256[](2);
+            amounts[0] = DEFAULT_OFFER_AMOUNT;
+            amounts[1] = DEFAULT_OFFER_AMOUNT;
+            batches[0] = TransitStation.FillBatch({ wantAsset: address(wantAsset), uuids: uuids, amounts: amounts });
+
+            vm.prank(executor);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.OrderNotFound.selector, uuid));
+            station.executePendingOrders(batches);
+        }
+
         function testExecutePendingOrders_EmitsOrderExecuted() external {
             (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
 
