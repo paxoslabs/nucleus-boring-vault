@@ -1424,6 +1424,40 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
         }
 
+        function testExecutePendingOrders_PartialFillThenFullFill() external {
+            (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
+
+            uint256 fillAmount = DEFAULT_OFFER_AMOUNT / 2;
+            uint256 remaining = DEFAULT_OFFER_AMOUNT - fillAmount;
+
+            // Approve only the partial fill amount so no residual allowance remains.
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), fillAmount);
+
+            uint256 userWantBefore = wantAsset.balanceOf(user);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, fillAmount));
+
+            assertEq(station.pendingOrderCount(), 1);
+            TransitStation.Order memory order = station.getPendingOrders()[0];
+            assertEq(order.amountDue, remaining);
+            assertEq(wantAsset.balanceOf(user), userWantBefore + fillAmount);
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+
+            // Approve the remaining amount and fully fill the order.
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), remaining);
+
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), uuid, remaining));
+
+            assertEq(station.pendingOrderCount(), 0);
+            assertEq(station.getPendingOrders().length, 0);
+            assertEq(wantAsset.balanceOf(user), userWantBefore + DEFAULT_OFFER_AMOUNT);
+            assertEq(wantAsset.allowance(wantAssetSource, address(station)), 0);
+        }
+
         function testExecutePendingOrders_EmitsOrderExecuted() external {
             (TransitStation station, bytes32 uuid) = _deployStationWithPendingOrder();
 
