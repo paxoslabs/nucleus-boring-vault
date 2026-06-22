@@ -1227,7 +1227,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 
-        function testLzReceive_RevertIf_DuplicatePushAttempt() external {
+        function testLzReceive_RevertIf_DuplicatePushFromSameChainOrder() external {
             TransitStation station = _deployDefaultStation();
 
             // Create a same-chain pending order.
@@ -1247,7 +1247,28 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             bytes memory payload = abi.encode(terms);
             Origin memory origin = Origin({ srcEid: DEST_EID, sender: registeredPeer, nonce: 1 });
 
-            // Receiving the same UUID again is a duplicate push.
+            // Receiving a UUID that already exists as a same-chain order is a duplicate push.
+            vm.prank(address(endpoint));
+            vm.expectRevert(TransitStation.DuplicatePushAttempt.selector);
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        function testLzReceive_RevertIf_DuplicatePushFromDoubleReceive() external {
+            TransitStation station = _deployDefaultStation();
+
+            bytes32 registeredPeer = bytes32(uint256(uint160(address(station))));
+            vm.prank(owner);
+            station.setPeer(DEST_EID, registeredPeer);
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({ srcEid: DEST_EID, sender: registeredPeer, nonce: 1 });
+
+            // First receive queues the order.
+            vm.prank(address(endpoint));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+
+            // Receiving the same UUID a second time is a duplicate push.
             vm.prank(address(endpoint));
             vm.expectRevert(TransitStation.DuplicatePushAttempt.selector);
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
