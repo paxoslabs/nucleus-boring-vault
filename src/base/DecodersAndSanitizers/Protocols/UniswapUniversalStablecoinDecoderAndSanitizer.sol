@@ -26,12 +26,14 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(address recipient);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotInRoute(address token);
     error UniswapUniversalStablecoinDecoderAndSanitizer__IncompleteSweep();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256 command);
 
     //============================== COMMAND IDS ===============================
     // From the modern (V4) Uniswap Commands.sol. A command byte's low 7 bits (0x7f) are the command type; the
     // high bit (0x80) is the allow-revert flag.
 
     bytes1 internal constant COMMAND_TYPE_MASK = 0x7f;
+    bytes1 internal constant FLAG_ALLOW_REVERT = 0x80;
     bytes1 internal constant COMMAND_SWEEP = 0x04;
     bytes1 internal constant V4_SWAP = 0x10;
 
@@ -110,6 +112,14 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         returns (bytes memory addressesFound)
     {
         if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
+        // Every command must let a revert bubble up (allow-revert flag unset), so a failing command — e.g. a sweep
+        // that does not return the funds — reverts the whole tx rather than being silently skipped.
+        for (uint256 i; i < commands.length; ++i) {
+            bytes1 command = commands[i];
+            if (command & FLAG_ALLOW_REVERT != 0) {
+                revert UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256(uint8(command)));
+            }
+        }
         if (commands.length == 0 || commands[0] & COMMAND_TYPE_MASK != V4_SWAP) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
         }
