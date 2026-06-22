@@ -406,4 +406,20 @@ contract DecoderCustomTypes {
         bytes[] signatures;
     }
 
+    // ========================================= ECO =========================================
+    // Eco Portal reward, for the publishAndFund(uint64,bytes,Reward,bool) overload (route passed as opaque bytes).
+    // The `Eco` prefix does not affect the selector, which depends only on the tuple layout.
+    struct EcoTokenAmount {
+        address token;
+        uint256 amount;
+    }
+
+    struct EcoReward {
+        uint64 deadline;
+        address creator;
+        address prover;
+        uint256 nativeAmount;
+        EcoTokenAmount[] tokens;
+    }
+
 }

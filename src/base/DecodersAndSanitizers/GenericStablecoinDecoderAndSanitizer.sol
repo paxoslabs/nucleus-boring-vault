@@ -44,6 +44,8 @@ import { NucleusDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Proto
 import {
     CoreWriterDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/CoreWriterDecoderAndSanitizer.sol";
+import { EcoDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/EcoDecoderAndSanitizer.sol";
+import { KhalaniDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/KhalaniDecoderAndSanitizer.sol";
 
 /// @notice Same protocol set as `GenericDecoderAndSanitizer`, with Uniswap and Curve scoped to stablecoin swaps:
 ///         `UniswapUniversalStablecoinDecoderAndSanitizer` (the Universal Router `approve`/swap/`SWEEP` surface) and
@@ -69,7 +71,9 @@ contract GenericStablecoinDecoderAndSanitizer is
     EtherFiDecoderAndSanitizer,
     LayerZeroOFTDecoderAndSanitizer,
     NucleusDecoderAndSanitizer,
-    CoreWriterDecoderAndSanitizer
+    CoreWriterDecoderAndSanitizer,
+    EcoDecoderAndSanitizer,
+    KhalaniDecoderAndSanitizer
 {
 
     /// @param _boringVault The vault these decodings are sanitized for.
