@@ -720,6 +720,18 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.submitOrder(quote, signature);
         }
 
+        function testSubmitOrder_RevertIf_SameChainOrdersRequireNoValue() external {
+            TransitStation station = _deployDefaultStation();
+
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+
+            vm.deal(user, 1 ether);
+            vm.prank(user);
+            vm.expectRevert(TransitStation.SameChainOrdersRequireNoValue.selector);
+            station.submitOrder{ value: 1 ether }(quote, signature);
+        }
+
         function testSubmitOrder_RevertIf_InsufficientAllowance() external {
             TransitStation station = _deployDefaultStation();
 
@@ -1212,6 +1224,32 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             vm.prank(address(endpoint));
             vm.expectRevert(abi.encodeWithSelector(IOAppCore.OnlyPeer.selector, DEST_EID, actualSender));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
+        function testLzReceive_RevertIf_DuplicatePushAttempt() external {
+            TransitStation station = _deployDefaultStation();
+
+            // Create a same-chain pending order.
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            TransitStation.Order[] memory orders = station.getPendingOrders();
+            TransitStation.OrderTerms memory terms = orders[0].terms;
+
+            // Set a peer so lzReceive will be authorized.
+            bytes32 registeredPeer = bytes32(uint256(uint160(address(station))));
+            vm.prank(owner);
+            station.setPeer(DEST_EID, registeredPeer);
+
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({ srcEid: DEST_EID, sender: registeredPeer, nonce: 1 });
+
+            // Receiving the same UUID again is a duplicate push.
+            vm.prank(address(endpoint));
+            vm.expectRevert(TransitStation.DuplicatePushAttempt.selector);
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 
