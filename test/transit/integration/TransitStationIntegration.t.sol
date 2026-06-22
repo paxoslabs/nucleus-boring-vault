@@ -265,7 +265,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         bytes32 constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
         bytes32 constant QUOTE_TYPEHASH = keccak256(
-            "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
+            "Quote(Route route,uint256 offerAmount,address receiver,uint256 protocolFee,uint256 integratorFee,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
         );
 
         function setUp() public {
@@ -371,10 +371,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 abi.encode(
                     QUOTE_TYPEHASH,
                     _hashRoute(quote.route),
-                    quote.offerAmountNormalized18,
+                    quote.offerAmount,
                     quote.receiver,
-                    quote.protocolFeeNormalized18,
-                    quote.integratorFeeNormalized18,
+                    quote.protocolFee,
+                    quote.integratorFee,
                     quote.integratorFeeReceiver,
                     quote.distributorCode,
                     quote.deadline,
@@ -394,10 +394,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 route: TransitStation.Route({
                     destEID: endpoint.eid(), offerAsset: address(offerToken), wantAsset: address(wantToken)
                 }),
-                offerAmountNormalized18: OFFER_AMOUNT_NORMALIZED,
+                offerAmount: OFFER_AMOUNT,
                 receiver: user,
-                protocolFeeNormalized18: 0,
-                integratorFeeNormalized18: 0,
+                protocolFee: 0,
+                integratorFee: 0,
                 integratorFeeReceiver: address(0),
                 distributorCode: bytes32(0),
                 deadline: block.timestamp + 1 hours,
@@ -456,8 +456,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             uint256 netTokenUnits = OFFER_AMOUNT - protocolFeeTokenUnits - integratorFeeTokenUnits;
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.protocolFee = protocolFeeTokenUnits;
+            quote.integratorFee = integratorFeeTokenUnits;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             bytes memory signature = _signQuote(quote);
@@ -534,8 +534,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.wantAsset = address(wantToken18);
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.protocolFee = protocolFeeTokenUnits;
+            quote.integratorFee = integratorFeeTokenUnits;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             bytes memory signature = _signQuote(quote);
@@ -607,8 +607,9 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.offerAsset = address(offerToken18);
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.offerAmount = OFFER_AMOUNT_18;
+            quote.protocolFee = protocolFeeNormalized18;
+            quote.integratorFee = integratorFeeNormalized18;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             bytes memory signature = _signQuote(quote);
@@ -681,8 +682,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DST_EID;
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.protocolFee = protocolFeeTokenUnits;
+            quote.integratorFee = integratorFeeTokenUnits;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             vm.prank(user);
@@ -742,8 +743,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DST_EID;
             quote.route.wantAsset = address(wantToken18);
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.protocolFee = protocolFeeTokenUnits;
+            quote.integratorFee = integratorFeeTokenUnits;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             vm.prank(user);
@@ -801,8 +802,9 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DST_EID;
             quote.route.offerAsset = address(offerToken18);
-            quote.protocolFeeNormalized18 = protocolFeeNormalized18;
-            quote.integratorFeeNormalized18 = integratorFeeNormalized18;
+            quote.offerAmount = OFFER_AMOUNT_18;
+            quote.protocolFee = protocolFeeNormalized18;
+            quote.integratorFee = integratorFeeNormalized18;
             quote.integratorFeeReceiver = integratorFeeRecipient;
 
             vm.prank(user);

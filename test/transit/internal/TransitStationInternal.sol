@@ -59,18 +59,6 @@ contract TransitStationInternal is TransitStation {
         return _domainSeparator();
     }
 
-    function exposedIsRouteApproved(Route calldata route) external view returns (bool) {
-        return _isRouteApproved(route);
-    }
-
-    function exposedHashRoute(Route calldata route) external pure returns (bytes32) {
-        return _hashRoute(route);
-    }
-
-    function exposedHashQuote(Quote calldata quote) external pure returns (bytes32) {
-        return _hashQuote(quote);
-    }
-
     function exposedToTokenDecimals(uint256 amountNormalized18, uint8 decimals) external pure returns (uint256) {
         return _toTokenDecimals(amountNormalized18, decimals);
     }

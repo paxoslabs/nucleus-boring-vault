@@ -274,7 +274,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
         bytes32 constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
         bytes32 constant QUOTE_TYPEHASH = keccak256(
-            "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
+            "Quote(Route route,uint256 offerAmount,address receiver,uint256 protocolFee,uint256 integratorFee,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
         );
 
         // Events re-declared here so `vm.expectEmit` can match them without needing an external emitter.
@@ -404,8 +404,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         ///      to override the single property it wants to test. Properties of the default quote:
         ///      - Route uses `endpoint.eid()` as the destination, so the order is same-chain.
         ///      - Offer and want assets are the 6-decimal test tokens deployed in `setUp`.
-        ///      - `offerAmountNormalized18` is `DEFAULT_OFFER_AMOUNT_NORMALIZED` (100e18), large enough to avoid
-        ///        truncation-to-zero issues.
+        ///      - `offerAmount` is `DEFAULT_OFFER_AMOUNT` (100e6 token units for the 6-decimal offer asset), large enough
+        ///        to avoid truncation-to-zero issues.
         ///      - Both fees are zero and `integratorFeeReceiver` is `address(0)`.
         ///      - `receiver` is the test `user`.
         ///      - `deadline` is `block.timestamp + 1 hours`.
@@ -415,10 +415,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 route: TransitStation.Route({
                     destEID: endpoint.eid(), offerAsset: address(offerAsset), wantAsset: address(wantAsset)
                 }),
-                offerAmountNormalized18: DEFAULT_OFFER_AMOUNT_NORMALIZED,
+                offerAmount: DEFAULT_OFFER_AMOUNT,
                 receiver: user,
-                protocolFeeNormalized18: 0,
-                integratorFeeNormalized18: 0,
+                protocolFee: 0,
+                integratorFee: 0,
                 integratorFeeReceiver: address(0),
                 distributorCode: bytes32(0),
                 deadline: block.timestamp + 1 hours,
@@ -483,10 +483,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 abi.encode(
                     QUOTE_TYPEHASH,
                     _hashRoute(quote.route),
-                    quote.offerAmountNormalized18,
+                    quote.offerAmount,
                     quote.receiver,
-                    quote.protocolFeeNormalized18,
-                    quote.integratorFeeNormalized18,
+                    quote.protocolFee,
+                    quote.integratorFee,
                     quote.integratorFeeReceiver,
                     quote.distributorCode,
                     quote.deadline,
@@ -665,7 +665,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation station = _deployDefaultStation();
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.integratorFeeNormalized18 = 1e18;
+            quote.integratorFee = 1;
             bytes memory signature = _signQuote(station, quote);
 
             vm.prank(user);
@@ -676,10 +676,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         function testSubmitOrder_RevertIf_ProtocolFeeTooHigh() external {
             TransitStation station = _deployDefaultStation();
 
-            uint256 maxProtocolFee = (DEFAULT_OFFER_AMOUNT_NORMALIZED * station.MAX_PROTOCOL_FEE_BPS()) / 10_000;
+            uint256 maxProtocolFee = (DEFAULT_OFFER_AMOUNT * station.MAX_PROTOCOL_FEE_BPS()) / 10_000;
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.protocolFeeNormalized18 = maxProtocolFee + 1;
+            quote.protocolFee = maxProtocolFee + 1;
             bytes memory signature = _signQuote(station, quote);
 
             vm.prank(user);
@@ -692,10 +692,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         function testSubmitOrder_RevertIf_IntegratorFeeTooHigh() external {
             TransitStation station = _deployDefaultStation();
 
-            uint256 maxIntegratorFee = (DEFAULT_OFFER_AMOUNT_NORMALIZED * station.MAX_INTEGRATOR_FEE_BPS()) / 10_000;
+            uint256 maxIntegratorFee = (DEFAULT_OFFER_AMOUNT * station.MAX_INTEGRATOR_FEE_BPS()) / 10_000;
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.integratorFeeNormalized18 = maxIntegratorFee + 1;
+            quote.integratorFee = maxIntegratorFee + 1;
             quote.integratorFeeReceiver = user;
             bytes memory signature = _signQuote(station, quote);
 
@@ -712,43 +712,11 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation station = _deployDefaultStation();
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.offerAmountNormalized18 = 0;
+            quote.offerAmount = 0;
             bytes memory signature = _signQuote(station, quote);
 
             vm.prank(user);
-            vm.expectRevert(abi.encodeWithSelector(TransitStation.FeesExceedOffer.selector, 0, 0, 0));
-            station.submitOrder(quote, signature);
-        }
-
-        function testSubmitOrder_RevertIf_NetTruncatesToZero() external {
-            ERC20 offerAsset6 = new tERC20(6);
-            TransitStation station = _deployStationWithAssets(offerAsset6, wantAsset);
-
-            TransitStation.Quote memory quote = _defaultQuote();
-            quote.route.offerAsset = address(offerAsset6);
-            quote.offerAmountNormalized18 = 1e11;
-            bytes memory signature = _signQuote(station, quote);
-
-            vm.prank(user);
-            vm.expectRevert(abi.encodeWithSelector(TransitStation.NetTruncatesToZero.selector, 1e11, 6));
-            station.submitOrder(quote, signature);
-        }
-
-        function testSubmitOrder_RevertIf_ZeroAmountDue() external {
-            ERC20 offerAsset18 = new tERC20(18);
-            ERC20 wantAsset6 = new tERC20(6);
-            TransitStation station = _deployStationWithAssets(offerAsset18, wantAsset6);
-
-            deal(address(offerAsset18), user, 1e11 * 10);
-
-            TransitStation.Quote memory quote = _defaultQuote();
-            quote.route.offerAsset = address(offerAsset18);
-            quote.route.wantAsset = address(wantAsset6);
-            quote.offerAmountNormalized18 = 1e11;
-            bytes memory signature = _signQuote(station, quote);
-
-            vm.prank(user);
-            vm.expectRevert(TransitStation.ZeroAmountDue.selector);
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.FeesExceedOrEqualOffer.selector, 0, 0, 0));
             station.submitOrder(quote, signature);
         }
 
@@ -907,8 +875,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             address integrator = makeAddr("integrator");
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.protocolFeeNormalized18 = 0.5e18;
-            quote.integratorFeeNormalized18 = 2e18;
+            quote.protocolFee = 0.5e6;
+            quote.integratorFee = 2e6;
             quote.integratorFeeReceiver = integrator;
             bytes memory signature = _signQuote(station, quote);
 
@@ -969,7 +937,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation station = _deployDefaultStation();
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.protocolFeeNormalized18 = 0.5e18;
+            quote.protocolFee = 0.5e6;
             bytes memory signature = _signQuote(station, quote);
 
             uint256 userBalanceBefore = offerAsset.balanceOf(user);
@@ -993,7 +961,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             address integrator = makeAddr("integrator");
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.integratorFeeNormalized18 = 2e18;
+            quote.integratorFee = 2e6;
             quote.integratorFeeReceiver = integrator;
             bytes memory signature = _signQuote(station, quote);
 
@@ -1018,8 +986,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             address integrator = makeAddr("integrator");
 
             TransitStation.Quote memory quote = _defaultQuote();
-            quote.protocolFeeNormalized18 = 0.5e18;
-            quote.integratorFeeNormalized18 = 2e18;
+            quote.protocolFee = 0.5e6;
+            quote.integratorFee = 2e6;
             quote.integratorFeeReceiver = integrator;
             bytes memory signature = _signQuote(station, quote);
 
@@ -1124,10 +1092,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 route: TransitStation.Route({
                     destEID: endpoint.eid(), offerAsset: address(offerPermit), wantAsset: address(wantAsset)
                 }),
-                offerAmountNormalized18: DEFAULT_OFFER_AMOUNT_NORMALIZED,
+                offerAmount: DEFAULT_OFFER_AMOUNT_NORMALIZED,
                 receiver: permitUser,
-                protocolFeeNormalized18: 0,
-                integratorFeeNormalized18: 0,
+                protocolFee: 0,
+                integratorFee: 0,
                 integratorFeeReceiver: address(0),
                 distributorCode: bytes32(0),
                 deadline: block.timestamp + 1 hours,
@@ -1162,10 +1130,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
                 route: TransitStation.Route({
                     destEID: endpoint.eid(), offerAsset: address(offerPermit), wantAsset: address(wantAsset)
                 }),
-                offerAmountNormalized18: DEFAULT_OFFER_AMOUNT_NORMALIZED,
+                offerAmount: DEFAULT_OFFER_AMOUNT_NORMALIZED,
                 receiver: permitUser,
-                protocolFeeNormalized18: 0,
-                integratorFeeNormalized18: 0,
+                protocolFee: 0,
+                integratorFee: 0,
                 integratorFeeReceiver: address(0),
                 distributorCode: bytes32(0),
                 deadline: block.timestamp + 1 hours,
@@ -1244,30 +1212,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             vm.prank(address(endpoint));
             vm.expectRevert(abi.encodeWithSelector(IOAppCore.OnlyPeer.selector, DEST_EID, actualSender));
-            station.lzReceive(origin, bytes32(0), payload, address(0), "");
-        }
-
-        function testLzReceive_RevertIf_ZeroAmountDue() external {
-            ERC20 wantAsset6 = new tERC20(6);
-            TransitStation station = _deployStationWithAssets(offerAsset, wantAsset6);
-
-            vm.prank(owner);
-            station.setPeer(DEST_EID, bytes32(uint256(uint160(address(station)))));
-
-            TransitStation.OrderTerms memory terms = TransitStation.OrderTerms({
-                uuid: keccak256("test-uuid"),
-                wantAsset: address(wantAsset6),
-                receiver: user,
-                offerAsset: address(offerAsset),
-                offerAmountNormalized18AfterFees: 1e11
-            });
-
-            bytes memory payload = abi.encode(terms);
-            Origin memory origin =
-                Origin({ srcEid: DEST_EID, sender: bytes32(uint256(uint160(address(station)))), nonce: 1 });
-
-            vm.prank(address(endpoint));
-            vm.expectRevert(TransitStation.ZeroAmountDue.selector);
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 

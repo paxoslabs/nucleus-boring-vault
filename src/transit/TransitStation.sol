@@ -12,14 +12,15 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 import { Pausable } from "src/helper/Pausable.sol";
 
 /// @title TransitStation
-/// @notice Per-chain entrypoint for Paxos Labs Transit. A user submits a backend-signed `Quote`,
-///         deposits the offer asset, and receives the want asset on the same chain or a peer chain. The actual
-///         swap is priced off-chain and fulfilled by a privileged executor; the station does not custody funds.
+/// @notice Per-chain entrypoint for Transit. A user submits a backend-signed `Quote`,
+///         deposits the offer asset, and receives the want asset on the same chain or a peer chain. The 1:1 swap
+///         fee is priced off-chain and fulfilled by a privileged executor; the station does not custody funds.
 /// @dev Funds never bridge — only order data does. On submit, the net offer is pulled to `offerReceiver`; on
 ///      fulfillment, the want asset is pulled from `wantAssetSource` straight to the receiver. A cross-chain order
 ///      travels as a LayerZero message carrying its `OrderTerms`; the peer station's `_lzReceive` expands them into
-///      an `Order` and queues it exactly as a same-chain order would be. All quote amounts and bridged values are
-///      normalized to 18 decimals;
+///      an `Order` and queues it exactly as a same-chain order would be. The station normalizes the collected net to
+///      18 decimals internally so the want owed can be derived across differing token decimals on the destination.
+///      Quote amounts are in offer-asset decimals; execute amounts are in want-asset decimals.
 contract TransitStation is OAppAuth, Pausable {
 
     using SafeTransferLib for ERC20;
@@ -47,8 +48,7 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice A swap queued for fulfillment on the destination chain: the source-attested terms plus the two fields
-    ///         only the destination can fill (the want asset — and so its decimals — is local there, not on the
-    ///         source).
+    ///         only the destination can fill
     struct Order {
         OrderTerms terms;
         uint256 amountDue; // want owed (want-asset units); derived in `_pushOrder`, decremented on partial fills
@@ -57,14 +57,13 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Backend-priced swap terms, EIP-712 signed by `quoteSigner`. Bearer instrument: anyone may submit a
     ///         valid quote (they pay the offer amount; the want asset goes to the fixed `receiver`).
-    ///         ALL amounts are normalized to 18 decimals regardless of the token's own decimals and are
-    ///         truncated down to the offer asset's native units at transfer time.
+    ///         All amounts are denominated in the offer asset's own decimals.
     struct Quote {
         Route route;
-        uint256 offerAmountNormalized18;
+        uint256 offerAmount;
         address receiver;
-        uint256 protocolFeeNormalized18; // capped at MAX_PROTOCOL_FEE_BPS
-        uint256 integratorFeeNormalized18; // frontend's cut; capped at MAX_INTEGRATOR_FEE_BPS
+        uint256 protocolFee; // capped at MAX_PROTOCOL_FEE_BPS
+        uint256 integratorFee; // frontend's cut; capped at MAX_INTEGRATOR_FEE_BPS
         address integratorFeeReceiver;
         bytes32 distributorCode; // Arbitrary code for emitting the source of funds
         uint256 deadline;
@@ -81,12 +80,15 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @dev Basis-points denominator.
-    uint256 internal constant ONE_HUNDRED_PERCENT = 10_000;
-    /// @dev Quote amounts and bridged values are normalized to this many decimals; token-native amounts exist only at
-    ///      the transfer boundary. Normalizing means token decimals never need to bridge.
+    uint256 public constant ONE_HUNDRED_PERCENT = 10_000;
+
+    /// @dev The collected net is normalized to this many decimals before bridging, so the destination can derive the
+    ///      want owed without knowing the offer asset's decimals.
     uint8 internal constant NORMALIZED_DECIMALS = 18;
+
     /// @notice Hard cap on the protocol fee (0.5%). Bounds what a compromised `quoteSigner` can skim as protocol fee.
     uint256 public constant MAX_PROTOCOL_FEE_BPS = 50;
+
     /// @notice Hard cap on the integrator fee (10%).
     uint256 public constant MAX_INTEGRATOR_FEE_BPS = 1000;
 
@@ -96,33 +98,40 @@ contract TransitStation is OAppAuth, Pausable {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 internal constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
     bytes32 internal constant QUOTE_TYPEHASH = keccak256(
-        "Quote(Route route,uint256 offerAmountNormalized18,address receiver,uint256 protocolFeeNormalized18,uint256 integratorFeeNormalized18,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
+        "Quote(Route route,uint256 offerAmount,address receiver,uint256 protocolFee,uint256 integratorFee,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
     );
 
     /// @notice This chain's LayerZero endpoint id, read from the endpoint at deploy.
     uint32 public immutable thisChainEID;
+
     /// @notice Receives `protocolFee` on every submit.
     address public protocolFeeRecipient;
+
     /// @notice Trusted backend key; every `Quote` must carry its EIP-712 signature.
     address public quoteSigner;
+
     /// @notice Destination for the net deposit on submit. The station only transfers
     ///         to it — it is not held by the station.
     address public offerReceiver;
+
     /// @notice Address the executor pulls the want asset FROM on fulfillment; must approve this station
     address public wantAssetSource;
 
     /// @notice Per-destination-EID gas the LZ executor supplies to the peer's `lzReceive`.
     mapping(uint32 => uint64) public messageGasLimit;
+
     /// @notice Global directional route allowlist (destEID => offerAsset => wantAsset). Enforced once, at
     ///         submission on the source, so a compromised backend can only ever land orders for globally-approved
     ///         asset pairs. Nested (not a hashed key) for readable getters.
-    mapping(uint32 => mapping(address => mapping(address => bool))) public approvedRoutes;
+    mapping(uint32 destEID => mapping(address offerAsset => mapping(address => bool))) public approvedRoutes;
+
     /// @notice Spent EIP-712 digests — replay guard.
     mapping(bytes32 => bool) public usedDigests;
 
     /// @dev Pending orders, addressed by UUID: an enumerable set of ids plus a UUID-keyed data mapping. Because the
     ///      executor references orders by UUID (not by position), removing one never disturbs another mid-batch.
     EnumerableSet.Bytes32Set internal pendingOrderIds;
+
     mapping(bytes32 => Order) public pendingOrders;
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
@@ -134,24 +143,32 @@ contract TransitStation is OAppAuth, Pausable {
         address indexed user,
         bytes32 indexed distributorCode
     );
+
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
     ///         message `guid`
     event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, OrderTerms terms);
+
     /// @notice Emitted when an order enters a pending set (local submit or cross-chain receive)
     event OrderReceived(bytes32 indexed uuid, Order order);
+
     /// @notice Emitted when a bridged order arrives via LayerZero. Carries the full (now-queued) order plus the
     ///         `guid`, which matches the source's `OrderBridged`.
     event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, Order order);
+
     /// @notice Emitted per fill; `remaining` is the want still owed after this fill (0 == fully filled)
     event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
+
     /// @notice Emitted when the admin force-removes a pending order
     event OrderForceRemoved(bytes32 indexed uuid, Order order);
+
     event ProtocolFeeRecipientSet(address indexed recipient);
     event QuoteSignerSet(address indexed signer);
     event OfferReceiverSet(address indexed offerReceiver);
     event WantAssetSourceSet(address indexed wantAssetSource);
     event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
     event RouteApprovalSet(Route route, bool indexed approved);
+    event TokensRecovered(ERC20 token, uint256 amount);
+    event ETHRecovered(uint256 amount);
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
@@ -165,15 +182,15 @@ contract TransitStation is OAppAuth, Pausable {
     error QuoteExpired(uint256 deadline);
     error ProtocolFeeTooHigh(uint256 protocolFee, uint256 maxProtocolFee);
     error IntegratorFeeTooHigh(uint256 integratorFee, uint256 maxIntegratorFee);
-    error FeesExceedOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
+    error FeesExceedOrEqualOffer(uint256 protocolFee, uint256 integratorFee, uint256 offerAmount);
     error ResidualApproval(address token, address wantAssetSource, uint256 remaining);
     error PermitFailedAndAllowanceTooLow();
     error InvalidSigner(address recoveredSigner);
     error RouteNotApproved(Route route);
-    error ZeroAmountDue();
-    error NetTruncatesToZero(uint256 offerAmountNormalized18, uint8 offerDecimals);
+    error SameChainOrdersRequireNoValue();
+    error DuplicatePushAttempt();
 
-    /// @param _owner Owner (bypasses auth) and initial LZ delegate.
+    /// @param _owner Owner and initial LZ delegate.
     /// @param _authority RolesAuthority granting `requiresAuth` capabilities.
     /// @param _endpoint LayerZero endpoint for this chain.
     /// @param _protocolFeeRecipient Initial `protocolFeeRecipient`.
@@ -206,6 +223,11 @@ contract TransitStation is OAppAuth, Pausable {
         quoteSigner = _quoteSigner;
         offerReceiver = _offerReceiver;
         wantAssetSource = _wantAssetSource;
+
+        emit ProtocolFeeRecipientSet(_protocolFeeRecipient);
+        emit QuoteSignerSet(_quoteSigner);
+        emit OfferReceiverSet(_offerReceiver);
+        emit WantAssetSourceSet(_wantAssetSource);
     }
 
     /// @notice Submit a backend-signed quote: collects the offer asset, then queues (same-chain) or bridges the order.
@@ -213,6 +235,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param signature EIP-712 signature over `quote` by `quoteSigner`.
     /// @return uuid Identifier of the created order.
     /// @dev `payable` to fund the LZ native fee on cross-chain orders (unused/refundable for same-chain).
+    /// @custom:access PUBLIC capability should be granted — the entrypoint to submit orders; the caller funds their
+    /// own offer and the want goes to the quote's fixed `receiver`, so misuse only self-griefs.
     function submitOrder(
         Quote calldata quote,
         bytes calldata signature
@@ -235,6 +259,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param s Permit signature component.
     /// @return uuid Identifier of the created order.
     /// @dev A failed permit (already approved / front-run) falls back to an allowance check rather than reverting.
+    /// @custom:access PUBLIC capability should be granted — `submitOrder` plus an EIP-2612 permit; identical trust
+    /// profile.
     function submitOrderWithPermit(
         Quote calldata quote,
         bytes calldata signature,
@@ -250,10 +276,9 @@ contract TransitStation is OAppAuth, Pausable {
         returns (bytes32 uuid)
     {
         ERC20 offer = ERC20(quote.route.offerAsset);
-        uint256 offerAmountTokenUnits = _toTokenDecimals(quote.offerAmountNormalized18, offer.decimals());
-        try offer.permit(msg.sender, address(this), offerAmountTokenUnits, permitDeadline, v, r, s) { }
+        try offer.permit(msg.sender, address(this), quote.offerAmount, permitDeadline, v, r, s) { }
         catch {
-            if (offer.allowance(msg.sender, address(this)) < offerAmountTokenUnits) {
+            if (offer.allowance(msg.sender, address(this)) < quote.offerAmount) {
                 revert PermitFailedAndAllowanceTooLow();
             }
         }
@@ -265,6 +290,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @dev The station custodies nothing: the want asset is pulled `wantAssetSource` -> receiver, and after each
     ///      batch we assert no approval is left dangling for its asset.
     ///      `whenNotPaused`: pausing halts fulfillment, the kill-switch for a compromised backend.
+    /// @custom:access TRANSIT_EXECUTOR_ROLE should be granted authority — a privileged fulfillment bot; it can only
+    /// settle existing orders to their fixed receivers within the vault's approval, never redirect funds.
     function executePendingOrders(FillBatch[] calldata batches) external requiresAuth whenNotPaused {
         for (uint256 i; i < batches.length;) {
             FillBatch calldata batch = batches[i];
@@ -319,7 +346,10 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Admin removal of a pending order (full only). No on-chain refund — the admin may manually refund if
-    /// necessary @param uuid Order to remove.
+    /// necessary
+    /// @param uuid Order to remove.
+    /// @custom:access OWNER should be granted authority — drops any queued order; the deposit is refunded off-chain
+    /// and no funds move on-chain.
     function forceRemovePendingOrder(bytes32 uuid) external requiresAuth {
         if (!pendingOrderIds.contains(uuid)) revert OrderNotFound(uuid);
         Order memory order = pendingOrders[uuid];
@@ -331,34 +361,45 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Sweep stray ETH to the owner (the station is not meant to hold ETH between txs).
     /// @param amount Wei to send.
     /// @dev Owner is trusted, so the low-level call is not reentrancy-guarded.
+    /// @custom:access OWNER should be granted authority — sweeps stray ETH, and only ever to `owner`.
     function recoverETH(uint256 amount) external requiresAuth {
         (bool success,) = owner.call{ value: amount }("");
         if (!success) revert CallFailed();
+        emit ETHRecovered(amount);
     }
 
     /// @notice Sweep stray tokens to the owner. The station is not meant to hold tokens so these are assumed to be sent
     /// by mistake.
     /// @param token Token to sweep.
     /// @param amount Amount to send.
+    /// @custom:access OWNER should be granted authority — sweeps stray tokens, and only ever to `owner`.
     function recoverTokens(ERC20 token, uint256 amount) external requiresAuth {
         token.safeTransfer(owner, amount);
+        emit TokensRecovered(token, amount);
     }
 
     /// @notice Emergency stop: halts both submission and fulfillment (`submitOrder`, `submitOrderWithPermit`,
     ///         `executePendingOrders`), so a compromised backend can be frozen before funds leave. `_lzReceive` is
     ///         intentionally not gated — no value moves on receive (only on execute, which is gated), and gating it
     ///         would strand in-flight cross-chain messages.
+    /// @custom:access PAUSER_ROLE should be granted authority — halts submit + execute; denial-of-service at worst
+    /// and no fund movement, so a lower-trust role is acceptable.
     function pause() external requiresAuth {
         _pause();
     }
 
-    /// @notice Should be configured such that only the highest trust assumption, may unpause.
+    /// @notice Resume submission and fulfillment after a pause.
+    /// @custom:access OWNER should be granted authority — lifts the kill-switch; higher-stakes than pausing, so not
+    /// the
+    ///         pauser.
     function unpause() external requiresAuth {
         _unpause();
     }
 
     /// @notice Set the protocol fee recipient.
     /// @param recipient New recipient.
+    /// @custom:access OWNER should be granted authority — redirects protocol fees (bounded by
+    /// `MAX_PROTOCOL_FEE_BPS`), never principal.
     function setProtocolFeeRecipient(address recipient) external requiresAuth {
         if (recipient == address(0)) revert ZeroAddress();
         protocolFeeRecipient = recipient;
@@ -367,6 +408,8 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Rotate the trusted quote signer
     /// @param signer New signer.
+    /// @custom:access OWNER should be granted authority — replaces the trusted signer, i.e. total control over valid
+    /// quotes; highest-stakes setter.
     function setQuoteSigner(address signer) external requiresAuth {
         if (signer == address(0)) revert ZeroAddress();
         quoteSigner = signer;
@@ -375,6 +418,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Set where the net offer deposit is sent on submit.
     /// @param newOfferReceiver New offer receiver.
+    /// @custom:access OWNER should be granted authority — redirects where every future deposit's net is sent.
     function setOfferReceiver(address newOfferReceiver) external requiresAuth {
         if (newOfferReceiver == address(0)) revert ZeroAddress();
         offerReceiver = newOfferReceiver;
@@ -383,6 +427,9 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Set the address the want asset is pulled from on fulfillment.
     /// @param newWantAssetSource New want-asset source.
+    /// @custom:access OWNER should be granted authority — changes where fills are pulled from; effective only with
+    /// that
+    ///         address's approval, so worst case is bricked fulfillment.
     function setWantAssetSource(address newWantAssetSource) external requiresAuth {
         if (newWantAssetSource == address(0)) revert ZeroAddress();
         wantAssetSource = newWantAssetSource;
@@ -392,6 +439,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Set the LZ executor gas for the peer's `lzReceive` on a given destination EID.
     /// @param eid Destination endpoint id.
     /// @param gasLimit Gas to supply (must be enough for `_lzReceive`, else delivery reverts and the message stalls).
+    /// @custom:access OWNER should be granted authority — per-EID LZ gas; a bad value only stalls or over-pays
+    /// bridging.
     function setMessageGasLimit(uint32 eid, uint64 gasLimit) external requiresAuth {
         messageGasLimit[eid] = gasLimit;
         emit MessageGasLimitSet(eid, gasLimit);
@@ -400,6 +449,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @notice Batch-set the global route allowlist.
     /// @param routes Routes to toggle.
     /// @param approved Index-aligned approval flags.
+    /// @custom:access OWNER should be granted authority — the route allowlist + 1:1-peg attestation; approving unlike
+    /// assets means vault loss.
     function setRouteApprovals(Route[] calldata routes, bool[] calldata approved) external requiresAuth {
         if (routes.length != approved.length) revert LengthMismatch(routes.length, approved.length);
         for (uint256 i; i < routes.length;) {
@@ -419,7 +470,8 @@ contract TransitStation is OAppAuth, Pausable {
     function quoteSend(uint32 destEID, OrderTerms calldata terms) external view returns (uint256) {
         bytes memory payload = abi.encode(terms);
         bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(messageGasLimit[destEID], 0);
-        MessagingFee memory fee = _quote(destEID, payload, options, false);
+        MessagingFee memory fee = _quote(destEID, payload, options, false); // The boolean here indicates usage of
+        // LayerZero token for fees. We do not want to support this, only native ETH
         return fee.nativeFee;
     }
 
@@ -438,15 +490,44 @@ contract TransitStation is OAppAuth, Pausable {
         }
     }
 
+    /// @notice Getter for all pending order IDs in the enumerable set
+    function getPendingOrderIds() external view returns (bytes32[] memory) {
+        return pendingOrderIds.values();
+    }
+
+    /// @notice Getter for pending order IDs. Returns true if the provided uuid is in the enumerable set
+    function pendingOrderIdsContains(bytes32 uuid) external view returns (bool) {
+        return pendingOrderIds.contains(uuid);
+    }
+
     /// @notice Number of pending orders.
     function pendingOrderCount() external view returns (uint256) {
         return pendingOrderIds.length();
     }
 
+    /// @dev EIP-712 hashStruct of `Quote` (the `route` member is encoded as its own hashStruct, per the spec).
+    function hashQuote(Quote calldata quote) public pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                QUOTE_TYPEHASH,
+                keccak256(
+                    abi.encode(ROUTE_TYPEHASH, quote.route.destEID, quote.route.offerAsset, quote.route.wantAsset)
+                ),
+                quote.offerAmount,
+                quote.receiver,
+                quote.protocolFee,
+                quote.integratorFee,
+                quote.integratorFeeReceiver,
+                quote.distributorCode,
+                quote.deadline,
+                quote.salt
+            )
+        );
+    }
+
     /// @dev Shared submit core (reused by both entrypoints).
     ///      Verifies + collects, then either queues locally or bridges. The UUID is the quote's EIP-712 digest, so it
-    ///      is fully determined by the signed quote — identical no matter who submits it or in what order — and
-    /// unique
+    ///      is fully determined by the signed quote — identical no matter who submits it or in what order — unique
     ///      per source station/chain (the domain separator binds both). Only the terms exist at this point: the
     ///      queued state (`amountDue`, `queuedAt`) is filled by `_pushOrder` on the order's destination chain, where
     ///      the want asset is local.
@@ -463,6 +544,7 @@ contract TransitStation is OAppAuth, Pausable {
         });
 
         if (quote.route.destEID == thisChainEID) {
+            if (msg.value != 0) revert SameChainOrdersRequireNoValue();
             _pushOrder(terms);
         } else {
             _sendOrder(quote.route.destEID, terms);
@@ -472,10 +554,9 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @dev Validates the quote, pulls the offer asset, and returns the EIP-712 digest (used as the order UUID) plus
-    ///      the collected post-fee offer value normalized to 18 decimals. Order of effects matters: the digest is
-    ///      marked used (the replay-critical effect) before any transfer. Each normalized quote amount is truncated
-    ///      down to the offer asset's native units at the transfer boundary, and the three transfers partition the
-    ///      truncated offer amount exactly
+    ///      the collected post-fee net, normalized to 18 decimals for bridging. Order of effects matters: the digest
+    ///      is marked used (the replay-critical effect) before any transfer. The three transfers partition
+    ///      `offerAmount` exactly (integer token units, no rounding).
     function _verifyAndCollect(
         Quote calldata quote,
         bytes calldata signature
@@ -484,27 +565,23 @@ contract TransitStation is OAppAuth, Pausable {
         returns (bytes32 digest, uint256 offerAmountNormalized18AfterFees)
     {
         if (block.timestamp > quote.deadline) revert QuoteExpired(quote.deadline);
-        if (!_isRouteApproved(quote.route)) revert RouteNotApproved(quote.route);
+        Route calldata route = quote.route;
+        if (!approvedRoutes[route.destEID][route.offerAsset][route.wantAsset]) revert RouteNotApproved(route);
         if (quote.receiver == address(0)) revert ZeroAddress();
-        if (quote.integratorFeeNormalized18 > 0 && quote.integratorFeeReceiver == address(0)) revert ZeroAddress();
+        if (quote.integratorFee > 0 && quote.integratorFeeReceiver == address(0)) revert ZeroAddress();
 
-        uint256 maxProtocolFee = (quote.offerAmountNormalized18 * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
-        if (quote.protocolFeeNormalized18 > maxProtocolFee) {
-            revert ProtocolFeeTooHigh(quote.protocolFeeNormalized18, maxProtocolFee);
-        }
-        uint256 maxIntegratorFee = (quote.offerAmountNormalized18 * MAX_INTEGRATOR_FEE_BPS) / ONE_HUNDRED_PERCENT;
-        if (quote.integratorFeeNormalized18 > maxIntegratorFee) {
-            revert IntegratorFeeTooHigh(quote.integratorFeeNormalized18, maxIntegratorFee);
-        }
-        // Strict `>=`: the post-fee net must be strictly positive in normalized terms (positivity in token units is
-        // enforced separately below, after truncation).
-        if (quote.protocolFeeNormalized18 + quote.integratorFeeNormalized18 >= quote.offerAmountNormalized18) {
-            revert FeesExceedOffer(
-                quote.protocolFeeNormalized18, quote.integratorFeeNormalized18, quote.offerAmountNormalized18
-            );
+        uint256 maxProtocolFee = (quote.offerAmount * MAX_PROTOCOL_FEE_BPS) / ONE_HUNDRED_PERCENT;
+        if (quote.protocolFee > maxProtocolFee) revert ProtocolFeeTooHigh(quote.protocolFee, maxProtocolFee);
+
+        uint256 maxIntegratorFee = (quote.offerAmount * MAX_INTEGRATOR_FEE_BPS) / ONE_HUNDRED_PERCENT;
+        if (quote.integratorFee > maxIntegratorFee) revert IntegratorFeeTooHigh(quote.integratorFee, maxIntegratorFee);
+
+        // Strict `>=` guarantees the net pulled to `offerReceiver` is at least one token unit.
+        if (quote.protocolFee + quote.integratorFee >= quote.offerAmount) {
+            revert FeesExceedOrEqualOffer(quote.protocolFee, quote.integratorFee, quote.offerAmount);
         }
 
-        digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(), _hashQuote(quote)));
+        digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(), hashQuote(quote)));
         address signer = ECDSA.recover(digest, signature);
         if (signer != quoteSigner) revert InvalidSigner(signer);
 
@@ -512,32 +589,21 @@ contract TransitStation is OAppAuth, Pausable {
         usedDigests[digest] = true;
 
         ERC20 offer = ERC20(quote.route.offerAsset);
-        uint8 offerDecimals = offer.decimals();
-        uint256 protocolFeeTokenUnits = _toTokenDecimals(quote.protocolFeeNormalized18, offerDecimals);
-        uint256 integratorFeeTokenUnits = _toTokenDecimals(quote.integratorFeeNormalized18, offerDecimals);
-        // Cannot underflow: truncation is superadditive (truncated parts never sum past the truncated whole), and the
-        // strict fee check above guarantees the normalized whole exceeds the normalized parts.
-        uint256 netTokenUnits = _toTokenDecimals(quote.offerAmountNormalized18, offerDecimals) - protocolFeeTokenUnits
-            - integratorFeeTokenUnits;
-        // A zero token-unit net would create an order while collecting (next to) nothing for the transit system; the
-        // backend's min order size keeps this from firing on legitimate quotes.
-        if (netTokenUnits == 0) revert NetTruncatesToZero(quote.offerAmountNormalized18, offerDecimals);
+        uint256 net = quote.offerAmount - quote.protocolFee - quote.integratorFee;
 
-        if (protocolFeeTokenUnits > 0) {
-            offer.safeTransferFrom(msg.sender, protocolFeeRecipient, protocolFeeTokenUnits);
+        if (quote.protocolFee > 0) offer.safeTransferFrom(msg.sender, protocolFeeRecipient, quote.protocolFee);
+        if (quote.integratorFee > 0) {
+            offer.safeTransferFrom(msg.sender, quote.integratorFeeReceiver, quote.integratorFee);
         }
-        if (integratorFeeTokenUnits > 0) {
-            offer.safeTransferFrom(msg.sender, quote.integratorFeeReceiver, integratorFeeTokenUnits);
-        }
-        offer.safeTransferFrom(msg.sender, offerReceiver, netTokenUnits);
+        offer.safeTransferFrom(msg.sender, offerReceiver, net);
 
-        offerAmountNormalized18AfterFees = _toNormalizedDecimals(netTokenUnits, offerDecimals);
+        offerAmountNormalized18AfterFees = _toNormalizedDecimals(net, offer.decimals());
     }
 
     /// @dev Destination handler for a bridged order. Sender authenticity is already enforced by
     ///      `OAppAuthReceiver.lzReceive` (LZ `peers`); the route was validated on the source at submission.
     ///      A revert here is safe: delivery is unordered, so the message simply stays
-    ///      retryable on the endpoint — nothing is consumed.
+    ///      retryable on the endpoint
     function _lzReceive(
         Origin calldata origin,
         bytes32 guid,
@@ -577,7 +643,7 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
-        if (order.amountDue == 0) revert ZeroAmountDue();
+        if (pendingOrderIds.contains(terms.uuid)) revert DuplicatePushAttempt();
         pendingOrderIds.add(terms.uuid);
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
@@ -589,34 +655,6 @@ contract TransitStation is OAppAuth, Pausable {
         return keccak256(
             abi.encode(
                 DOMAIN_TYPEHASH, keccak256(bytes("TransitStation")), keccak256(bytes("1")), block.chainid, address(this)
-            )
-        );
-    }
-
-    /// @dev Allowlist lookup for a route.
-    function _isRouteApproved(Route memory route) internal view returns (bool) {
-        return approvedRoutes[route.destEID][route.offerAsset][route.wantAsset];
-    }
-
-    /// @dev EIP-712 hashStruct of the nested `Route`.
-    function _hashRoute(Route calldata route) internal pure returns (bytes32) {
-        return keccak256(abi.encode(ROUTE_TYPEHASH, route.destEID, route.offerAsset, route.wantAsset));
-    }
-
-    /// @dev EIP-712 hashStruct of `Quote` (the `route` member is encoded as its own hashStruct, per the spec).
-    function _hashQuote(Quote calldata quote) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                QUOTE_TYPEHASH,
-                _hashRoute(quote.route),
-                quote.offerAmountNormalized18,
-                quote.receiver,
-                quote.protocolFeeNormalized18,
-                quote.integratorFeeNormalized18,
-                quote.integratorFeeReceiver,
-                quote.distributorCode,
-                quote.deadline,
-                quote.salt
             )
         );
     }
