@@ -263,10 +263,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         address integratorFeeRecipient = makeAddr("integratorFeeRecipient");
 
-        bytes32 constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
-        bytes32 constant QUOTE_TYPEHASH = keccak256(
-            "Quote(Route route,uint256 offerAmount,address receiver,uint256 protocolFee,uint256 integratorFee,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
-        );
 
         function setUp() public {
             (quoteSigner, quoteSignerPk) = makeAddrAndKey("quoteSigner");
@@ -362,29 +358,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             );
         }
 
-        function _hashRoute(TransitStation.Route memory route) internal pure returns (bytes32) {
-            return keccak256(abi.encode(ROUTE_TYPEHASH, route.destEID, route.offerAsset, route.wantAsset));
-        }
-
-        function _hashQuote(TransitStation.Quote memory quote) internal pure returns (bytes32) {
-            return keccak256(
-                abi.encode(
-                    QUOTE_TYPEHASH,
-                    _hashRoute(quote.route),
-                    quote.offerAmount,
-                    quote.receiver,
-                    quote.protocolFee,
-                    quote.integratorFee,
-                    quote.integratorFeeReceiver,
-                    quote.distributorCode,
-                    quote.deadline,
-                    quote.salt
-                )
-            );
-        }
-
         function _signQuote(TransitStation.Quote memory quote) internal view returns (bytes memory) {
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(quoteSignerPk, digest);
             return abi.encodePacked(r, s, v);
         }
@@ -424,8 +399,12 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             internal
             returns (bytes32 uuid, TransitStation.OrderTerms memory terms)
         {
+            bytes memory signature = _signQuote(quote);
+
             vm.recordLogs();
-            uuid = station.submitOrder{ value: LZ_FEE }(quote, _signQuote(quote));
+            vm.startPrank(user);
+            uuid = station.submitOrder{ value: LZ_FEE }(quote, signature);
+            vm.stopPrank();
 
             bytes32 eventSig =
                 keccak256("OrderBridged(bytes32,uint32,bytes32,(bytes32,address,address,address,uint256))");
@@ -468,7 +447,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
 
-            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             assertEq(uuid, expectedUuid);
 
             // Offer tokens should have been partitioned between fees and the offer receiver.
@@ -546,7 +525,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
 
-            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             assertEq(uuid, expectedUuid);
 
             // Offer tokens should have been partitioned between fees and the offer receiver.
@@ -620,7 +599,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
 
-            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             assertEq(uuid, expectedUuid);
 
             // Offer tokens should have been partitioned between fees and the offer receiver.
@@ -689,7 +668,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
 
-            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote))));
             assertEq(offerToken.balanceOf(user), OFFER_AMOUNT * 9);
             assertEq(offerToken.balanceOf(protocolFeeRecipient), protocolFeeTokenUnits);
             assertEq(offerToken.balanceOf(integratorFeeRecipient), integratorFeeTokenUnits);
@@ -750,7 +729,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
 
-            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote))));
             assertEq(offerToken.balanceOf(user), OFFER_AMOUNT * 9);
             assertEq(offerToken.balanceOf(protocolFeeRecipient), protocolFeeTokenUnits);
             assertEq(offerToken.balanceOf(integratorFeeRecipient), integratorFeeTokenUnits);
@@ -810,7 +789,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(user);
             (bytes32 uuid, TransitStation.OrderTerms memory terms) = _submitCrossChainAndGetTerms(quote);
 
-            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote))));
             assertEq(offerToken18.balanceOf(user), OFFER_AMOUNT_18 * 9);
             assertEq(offerToken18.balanceOf(protocolFeeRecipient), protocolFeeNormalized18);
             assertEq(offerToken18.balanceOf(integratorFeeRecipient), integratorFeeNormalized18);

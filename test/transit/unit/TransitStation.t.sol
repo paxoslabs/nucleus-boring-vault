@@ -272,10 +272,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
         bytes32 constant DOMAIN_TYPEHASH =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-        bytes32 constant ROUTE_TYPEHASH = keccak256("Route(uint32 destEID,address offerAsset,address wantAsset)");
-        bytes32 constant QUOTE_TYPEHASH = keccak256(
-            "Quote(Route route,uint256 offerAmount,address receiver,uint256 protocolFee,uint256 integratorFee,address integratorFeeReceiver,bytes32 distributorCode,uint256 deadline,bytes32 salt)Route(uint32 destEID,address offerAsset,address wantAsset)"
-        );
 
         // Events re-declared here so `vm.expectEmit` can match them without needing an external emitter.
         event OrderSubmitted(
@@ -474,27 +470,6 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             return batches;
         }
 
-        function _hashRoute(TransitStation.Route memory route) internal pure returns (bytes32) {
-            return keccak256(abi.encode(ROUTE_TYPEHASH, route.destEID, route.offerAsset, route.wantAsset));
-        }
-
-        function _hashQuote(TransitStation.Quote memory quote) internal pure returns (bytes32) {
-            return keccak256(
-                abi.encode(
-                    QUOTE_TYPEHASH,
-                    _hashRoute(quote.route),
-                    quote.offerAmount,
-                    quote.receiver,
-                    quote.protocolFee,
-                    quote.integratorFee,
-                    quote.integratorFeeReceiver,
-                    quote.distributorCode,
-                    quote.deadline,
-                    quote.salt
-                )
-            );
-        }
-
         function _domainSeparator(TransitStation station) internal view returns (bytes32) {
             return keccak256(
                 abi.encode(
@@ -515,7 +490,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             view
             returns (bytes memory)
         {
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(quoteSignerPk, digest);
             return abi.encodePacked(r, s, v);
         }
@@ -854,7 +829,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             (, uint256 attackerPk) = makeAddrAndKey("attacker");
             address attacker = vm.addr(attackerPk);
 
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(attackerPk, digest);
             bytes memory signature = abi.encodePacked(r, s, v);
 
@@ -868,7 +843,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             // First submission succeeds.
             vm.prank(user);
@@ -926,7 +901,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature);
@@ -1124,7 +1099,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(permitUser);
             bytes32 uuid = station.submitOrderWithPermit{ value: 0 }(quote, signature, deadline, v, r, s);
 
-            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote))));
             assertEq(station.pendingOrderCount(), 1);
             assertEq(offerPermit.allowance(permitUser, address(station)), 0);
             assertEq(offerPermit.balanceOf(offerReceiver), DEFAULT_OFFER_AMOUNT_NORMALIZED);
@@ -1171,7 +1146,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             vm.prank(permitUser);
             bytes32 uuid = station.submitOrderWithPermit{ value: 0 }(quote, signature, deadline, v, r, s);
 
-            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote))));
+            assertEq(uuid, keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote))));
             assertEq(station.pendingOrderCount(), 1);
             assertEq(offerPermit.allowance(permitUser, address(station)), 0);
             assertEq(offerPermit.balanceOf(offerReceiver), DEFAULT_OFFER_AMOUNT_NORMALIZED);
@@ -1901,7 +1876,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             vm.prank(user);
             bytes32 uuid = station.submitOrder{ value: 0 }(quote, signature);
@@ -1914,7 +1889,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             vm.prank(user);
             bytes32 uuid =
@@ -1933,7 +1908,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             // One order.
             quote.salt = bytes32(uint256(0));
             bytes memory signature0 = _signQuote(station, quote);
-            bytes32 expectedUuid0 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid0 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature0);
 
@@ -1950,7 +1925,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             // Two orders.
             quote.salt = bytes32(uint256(1));
             bytes memory signature1 = _signQuote(station, quote);
-            bytes32 expectedUuid1 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid1 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature1);
 
@@ -1962,7 +1937,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             // Three orders.
             quote.salt = bytes32(uint256(2));
             bytes memory signature2 = _signQuote(station, quote);
-            bytes32 expectedUuid2 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 expectedUuid2 = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature2);
 
@@ -2012,7 +1987,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation station = _deployDefaultStation();
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
                 uuid: uuid,
@@ -2040,7 +2015,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DEST_EID;
             bytes memory signature = _signQuote(station, quote);
-            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
                 uuid: uuid,
@@ -2063,7 +2038,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation station = _deployDefaultStation();
             TransitStation.Quote memory quote = _defaultQuote();
             bytes memory signature = _signQuote(station, quote);
-            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
                 uuid: uuid,
@@ -2096,7 +2071,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             TransitStation.Quote memory quote = _defaultQuote();
             quote.route.destEID = DEST_EID;
             bytes memory signature = _signQuote(station, quote);
-            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), _hashQuote(quote)));
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
             TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
                 uuid: uuid,
