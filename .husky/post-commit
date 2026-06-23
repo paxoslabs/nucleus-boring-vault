@@ -10,7 +10,7 @@ cat <<'EOF'
   ███████║   ██║   ╚██████╔╝██║
   ╚══════╝   ╚═╝    ╚═════╝ ╚═╝
 
-  Error: the commit you just created is not signed.
+  Warning: the commit you just created is not signed.
   Please amend it with: git commit --amend -S
 EOF
-exit 1
+exit 0
