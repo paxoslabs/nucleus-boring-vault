@@ -620,6 +620,8 @@ contract TransitStation is OAppAuth, Pausable {
         override
     {
         OrderTerms memory terms = abi.decode(payload, (OrderTerms));
+        if (usedDigests[terms.uuid]) revert DuplicatePushAttempt();
+        usedDigests[terms.uuid] = true;
         Order memory stored = _pushOrder(terms);
         emit OrderBridgeReceived(stored.terms.uuid, origin.srcEid, guid, stored);
     }
@@ -648,8 +650,7 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
-        bool added = pendingOrderIds.add(terms.uuid);
-        if (!added) revert DuplicatePushAttempt();
+        pendingOrderIds.add(terms.uuid);
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
         return order;
