@@ -8,6 +8,10 @@
       "0x036cbd53842c5426634e7929541ec2318f3dcf7e": {
         "isPegged": true,
         "rateProvider": "0x0000000000000000000000000000000000000000"
+      },
+      "0xd50eafb9e13dcdb515d5c1bd17cdaa49fec2c4d6": {
+        "isPegged": true,
+        "rateProvider": "0x0000000000000000000000000000000000000000"
       }
     }
   }
