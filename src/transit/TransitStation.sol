@@ -647,8 +647,8 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
-        if (pendingOrderIds.contains(terms.uuid)) revert DuplicatePushAttempt();
-        pendingOrderIds.add(terms.uuid);
+        bool added = pendingOrderIds.add(terms.uuid);
+        if (!added) revert DuplicatePushAttempt();
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
         return order;
