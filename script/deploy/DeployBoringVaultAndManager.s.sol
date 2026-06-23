@@ -11,16 +11,16 @@ import "src/helper/Constants.sol";
 
 contract DeployBoringVaultAndManager is BaseScript {
 
-    string constant NAME = "PaxosLabsRewardsV2Interceptor";
-    string constant SYMBOL = "pxlRv2I";
+    string constant NAME = "Transit Vault";
+    string constant SYMBOL = "TRANSIT";
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-    address constant STRATEGIST_ADDRESS = 0xb62C8d83A56626921709493F8f1381dE8339C504;
+    address constant STRATEGIST_ADDRESS = 0x4539C6BAFC29C245993242d9850F5a8605779110;
     uint8 constant DECIMALS = 6;
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: BoringVault");
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
     bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
-        makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: ManagerWithMerkleVerification");
+        makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
 
     function run() public broadcast {
         // deploy a roles authority
