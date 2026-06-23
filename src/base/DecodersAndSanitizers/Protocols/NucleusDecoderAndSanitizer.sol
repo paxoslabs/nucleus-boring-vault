@@ -5,6 +5,7 @@ import { BaseDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/BaseDeco
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
+import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
 
 import { TransitStation } from "src/transit/TransitStation.sol";
 
@@ -199,6 +200,26 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         returns (bytes memory addressesFound)
     {
         // Nothing to decode
+    }
+
+    // @desc submit an order to the withdraw queue
+    // @tag wantAsset:address:ERC20 asset being requested
+    // @tag receiver:address:receiver of the NFT receipt
+    // @tag refundReceiver:address:receiver of refunds
+    // @tag approvalMethod:uint8:token approval mechanism
+    // @tag submitWithSignature:bool:whether order includes depositor signature
+    function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
+        external
+        pure
+        returns (bytes memory argumentsFound)
+    {
+        argumentsFound = abi.encodePacked(
+            params.wantAsset,
+            params.receiver,
+            params.refundReceiver,
+            params.signatureParams.approvalMethod,
+            params.signatureParams.submitWithSignature
+        );
     }
 
 }
