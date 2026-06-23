@@ -550,6 +550,19 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             _deploy(owner, protocolFeeRecipient, quoteSigner, offerReceiver, wantAssetSource, address(0xdead));
         }
 
+        function testConstructor_RevertIf_AuthorityHasNoCode() external {
+            vm.expectRevert(abi.encodeWithSelector(TransitStation.NoCode.selector, address(0xdead)));
+            new TransitStation(
+                owner,
+                Authority(address(0xdead)),
+                address(endpoint),
+                protocolFeeRecipient,
+                quoteSigner,
+                offerReceiver,
+                wantAssetSource
+            );
+        }
+
         // ========================================= submitOrder REVERTS =========================================
 
         function testSubmitOrder_RevertIf_CallerNotAuthorized() external {
