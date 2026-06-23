@@ -16,10 +16,10 @@ contract DeployBoringVaultAndManager is BaseScript {
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     uint8 constant DECIMALS = 6;
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxosLabsTransitVault: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxosLabsTransitVault: BoringVault");
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority3");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault3");
     bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
-        makeSalt(broadcaster, false, "PaxosLabsTransitVault: ManagerWithMerkleVerification");
+        makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification3");
 
     function run() public broadcast {
         address STRATEGIST_ADDRESS = getMultisig();
