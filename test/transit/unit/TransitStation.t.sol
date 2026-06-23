@@ -1249,6 +1249,46 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             station.lzReceive(origin, bytes32(0), payload, address(0), "");
         }
 
+        function testLzReceive_RevertIf_DuplicatePushAfterExecution() external {
+            TransitStation station = _deployDefaultStation();
+
+            // Register a peer so lzReceive accepts the cross-chain origin.
+            bytes32 registeredPeer = bytes32(uint256(uint160(address(station))));
+            vm.prank(owner);
+            station.setPeer(DEST_EID, registeredPeer);
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({ srcEid: DEST_EID, sender: registeredPeer, nonce: 1 });
+
+            // Queue the order via lzReceive.
+            vm.prank(address(endpoint));
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+
+            // Prepare the executor and want-asset source so the order can be settled.
+            vm.startPrank(owner);
+            rolesAuthority.setUserRole(executor, EXECUTOR_ROLE, true);
+            rolesAuthority.setRoleCapability(
+                EXECUTOR_ROLE, address(station), TransitStation.executePendingOrders.selector, true
+            );
+            vm.stopPrank();
+
+            deal(address(wantAsset), wantAssetSource, DEFAULT_OFFER_AMOUNT * 10);
+            vm.prank(wantAssetSource);
+            wantAsset.approve(address(station), DEFAULT_OFFER_AMOUNT);
+
+            // Fully execute the order.
+            vm.prank(executor);
+            station.executePendingOrders(_singleFillBatch(address(wantAsset), terms.uuid, DEFAULT_OFFER_AMOUNT));
+
+            assertEq(station.pendingOrderCount(), 0);
+
+            // Receiving the same UUID again after execution should be treated as a duplicate push.
+            vm.prank(address(endpoint));
+            vm.expectRevert(TransitStation.DuplicatePushAttempt.selector);
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+        }
+
         function testLzReceive_IncrementsPendingOrderCount() external {
             TransitStation station = _deployDefaultStation();
 
