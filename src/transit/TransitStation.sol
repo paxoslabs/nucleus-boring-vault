@@ -198,6 +198,10 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param _offerReceiver Initial `offerReceiver`.
     /// @param _wantAssetSource Initial `wantAssetSource`.
     /// @dev `Auth` is initialized directly because `OAppAuthCore` inherits it without calling its constructor.
+    ///      `_authority` is not validated to contain code. If it is set to a no-code address (other than the zero address),
+    ///      `authority.canCall(...)` will revert, causing every `requiresAuth` function in this contract
+    ///      (including calls made by the owner) to revert. The owner can recover by calling `setAuthority`
+    ///      directly, since that function checks `msg.sender == owner` before consulting the current authority.
     constructor(
         address _owner,
         Authority _authority,
