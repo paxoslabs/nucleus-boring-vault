@@ -1,0 +1,16 @@
+if git cat-file commit HEAD | sed '/^$/q' | grep -q "^gpgsig "; then
+    exit 0
+fi
+
+cat <<'EOF'
+  ███████╗████████╗ ██████╗ ██████╗
+  ██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+  ███████╗   ██║   ██║   ██║██████╔╝
+  ╚════██║   ██║   ██║   ██║██╔═══╝
+  ███████║   ██║   ╚██████╔╝██║
+  ╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+
+  Warning: the commit you just created is not signed.
+  Please amend it with: git commit --amend -S
+EOF
+exit 0
