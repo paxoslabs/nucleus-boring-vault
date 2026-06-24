@@ -5,7 +5,7 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
-contract EquivalentExchange is ReentrancyGuard {
+contract EquivalentExchange {
 
     using SafeTransferLib for ERC20;
     using Address for address;
