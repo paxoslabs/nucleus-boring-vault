@@ -5,6 +5,9 @@ import { BaseDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/BaseDeco
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
+import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
+
+import { TransitStation } from "src/transit/TransitStation.sol";
 
 abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
@@ -164,6 +167,59 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
     // @desc process orders using the one to one queue
     function processOrders(uint256 ordersToProcess) external pure returns (bytes memory addressesFound) {
         // Nothing to decode
+    }
+
+    // @desc Transit Station submit order
+    // @tag destEID:uint32:destination chain EID (LayerZero)
+    // @tag offerAsset:address:offer asset
+    // @tag wantAsset:address:want asset
+    // @tag receiver:address:receiver
+    // @tag integratorFeeReceiver:address:integrator fee receiver
+    function submitOrder(
+        TransitStation.Quote calldata quote,
+        bytes calldata signature
+    )
+        external
+        returns (bytes memory addressesFound)
+    {
+        addressesFound = abi.encodePacked(
+            quote.route.destEID,
+            quote.route.offerAsset,
+            quote.route.wantAsset,
+            quote.receiver,
+            quote.integratorFeeReceiver
+        );
+    }
+
+    // @desc Transit Station execute pending orders
+    function executePendingOrders(
+        bytes32[] calldata uuids,
+        uint256[] calldata amounts
+    )
+        external
+        returns (bytes memory addressesFound)
+    {
+        // Nothing to decode
+    }
+
+    // @desc submit an order to the withdraw queue
+    // @tag wantAsset:address:ERC20 asset being requested
+    // @tag receiver:address:receiver of the NFT receipt
+    // @tag refundReceiver:address:receiver of refunds
+    // @tag approvalMethod:uint8:token approval mechanism
+    // @tag submitWithSignature:bool:whether order includes depositor signature
+    function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
+        external
+        pure
+        returns (bytes memory argumentsFound)
+    {
+        argumentsFound = abi.encodePacked(
+            params.wantAsset,
+            params.receiver,
+            params.refundReceiver,
+            params.signatureParams.approvalMethod,
+            params.signatureParams.submitWithSignature
+        );
     }
 
 }

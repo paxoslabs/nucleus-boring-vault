@@ -140,24 +140,19 @@ contract DeployMultiChainLayerZeroTellerWithMultiAssetSupport is BaseScript {
             }
         }
 
-        // if no dead address in the ulnConfig, prompt for use of default onchain config, otherwise just use what's in
-        // config file
+        // if no dead address in the ulnConfig, there is a default onchain configuration we can use. However, only
+        // prompt to notify user and always set to configured params.
         if (!isDead) {
-            string memory a = vm.prompt(
-                "There is a default onchain configuration for this chain/peerEid combination. Would you like to use it? (y/n)"
+            console2.log(
+                "A default onchain configuration is provided. Regardless, we will be using the the params provided in the config file"
             );
-            if (compareStrings(a, "y")) {
-                console2.log("using default onchain config");
-            } else {
-                console2.log("setting LayerZero ULN config using params provided in config file");
-                _setConfig(newTeller, endpoint, lib, config);
-            }
         } else {
             console2.log(
                 "No default configuration for this chain/peerEid combination. Using params provided in config file"
             );
-            _setConfig(newTeller, endpoint, lib, config);
         }
+        // Use what's in the config file regardless of default configuration
+        _setConfig(newTeller, endpoint, lib, config);
     }
 
     function _setConfig(
