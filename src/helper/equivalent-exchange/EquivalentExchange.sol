@@ -87,11 +87,7 @@ contract EquivalentExchange is Auth {
         }
     }
 
-    function _coverShortfall(
-        ERC20 subsidyToken,
-        address subsidyProvider,
-        uint256 shortfall
-    )
+    function _coverShortfall(ERC20 subsidyToken, address subsidyProvider, uint256 shortfall)
         internal
         returns (uint256)
     {
