@@ -38,7 +38,7 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
     bytes1 internal constant COMMAND_TYPE_MASK = 0xff;
     bytes1 internal constant COMMAND_SWEEP = 0x04;
-    bytes1 internal constant V4_SWAP = 0x10;
+    bytes1 internal constant COMMAND_V4_SWAP = 0x10;
 
     //============================== V4 SWAP ACTION IDS ===============================
     // From Uniswap v4-periphery Actions.sol.
@@ -126,7 +126,7 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
         bytes1 swapCommand = commands[0];
         bytes1 sweepCommand = commands[1];
-        if (swapCommand & COMMAND_TYPE_MASK != V4_SWAP) {
+        if (swapCommand & COMMAND_TYPE_MASK != COMMAND_V4_SWAP) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
         }
         if (sweepCommand & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
