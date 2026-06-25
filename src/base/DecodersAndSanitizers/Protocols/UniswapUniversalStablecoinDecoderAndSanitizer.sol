@@ -22,9 +22,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     //============================== ERRORS ===============================
 
     error UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
-    error UniswapUniversalStablecoinDecoderAndSanitizer__ExpectedSwapThenSweep(uint256 commandCount);
-    error UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
-    error UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommandLength(uint256 commandCount);
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(address token);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(address recipient);
     error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(uint256 action);
@@ -120,17 +119,17 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     {
         // Exact-in single-hop: one swap, one sweep of the output. Nothing more, nothing less.
         if (commands.length != 2) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__ExpectedSwapThenSweep(commands.length);
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommandLength(commands.length);
         }
         if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
 
         bytes1 swapCommand = commands[0];
         bytes1 sweepCommand = commands[1];
         if (swapCommand & COMMAND_TYPE_MASK != COMMAND_V4_SWAP) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
         if (sweepCommand & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
 
         (address currencyOut, uint256 price) = _handleV4Swap(inputs[0]);
