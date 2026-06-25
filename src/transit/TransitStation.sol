@@ -198,6 +198,8 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param _offerReceiver Initial `offerReceiver`.
     /// @param _wantAssetSource Initial `wantAssetSource`.
     /// @dev `Auth` is initialized directly because `OAppAuthCore` inherits it without calling its constructor.
+    ///      A non-zero `_authority` is validated to contain code; the zero address is allowed so the station can be
+    ///      deployed in owner-only mode before roles are wired.
     constructor(
         address _owner,
         Authority _authority,
@@ -217,6 +219,9 @@ contract TransitStation is OAppAuth, Pausable {
             revert ZeroAddress();
         }
         if (_endpoint.code.length == 0) revert NoCode(_endpoint);
+        if (address(_authority) != address(0) && address(_authority).code.length == 0) {
+            revert NoCode(address(_authority));
+        }
 
         thisChainEID = endpoint.eid();
         protocolFeeRecipient = _protocolFeeRecipient;
@@ -615,6 +620,8 @@ contract TransitStation is OAppAuth, Pausable {
         override
     {
         OrderTerms memory terms = abi.decode(payload, (OrderTerms));
+        if (usedDigests[terms.uuid]) revert DuplicatePushAttempt();
+        usedDigests[terms.uuid] = true;
         Order memory stored = _pushOrder(terms);
         emit OrderBridgeReceived(stored.terms.uuid, origin.srcEid, guid, stored);
     }
@@ -643,7 +650,6 @@ contract TransitStation is OAppAuth, Pausable {
             amountDue: _toTokenDecimals(terms.offerAmountNormalized18AfterFees, ERC20(terms.wantAsset).decimals()),
             queuedAt: uint64(block.timestamp)
         });
-        if (pendingOrderIds.contains(terms.uuid)) revert DuplicatePushAttempt();
         pendingOrderIds.add(terms.uuid);
         pendingOrders[terms.uuid] = order;
         emit OrderReceived(terms.uuid, order);
