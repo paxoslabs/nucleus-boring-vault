@@ -118,11 +118,11 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         view
         returns (bytes memory addressesFound)
     {
-        if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
         // Exact-in single-hop: one swap, one sweep of the output. Nothing more, nothing less.
         if (commands.length != 2) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__ExpectedSwapThenSweep(commands.length);
         }
+        if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
 
         bytes1 swapCommand = commands[0];
         bytes1 sweepCommand = commands[1];
