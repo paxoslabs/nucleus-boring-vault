@@ -124,12 +124,10 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         }
         if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
 
-        bytes1 swapCommand = commands[0];
-        bytes1 sweepCommand = commands[1];
-        if (swapCommand & COMMAND_TYPE_MASK != COMMAND_V4_SWAP) {
+        if (commands[0] & COMMAND_TYPE_MASK != COMMAND_V4_SWAP) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
-        if (sweepCommand & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
+        if (commands[1] & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
 
