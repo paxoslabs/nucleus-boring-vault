@@ -3,9 +3,10 @@ pragma solidity 0.8.21;
 
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
+import { Auth, Authority } from "@solmate/auth/Auth.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
-contract EquivalentExchange {
+contract EquivalentExchange is Auth {
 
     using SafeTransferLib for ERC20;
     using Address for address;
@@ -18,6 +19,8 @@ contract EquivalentExchange {
     error DanglingApproval(address token);
     error InsufficientReturn(uint256 totalIn, uint256 totalOut);
 
+    constructor(address _owner, Authority _authority) Auth(_owner, _authority) { }
+
     function execute(
         ERC20[] calldata tokens,
         uint256[] calldata amountsIn,
@@ -25,6 +28,7 @@ contract EquivalentExchange {
         bytes[] calldata targetData
     )
         external
+        requiresAuth
     {
         uint256 tokensLength = tokens.length;
         if (tokensLength != amountsIn.length) revert LengthMismatch();
