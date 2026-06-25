@@ -133,15 +133,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         }
 
         (address currencyOut, uint256 price) = _handleV4Swap(inputs[0]);
+        (address token, address recipient) = _handleSweep(inputs[1], currencyOut);
 
-        // SWEEP input = (address token, address recipient, uint256 amountMin). The swap's output must be swept to
-        // the vault, so it cannot be left in the router.  The amountMin parameter is not checked because, for a single-hop
-        // swap, it is identical to the swap command's amountOutMinimum, which is checked.
-        (address token, address recipient,) = abi.decode(inputs[1], (address, address, uint256));
-        if (token != currencyOut) revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(token);
-        if (recipient != boringVault && recipient != ADDRESS_MSG_SENDER) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(recipient);
-        }
         addressesFound = abi.encodePacked(price, token, recipient);
     }
 
@@ -171,6 +164,21 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
             }
         }
         if (!swapSeen) revert UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
+    }
+
+    /// @dev Decodes the SWEEP command input and validates that the swap's output currency is returned to the vault.
+    ///      The amountMin parameter is not checked because, for a single-hop swap, it is identical to the swap
+    ///      command's amountOutMinimum, which is checked.
+    function _handleSweep(bytes calldata input, address currencyOut)
+        internal
+        view
+        returns (address token, address recipient)
+    {
+        (token, recipient,) = abi.decode(input, (address, address, uint256));
+        if (token != currencyOut) revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(token);
+        if (recipient != boringVault && recipient != ADDRESS_MSG_SENDER) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(recipient);
+        }
     }
 
 }
