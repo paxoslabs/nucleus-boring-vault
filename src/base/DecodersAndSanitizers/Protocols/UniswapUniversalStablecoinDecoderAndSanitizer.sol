@@ -27,17 +27,16 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     error UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(address token);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(address recipient);
-    error UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256 command);
     error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(uint256 action);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SingleHopOnly();
     error UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
 
     //============================== COMMAND IDS ===============================
     // From the modern (V4) Uniswap Commands.sol. A command byte's low 7 bits (0x7f) are the command type; the
-    // high bit (0x80) is the allow-revert flag.
+    // high bit (0x80) is the allow-revert flag.  The constants below are the
+    // full 8-bit values expected by the decoder (allow-revert flag unset).
 
-    bytes1 internal constant COMMAND_TYPE_MASK = 0x7f;
-    bytes1 internal constant FLAG_ALLOW_REVERT = 0x80;
+    bytes1 internal constant COMMAND_TYPE_MASK = 0xff;
     bytes1 internal constant COMMAND_SWEEP = 0x04;
     bytes1 internal constant V4_SWAP = 0x10;
 
@@ -127,13 +126,6 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
         bytes1 swapCommand = commands[0];
         bytes1 sweepCommand = commands[1];
-        // Neither command may swallow its own revert; a failure must revert the whole tx.
-        if (swapCommand & FLAG_ALLOW_REVERT != 0) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256(uint8(swapCommand)));
-        }
-        if (sweepCommand & FLAG_ALLOW_REVERT != 0) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256(uint8(sweepCommand)));
-        }
         if (swapCommand & COMMAND_TYPE_MASK != V4_SWAP) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
         }
