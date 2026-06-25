@@ -29,6 +29,7 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(uint256 action);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SingleHopOnly();
     error UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedActionLength(uint256 actionLength);
 
     //============================== COMMAND IDS ===============================
     // From the modern (V4) Uniswap Commands.sol. A command byte's low 7 bits (0x7f) are the command type; the
@@ -147,30 +148,34 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
     //============================== V4 SWAP ACTION DISPATCH ===============================
 
-    /// @dev Requires exactly one SWAP_EXACT_IN_SINGLE plus only SETTLE_ALL / TAKE_ALL actions, reverting on anything
-    ///      else. Decodes the swap's pool key + direction (output currency, for the sweep check) and its
-    ///      amounts (the committed price floor); Uniswap reverts on its own if the deltas are not settled, so
-    ///      settle/take presence is not checked here.
+    /// @dev Requires exactly three actions: SWAP_EXACT_IN_SINGLE followed by SETTLE_ALL and TAKE_ALL. Decodes
+    ///      the swap's pool key + direction (output currency, for the sweep check) and its amounts (the committedprice floor);
+    ///      Uniswap reverts on its own if the deltas are not settled, so settle/take presence is not checked here.
     function _handleV4Swap(bytes calldata input) internal pure returns (address currencyOut, uint256 price) {
         (bytes memory actions, bytes[] memory params) = abi.decode(input, (bytes, bytes[]));
         if (actions.length != params.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
-        bool swapSeen;
-        for (uint256 i; i < actions.length; ++i) {
-            uint256 action = uint8(actions[i]);
-            if (action == SWAP_EXACT_IN_SINGLE) {
-                if (swapSeen) revert UniswapUniversalStablecoinDecoderAndSanitizer__SingleHopOnly();
-                swapSeen = true;
-                DecoderCustomTypes.V4ExactInputSingleParams memory p =
-                    abi.decode(params[i], (DecoderCustomTypes.V4ExactInputSingleParams));
-                currencyOut = p.zeroForOne ? p.poolKey.currency1 : p.poolKey.currency0;
-                // Reverts on amountOutMinimum == 0 (a swap with no output floor is unsafe and should never be
-                // approved).
-                price = (uint256(p.amountIn) * PRICE_SCALE) / p.amountOutMinimum;
-            } else if (action != SETTLE_ALL && action != TAKE_ALL) {
-                revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action);
-            }
+        if (actions.length != 3) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedActionLength(actions.length);
         }
-        if (!swapSeen) revert UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
+
+        uint256 action0 = uint8(actions[0]);
+        if (action0 != SWAP_EXACT_IN_SINGLE) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action0);
+        }
+        DecoderCustomTypes.V4ExactInputSingleParams memory p =
+            abi.decode(params[0], (DecoderCustomTypes.V4ExactInputSingleParams));
+        currencyOut = p.zeroForOne ? p.poolKey.currency1 : p.poolKey.currency0;
+        // Reverts on amountOutMinimum == 0 (a swap with no output floor is unsafe and should never be approved).
+        price = (uint256(p.amountIn) * PRICE_SCALE) / p.amountOutMinimum;
+
+        uint256 action1 = uint8(actions[1]);
+        if (action1 != SETTLE_ALL && action1 != TAKE_ALL) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action1);
+        }
+        uint256 action2 = uint8(actions[2]);
+        if (action2 != SETTLE_ALL && action2 != TAKE_ALL) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action2);
+        }
     }
 
 }
