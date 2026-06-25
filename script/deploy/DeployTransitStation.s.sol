@@ -2,7 +2,6 @@
 pragma solidity =0.8.21;
 
 import { console } from "forge-std/console.sol";
-import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BoringVault } from "src/base/BoringVault.sol";
 import { ManagerWithMerkleVerification } from "src/base/Roles/ManagerWithMerkleVerification.sol";
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
@@ -10,48 +9,59 @@ import { TransitStation } from "src/transit/TransitStation.sol";
 import { BaseScript } from "script/Base.s.sol";
 import "src/helper/Constants.sol";
 
+/// @notice Production deployment for a Transit Station, with its BoringVault + Manager combo.
+/// @dev IMPORTANT — if you reuse a `RolesAuthority` that has ALREADY been transferred to the multisig, the
+///      broadcaster no longer owns it, so the station role wiring (`setRoleCapability` / `setUserRole` /
+///      `setPublicCapability`) and `setRouteApprovals` below will revert. In that case run those steps as a multisig
+///      transaction instead of from this EOA broadcast.
 contract DeployTransitStation is BaseScript {
 
-    // ---- fill these per testnet deployment ----
-    address constant QUOTE_SIGNER = 0x9d08cC364da8Be1d5C54d05A0F8dc3b2046C5FdE; // staging
-    address constant EXECUTOR = 0xFb7dad16c87910065859824fD53fef0f2705E91b;
-    uint64 constant MESSAGE_GAS_LIMIT = 400_000;
+    // ============================== FILL PER DEPLOYMENT ==============================
 
-    string constant NAME = "PXL Test Transit Vault";
+    // Backend quote signer (zero-checked in the constructor, so a fresh deploy reverts until set).
+    address constant QUOTE_SIGNER = address(0); // TODO: production quote signer
+    // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
+    address constant EXECUTOR = address(0); // TODO: production executor
+
+    // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
+    address constant EXISTING_ROLES_AUTHORITY = address(0);
+    address constant EXISTING_BORING_VAULT = address(0);
+    address constant EXISTING_MANAGER = address(0);
+
+    // BoringVault metadata (only used when deploying fresh).
+    string constant NAME = "Transit Vault";
     string constant SYMBOL = "TRANSIT";
     uint8 constant DECIMALS = 6;
+
+    uint64 constant MESSAGE_GAS_LIMIT = 400_000;
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
-    uint8 constant MOCK_DECIMALS = 6;
-    uint256 constant MOCK_MINT = 10_000_000 * 10 ** MOCK_DECIMALS;
+    // ============================== SALTS ==============================
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority3");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault3");
-    bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification3");
-    bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation3");
-    bytes32 SALT_MOCK_TOKEN = makeSalt(broadcaster, false, "Transit: MockToken3");
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
+    bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
+    bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation");
 
     RolesAuthority public rolesAuthority;
     BoringVault public boringVault;
     ManagerWithMerkleVerification public manager;
     TransitStation public transitStation;
-    BoringVault public mockToken;
 
     function run() public broadcast {
+        // ==================== DEPLOY VAULT / MANAGER COMBO ====================
         rolesAuthority = RolesAuthority(
             CREATEX.deployCreate3(
                 SALT_ROLES_AUTHORITY,
                 abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(broadcaster, Authority(address(0))))
             )
         );
-
         boringVault = BoringVault(
             payable(CREATEX.deployCreate3(
                     SALT_BORING_VAULT,
                     abi.encodePacked(type(BoringVault).creationCode, abi.encode(broadcaster, NAME, SYMBOL, DECIMALS))
                 ))
         );
-
         manager = ManagerWithMerkleVerification(
             CREATEX.deployCreate3(
                 SALT_MANAGER,
@@ -61,10 +71,8 @@ contract DeployTransitStation is BaseScript {
                 )
             )
         );
-
         boringVault.setAuthority(rolesAuthority);
         manager.setAuthority(rolesAuthority);
-
         rolesAuthority.setRoleCapability(
             MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
         );
@@ -79,6 +87,7 @@ contract DeployTransitStation is BaseScript {
         );
         rolesAuthority.setUserRole(address(manager), MANAGER_ROLE, true);
 
+        // ==================== DEPLOY STATION ====================
         transitStation = TransitStation(
             payable(CREATEX.deployCreate3(
                     SALT_STATION,
@@ -88,43 +97,41 @@ contract DeployTransitStation is BaseScript {
                             broadcaster,
                             Authority(address(rolesAuthority)),
                             _lzEndpoint(),
-                            getMultisig(),
+                            getMultisig(), // protocolFeeRecipient
                             QUOTE_SIGNER,
-                            address(boringVault),
-                            address(boringVault)
+                            address(boringVault), // offerReceiver
+                            address(boringVault) // wantAssetSource
                         )
                     )
                 ))
         );
 
+        // ==================== STATION ROLE WIRING ====================
         rolesAuthority.setRoleCapability(
             TRANSIT_EXECUTOR_ROLE, address(transitStation), TransitStation.executePendingOrders.selector, true
         );
         rolesAuthority.setRoleCapability(PAUSER_ROLE, address(transitStation), TransitStation.pause.selector, true);
         rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
         rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
-
         rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
         rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector, true);
 
-        transitStation.setPeer(_peerEid(), bytes32(uint256(uint160(address(transitStation)))));
-        transitStation.setMessageGasLimit(_peerEid(), MESSAGE_GAS_LIMIT);
+        // ==================== CROSS-CHAIN (LayerZero) ====================
+        // CREATE3 gives the station the same address on every chain, so its peer is itself.
+        uint32 peerEid = _peerEid();
+        if (peerEid != 0) {
+            transitStation.setPeer(peerEid, bytes32(uint256(uint160(address(transitStation)))));
+            transitStation.setMessageGasLimit(peerEid, MESSAGE_GAS_LIMIT);
+        } else {
+            console.log("WARNING: no peer EID set; configure the LZ peer + gas limit post-deploy");
+        }
         transitStation.setDelegate(getMultisig());
 
-        // Mock token: a BoringVault used as a test ERC20. Deterministic address across chains; named per chain
-        // (mockUSDC on Sepolia, mockUSDG on Robinhood). Mints 10M to the owner via enter (no asset deposit).
-        (string memory mockName, string memory mockSymbol) = _mockTokenMeta();
-        mockToken = BoringVault(
-            payable(CREATEX.deployCreate3(
-                    SALT_MOCK_TOKEN,
-                    abi.encodePacked(
-                        type(BoringVault).creationCode, abi.encode(broadcaster, mockName, mockSymbol, MOCK_DECIMALS)
-                    )
-                ))
-        );
-        mockToken.enter(broadcaster, ERC20(address(0)), 0, getMultisig(), MOCK_MINT);
-        mockToken.transferOwnership(getMultisig());
+        // ==================== ROUTE APPROVALS ====================
+        _approveRoutes();
 
+        // ==================== OWNERSHIP ====================
+        // When reusing an existing combo, drop the vault/manager/authority transfers (already multisig-owned).
         rolesAuthority.transferOwnership(getMultisig());
         boringVault.transferOwnership(getMultisig());
         manager.transferOwnership(getMultisig());
@@ -134,25 +141,34 @@ contract DeployTransitStation is BaseScript {
         console.log("BoringVault:", address(boringVault));
         console.log("Manager:", address(manager));
         console.log("TransitStation:", address(transitStation));
-        console.log("MockToken:", address(mockToken));
+    }
+
+    /// TODO: Fill with this chain's production routes: {destEID, offerAsset, wantAsset}. `destEID` is the station's
+    ///      own EID (`transitStation.thisChainEID()`) for a same-chain swap, or the peer EID for cross-chain. Resize
+    ///      the array and set each entry. Left empty by default; if so, configure post-deploy via setRouteApprovals.
+    function _approveRoutes() internal {
+        TransitStation.Route[] memory routes = new TransitStation.Route[](0);
+        bool[] memory approved = new bool[](0);
+        // Example (resize the arrays above to match):
+        // routes[0] = TransitStation.Route({ destEID: _peerEid(), offerAsset: 0x..., wantAsset: 0x... });
+        // approved[0] = true;
+        if (routes.length == 0) {
+            console.log("WARNING: no routes approved in-script; configure via setRouteApprovals");
+            return;
+        }
+        transitStation.setRouteApprovals(routes, approved);
     }
 
     function _peerEid() internal view returns (uint32) {
-        if (block.chainid == 11_155_111) return 40_451; // peer = Robinhood
-        if (block.chainid == 46_630) return 40_161; // peer = Sepolia
-        revert("DeployTransitStation: no peer EID for this chain");
+        // TODO: return the production peer EID for each chain this station bridges with. 0 skips LZ peer wiring
+        // (configure it post-deploy once the peer station exists).
+        if (block.chainid == 1) return 0; // Ethereum mainnet — set the peer EID here
+        return 0;
     }
 
     function _lzEndpoint() internal view returns (address) {
-        if (block.chainid == 11_155_111) return 0x6EDCE65403992e310A62460808c4b910D972f10f; // Sepolia
-        if (block.chainid == 46_630) return 0x3aCAAf60502791D199a5a5F0B173D78229eBFe32; // Robinhood
+        if (block.chainid == 1) return 0x1a44076050125825900e736c501f859c50fE728c; // Ethereum mainnet (LZ V2)
         revert("DeployTransitStation: no LZ endpoint for this chain");
-    }
-
-    function _mockTokenMeta() internal view returns (string memory name, string memory symbol) {
-        if (block.chainid == 11_155_111) return ("mockUSDC -- Owner may mint/burn with enter/exit", "mockUSDC");
-        if (block.chainid == 46_630) return ("mockUSDG -- Owner may mint/burn with enter/exit", "mockUSDG");
-        revert("DeployTransitStation: no mock token name for this chain");
     }
 
 }
