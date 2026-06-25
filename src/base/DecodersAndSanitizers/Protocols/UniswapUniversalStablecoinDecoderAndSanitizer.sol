@@ -108,7 +108,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     //============================== COMMAND DISPATCH ===============================
 
     /// @dev The program must be exactly [V4_SWAP, SWEEP], neither allowing revert, and the SWEEP must return the
-    ///      swap's output currency to the vault. The swept token and recipient are committed to the merkle leaf.
+    ///      swap's output currency to the vault. The sweep recipient is constrained to the vault (or the MSG_SENDER
+    ///      sentinel that resolves to it), so only the swept token and the swap's committed price floor are returned.
     function _decodeCommands(
         bytes calldata commands,
         bytes[] calldata inputs
@@ -133,9 +134,9 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         }
 
         (address currencyOut, uint256 price) = _handleV4Swap(inputs[0]);
-        (address token, address recipient) = _handleSweep(inputs[1], currencyOut);
+        address token = _handleSweep(inputs[1], currencyOut);
 
-        addressesFound = abi.encodePacked(price, token, recipient);
+        addressesFound = abi.encodePacked(price, token);
     }
 
     //============================== V4 SWAP ACTION DISPATCH ===============================
@@ -169,11 +170,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     /// @dev Decodes the SWEEP command input and validates that the swap's output currency is returned to the vault.
     ///      The amountMin parameter is not checked because, for a single-hop swap, it is identical to the swap
     ///      command's amountOutMinimum, which is checked.
-    function _handleSweep(bytes calldata input, address currencyOut)
-        internal
-        view
-        returns (address token, address recipient)
-    {
+    function _handleSweep(bytes calldata input, address currencyOut) internal view returns (address token) {
+        address recipient;
         (token, recipient,) = abi.decode(input, (address, address, uint256));
         if (token != currencyOut) revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(token);
         if (recipient != boringVault && recipient != ADDRESS_MSG_SENDER) {
