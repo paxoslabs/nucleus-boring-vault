@@ -21,7 +21,7 @@ contract DeployTransitStation is BaseScript {
     // Backend quote signer (zero-checked in the constructor, so a fresh deploy reverts until set).
     address constant QUOTE_SIGNER = address(0xE4a40e9E04eb7F33368D998FD423073b778Ce420);
     // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
-    address constant EXECUTOR = address(0xCf96d0232cefB7b9476ba37B3B698875a796E80F);
+    address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault
 
     // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
     address constant EXISTING_ROLES_AUTHORITY = address(0x94dF457c3628233E2FD1B62FcfaA2A5a529644a4);
@@ -50,8 +50,8 @@ contract DeployTransitStation is BaseScript {
 
     function run() public broadcast {
         rolesAuthority = RolesAuthority(EXISTING_ROLES_AUTHORITY);
-        boringVault = BoringVault(EXISTING_BORING_VAULT);
-        manager = Manager(EXISTING_MANAGER);
+        boringVault = BoringVault(payable(EXISTING_BORING_VAULT));
+        manager = ManagerWithMerkleVerification(EXISTING_MANAGER);
         // Commented out because we are connecting to previously deployed vaults
         // ==================== DEPLOY VAULT / MANAGER COMBO ====================
         // rolesAuthority = RolesAuthority(
