@@ -24,6 +24,8 @@ contract tERC20 is ERC20 {
 
 contract EquivalentExchangeTest is Test {
 
+    event Executed(address indexed caller, uint256 totalIn, uint256 totalOut);
+
     EquivalentExchange internal exchange;
 
     address internal owner = makeAddr("owner");
@@ -358,6 +360,79 @@ contract EquivalentExchangeTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(EquivalentExchange.DanglingApproval.selector, address(token)));
         exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
+        vm.stopPrank();
+    }
+
+    function test_Execute_EmitsExecutedEventWithMultipleDecimalsAndSurplus() external {
+        tERC20 tokenA = new tERC20(6);
+        tERC20 tokenB = new tERC20(18);
+
+        deal(address(tokenA), owner, 1e6);
+        deal(address(tokenB), owner, 1e18);
+        deal(address(tokenB), address(exchange), 0.5e18);
+
+        ERC20[] memory tokens = new ERC20[](2);
+        uint256[] memory amountsIn = new uint256[](2);
+        address[] memory targets = new address[](0);
+        bytes[] memory targetData = new bytes[](0);
+
+        tokens[0] = ERC20(address(tokenA));
+        tokens[1] = ERC20(address(tokenB));
+        amountsIn[0] = 1e6;
+        amountsIn[1] = 1e18;
+
+        // totalIn  = 1e6 * 1e12 + 1e18 = 2e18
+        // totalOut = 1e6 * 1e12 + 1.5e18 = 2.5e18
+
+        vm.startPrank(owner);
+        tokenA.approve(address(exchange), 1e6);
+        tokenB.approve(address(exchange), 1e18);
+
+        vm.expectEmit(true, true, true, true);
+        emit Executed(owner, 2e18, 2.5e18);
+        exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
+        vm.stopPrank();
+    }
+
+    function test_Execute_EmitsExecutedEventWithSubsidy() external {
+        address recipient = makeAddr("recipient");
+        address subsidyProvider = makeAddr("subsidyProvider");
+        tERC20 tokenA = new tERC20(6);
+        tERC20 tokenB = new tERC20(18);
+
+        deal(address(tokenA), owner, 1e6);
+        deal(address(tokenB), owner, 1e18);
+        deal(address(tokenB), subsidyProvider, 0.5e18);
+
+        ERC20[] memory tokens = new ERC20[](2);
+        uint256[] memory amountsIn = new uint256[](2);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(tokenA));
+        tokens[1] = ERC20(address(tokenB));
+        amountsIn[0] = 1e6;
+        amountsIn[1] = 1e18;
+        targets[0] = address(tokenA);
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, recipient, 0.5e6);
+
+        // totalIn  = 1e6 * 1e12 + 1e18 = 2e18
+        // tokenA out = (1e6 - 0.5e6) * 1e12 = 0.5e18
+        // tokenB out = 1e18
+        // totalOut before subsidy = 0.5e18 + 1e18 = 1.5e18
+        // subsidy = 0.5e18
+        // totalOut after subsidy = 2e18
+
+        vm.prank(subsidyProvider);
+        tokenB.approve(address(exchange), 0.5e18);
+
+        vm.startPrank(owner);
+        tokenA.approve(address(exchange), 1e6);
+        tokenB.approve(address(exchange), 1e18);
+
+        vm.expectEmit(true, true, true, true);
+        emit Executed(owner, 2e18, 2e18);
+        exchange.execute(tokens, amountsIn, targets, targetData, subsidyProvider, ERC20(address(tokenB)));
         vm.stopPrank();
     }
 
