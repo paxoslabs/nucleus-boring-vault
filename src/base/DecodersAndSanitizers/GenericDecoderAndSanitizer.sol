@@ -9,6 +9,9 @@ import {
 import {
     UniswapV3DecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/UniswapV3DecoderAndSanitizer.sol";
+import {
+    UniswapUniversalStablecoinDecoderAndSanitizer
+} from "src/base/DecodersAndSanitizers/Protocols/UniswapUniversalStablecoinDecoderAndSanitizer.sol";
 import { OneInchDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/OneInchDecoderAndSanitizer.sol";
 import { CurveDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/CurveDecoderAndSanitizer.sol";
 import {
@@ -39,10 +42,12 @@ import { NucleusDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Proto
 import {
     CoreWriterDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/CoreWriterDecoderAndSanitizer.sol";
+import { KhalaniDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/KhalaniDecoderAndSanitizer.sol";
 
 contract GenericDecoderAndSanitizer is
     PendleRouterDecoderAndSanitizer,
     UniswapV3DecoderAndSanitizer,
+    UniswapUniversalStablecoinDecoderAndSanitizer,
     OneInchDecoderAndSanitizer,
     CurveDecoderAndSanitizer,
     NativeWrapperDecoderAndSanitizer,
@@ -58,7 +63,8 @@ contract GenericDecoderAndSanitizer is
     EtherFiDecoderAndSanitizer,
     LayerZeroOFTDecoderAndSanitizer,
     NucleusDecoderAndSanitizer,
-    CoreWriterDecoderAndSanitizer
+    CoreWriterDecoderAndSanitizer,
+    KhalaniDecoderAndSanitizer
 {
 
     constructor(
