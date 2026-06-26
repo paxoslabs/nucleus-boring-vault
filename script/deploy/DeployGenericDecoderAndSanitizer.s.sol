@@ -14,7 +14,7 @@ contract DeployGenericDecoderAndSanitizer is BaseScript {
     // Uniswap V3 NonfungiblePositionManager (for the V3 position decoder); same address on most chains.
     address constant UNISWAP_V3_NFPM = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
 
-    bytes32 SALT = makeSalt(broadcaster, false, "Transit: GenericDecoderAndSanitizer");
+    bytes32 SALT = makeSalt(broadcaster, false, "Transit: GenericDecoderAndSanitizer2");
 
     function run() public broadcast {
         address decoder = CREATEX.deployCreate3(
