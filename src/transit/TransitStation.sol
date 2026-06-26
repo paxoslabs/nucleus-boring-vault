@@ -169,6 +169,7 @@ contract TransitStation is OAppAuth, Pausable {
     event RouteApprovalSet(Route route, bool indexed approved);
     event TokensRecovered(ERC20 token, uint256 amount);
     event ETHRecovered(uint256 amount);
+    event UUIDForceSetUsed();
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
@@ -361,6 +362,15 @@ contract TransitStation is OAppAuth, Pausable {
         pendingOrderIds.remove(uuid);
         delete pendingOrders[uuid];
         emit OrderForceRemoved(uuid, order);
+    }
+
+    /// @notice Admin tombstone of a particular uuid. If an order is stuck and in bridging and manually refunded, we can
+    /// block it from ever becoming received
+    /// @param uuid to set as used in usedDigests mapping
+    /// @custom:access OWNER should be granted authority — allows blocking of any order uuid from beign received
+    function forceSetUsedDigestTrue(bytes32 uuid) external requiresAuth {
+        usedDigests[uuid] = true;
+        emit UUIDForceSetUsed(uuid);
     }
 
     /// @notice Sweep stray ETH to the owner (the station is not meant to hold ETH between txs).
