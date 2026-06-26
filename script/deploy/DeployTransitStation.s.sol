@@ -19,14 +19,14 @@ contract DeployTransitStation is BaseScript {
     // ============================== FILL PER DEPLOYMENT ==============================
 
     // Backend quote signer (zero-checked in the constructor, so a fresh deploy reverts until set).
-    address constant QUOTE_SIGNER = address(0); // TODO: production quote signer
+    address constant QUOTE_SIGNER = address(0xE4a40e9E04eb7F33368D998FD423073b778Ce420);
     // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
-    address constant EXECUTOR = address(0); // TODO: production executor
+    address constant EXECUTOR = address(0xCf96d0232cefB7b9476ba37B3B698875a796E80F);
 
     // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
-    address constant EXISTING_ROLES_AUTHORITY = address(0);
-    address constant EXISTING_BORING_VAULT = address(0);
-    address constant EXISTING_MANAGER = address(0);
+    address constant EXISTING_ROLES_AUTHORITY = address(0x94dF457c3628233E2FD1B62FcfaA2A5a529644a4);
+    address constant EXISTING_BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
+    address constant EXISTING_MANAGER = address(0x289Ea9326f2f8b99E18F7980de3b4AfDc7f9Bbb0);
 
     // BoringVault metadata (only used when deploying fresh).
     string constant NAME = "Transit Vault";
@@ -49,43 +49,47 @@ contract DeployTransitStation is BaseScript {
     TransitStation public transitStation;
 
     function run() public broadcast {
+        rolesAuthority = RolesAuthority(EXISTING_ROLES_AUTHORITY);
+        boringVault = BoringVault(EXISTING_BORING_VAULT);
+        manager = Manager(EXISTING_MANAGER);
+        // Commented out because we are connecting to previously deployed vaults
         // ==================== DEPLOY VAULT / MANAGER COMBO ====================
-        rolesAuthority = RolesAuthority(
-            CREATEX.deployCreate3(
-                SALT_ROLES_AUTHORITY,
-                abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(broadcaster, Authority(address(0))))
-            )
-        );
-        boringVault = BoringVault(
-            payable(CREATEX.deployCreate3(
-                    SALT_BORING_VAULT,
-                    abi.encodePacked(type(BoringVault).creationCode, abi.encode(broadcaster, NAME, SYMBOL, DECIMALS))
-                ))
-        );
-        manager = ManagerWithMerkleVerification(
-            CREATEX.deployCreate3(
-                SALT_MANAGER,
-                abi.encodePacked(
-                    type(ManagerWithMerkleVerification).creationCode,
-                    abi.encode(broadcaster, address(boringVault), BALANCER_VAULT)
-                )
-            )
-        );
-        boringVault.setAuthority(rolesAuthority);
-        manager.setAuthority(rolesAuthority);
-        rolesAuthority.setRoleCapability(
-            MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
-        );
-        rolesAuthority.setRoleCapability(
-            MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address[],bytes[],uint256[])")), true
-        );
-        rolesAuthority.setRoleCapability(
-            STRATEGIST_ROLE,
-            address(manager),
-            ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
-            true
-        );
-        rolesAuthority.setUserRole(address(manager), MANAGER_ROLE, true);
+        // rolesAuthority = RolesAuthority(
+        //     CREATEX.deployCreate3(
+        //         SALT_ROLES_AUTHORITY,
+        //         abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(broadcaster, Authority(address(0))))
+        //     )
+        // );
+        // boringVault = BoringVault(
+        //     payable(CREATEX.deployCreate3(
+        //             SALT_BORING_VAULT,
+        //             abi.encodePacked(type(BoringVault).creationCode, abi.encode(broadcaster, NAME, SYMBOL, DECIMALS))
+        //         ))
+        // );
+        // manager = ManagerWithMerkleVerification(
+        //     CREATEX.deployCreate3(
+        //         SALT_MANAGER,
+        //         abi.encodePacked(
+        //             type(ManagerWithMerkleVerification).creationCode,
+        //             abi.encode(broadcaster, address(boringVault), BALANCER_VAULT)
+        //         )
+        //     )
+        // );
+        // boringVault.setAuthority(rolesAuthority);
+        // manager.setAuthority(rolesAuthority);
+        // rolesAuthority.setRoleCapability(
+        //     MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
+        // );
+        // rolesAuthority.setRoleCapability(
+        //     MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address[],bytes[],uint256[])")), true
+        // );
+        // rolesAuthority.setRoleCapability(
+        //     STRATEGIST_ROLE,
+        //     address(manager),
+        //     ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
+        //     true
+        // );
+        // rolesAuthority.setUserRole(address(manager), MANAGER_ROLE, true);
 
         // ==================== DEPLOY STATION ====================
         transitStation = TransitStation(
@@ -107,14 +111,15 @@ contract DeployTransitStation is BaseScript {
         );
 
         // ==================== STATION ROLE WIRING ====================
-        rolesAuthority.setRoleCapability(
-            TRANSIT_EXECUTOR_ROLE, address(transitStation), TransitStation.executePendingOrders.selector, true
-        );
-        rolesAuthority.setRoleCapability(PAUSER_ROLE, address(transitStation), TransitStation.pause.selector, true);
-        rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
-        rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
-        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
-        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector, true);
+        // rolesAuthority.setRoleCapability(
+        //     TRANSIT_EXECUTOR_ROLE, address(transitStation), TransitStation.executePendingOrders.selector, true
+        // );
+        // rolesAuthority.setRoleCapability(PAUSER_ROLE, address(transitStation), TransitStation.pause.selector, true);
+        // rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
+        // rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
+        // rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
+        // rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector,
+        // true);
 
         // ==================== CROSS-CHAIN (LayerZero) ====================
         // CREATE3 gives the station the same address on every chain, so its peer is itself.
