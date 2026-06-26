@@ -168,4 +168,35 @@ contract EquivalentExchangeTest is Test {
         vm.stopPrank();
     }
 
+    function test_Execute_SweepsEntireBalanceOfMultipleTokensWithDifferentDecimals() external {
+        tERC20 tokenA = new tERC20(6);
+        tERC20 tokenB = new tERC20(18);
+
+        deal(address(tokenA), owner, 1e6);
+        deal(address(tokenB), owner, 1e18);
+        deal(address(tokenB), address(exchange), 0.5e18);
+
+        ERC20[] memory tokens = new ERC20[](2);
+        uint256[] memory amountsIn = new uint256[](2);
+        address[] memory targets = new address[](0);
+        bytes[] memory targetData = new bytes[](0);
+
+        tokens[0] = ERC20(address(tokenA));
+        tokens[1] = ERC20(address(tokenB));
+        amountsIn[0] = 1e6;
+        amountsIn[1] = 1e18;
+
+        vm.startPrank(owner);
+        tokenA.approve(address(exchange), 1e6);
+        tokenB.approve(address(exchange), 1e18);
+
+        exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
+        vm.stopPrank();
+
+        assertEq(tokenA.balanceOf(owner), 1e6, "owner should receive back tokenA");
+        assertEq(tokenB.balanceOf(owner), 1.5e18, "owner should receive pulled tokenB plus pre-funded tokenB");
+        assertEq(tokenA.balanceOf(address(exchange)), 0, "exchange should have no tokenA");
+        assertEq(tokenB.balanceOf(address(exchange)), 0, "exchange should have no tokenB");
+    }
+
 }
