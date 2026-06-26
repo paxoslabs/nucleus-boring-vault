@@ -198,9 +198,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         pure
         returns (bytes memory addressesFound)
     {
-        for (uint256 i; i < batches.length; ++i) {
-            addressesFound = abi.encodePacked(addressesFound, batches[i].wantAsset);
-        }
+        // Nothing to decode
     }
 
     // @desc submit an order to the withdraw queue
