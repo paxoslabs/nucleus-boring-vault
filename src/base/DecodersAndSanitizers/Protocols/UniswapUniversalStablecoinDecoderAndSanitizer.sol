@@ -13,8 +13,9 @@ import {
 ///         - the program must be exactly [V4_SWAP];
 ///         - inside the swap, the only allowed actions are one SWAP_EXACT_IN_SINGLE plus SETTLE_ALL / TAKE_ALL.
 /// @dev `TAKE_ALL` sends the output to `msgSender()` — the vault, as the `execute` caller — with no recipient
-///      parameter, so the output returns to the vault and cannot be redirected. The swap commits its output
-///      currency; the pool's fee/tickSpacing/hooks are not committed.
+///      parameter, so the output returns to the vault and cannot be redirected. The swap commits the canonical v4
+///      PoolId (keccak256 of the full pool key) plus the swap direction (zeroForOne), so a merkle leaf pins the
+///      exact pool — including the hooks contract — and the specific direction it may trade.
 abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     //============================== ERRORS ===============================
@@ -92,8 +93,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
     //============================== COMMAND DISPATCH ===============================
 
-    /// @dev The program must be exactly one V4_SWAP command (allow-revert flag unset). The swap's output currency is
-    ///      committed.
+    /// @dev The program must be exactly one V4_SWAP command (allow-revert flag unset). The swap's PoolId and
+    ///      direction are committed.
     function _decodeCommands(
         bytes calldata commands,
         bytes[] calldata inputs
@@ -115,10 +116,13 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
 
     //============================== V4 SWAP ACTION DISPATCH ===============================
 
-    /// @dev Requires exactly three actions: SWAP_EXACT_IN_SINGLE followed by SETTLE_ALL and TAKE_ALL. Decodes the
-    ///      swap's pool key + direction for the output currency; Uniswap reverts on its own if the deltas are not
-    ///      settled, so settle/take presence is not checked here.
-    function _handleV4Swap(bytes calldata input) internal pure returns (address currencyOut) {
+    /// @dev Requires exactly three actions: SWAP_EXACT_IN_SINGLE followed by SETTLE_ALL and TAKE_ALL. Commits the
+    ///      canonical v4 PoolId (the keccak256 of the full pool key) and the swap direction (zeroForOne), so the leaf
+    ///      pins both the exact pool — including its hooks contract — and the direction it may trade. `hookData` is
+    /// not
+    ///      committed. Uniswap reverts on its own if the deltas are not settled, so settle/take presence is not checked
+    ///      here.
+    function _handleV4Swap(bytes calldata input) internal pure returns (bytes memory poolIdAndDirection) {
         (bytes memory actions, bytes[] memory params) = abi.decode(input, (bytes, bytes[]));
         if (actions.length != params.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
         if (actions.length != 3) {
@@ -131,7 +135,12 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         }
         DecoderCustomTypes.V4ExactInputSingleParams memory p =
             abi.decode(params[0], (DecoderCustomTypes.V4ExactInputSingleParams));
-        currencyOut = p.zeroForOne ? p.poolKey.currency1 : p.poolKey.currency0;
+
+        // Commit the canonical v4 PoolId plus direction. The PoolId is keccak256(abi.encode(poolKey)) — `abi.encode`
+        // (NOT encodePacked) is required so this equals Uniswap's PoolIdLibrary.toId. Hashing all five pool-key fields
+        // pins the exact pool (including the hooks contract); `zeroForOne` then pins the direction it may trade.
+        bytes32 poolId = keccak256(abi.encode(p.poolKey));
+        poolIdAndDirection = abi.encodePacked(poolId, p.zeroForOne);
 
         uint256 action1 = uint8(actions[1]);
         if (action1 != SETTLE_ALL && action1 != TAKE_ALL) {
