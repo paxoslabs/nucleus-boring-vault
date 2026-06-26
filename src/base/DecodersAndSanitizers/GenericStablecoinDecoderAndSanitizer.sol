@@ -13,9 +13,7 @@ import {
     UniswapV3DecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/UniswapV3DecoderAndSanitizer.sol";
 import { OneInchDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/OneInchDecoderAndSanitizer.sol";
-import {
-    StablecoinCurveDecoderAndSanitizer
-} from "src/base/DecodersAndSanitizers/Protocols/StablecoinCurveDecoderAndSanitizer.sol";
+import { CurveDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/CurveDecoderAndSanitizer.sol";
 import {
     NativeWrapperDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/NativeWrapperDecoderAndSanitizer.sol";
@@ -47,17 +45,15 @@ import {
 import { EcoDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/EcoDecoderAndSanitizer.sol";
 import { KhalaniDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/KhalaniDecoderAndSanitizer.sol";
 
-/// @notice Same protocol set as `GenericDecoderAndSanitizer`, with Uniswap and Curve scoped to stablecoin swaps:
-///         `UniswapUniversalStablecoinDecoderAndSanitizer` (the Universal Router `approve`/swap/`SWEEP` surface) and
-///         `StablecoinCurveDecoderAndSanitizer` (Curve `exchange`) each commit the swap's minimum output so the
-///         merkle leaf pins the worst price the strategist may accept. `UniswapV3DecoderAndSanitizer` covers direct
-///         Uniswap V3 position management.
+/// @notice Same protocol set as `GenericDecoderAndSanitizer`, plus the Uniswap Universal Router swap surface
+///         (`UniswapUniversalStablecoinDecoderAndSanitizer`) and direct Uniswap V3 position management
+///         (`UniswapV3DecoderAndSanitizer`).
 contract GenericStablecoinDecoderAndSanitizer is
     PendleRouterDecoderAndSanitizer,
     UniswapUniversalStablecoinDecoderAndSanitizer,
     UniswapV3DecoderAndSanitizer,
     OneInchDecoderAndSanitizer,
-    StablecoinCurveDecoderAndSanitizer,
+    CurveDecoderAndSanitizer,
     NativeWrapperDecoderAndSanitizer,
     ERC4626DecoderAndSanitizer,
     EigenpieDecoderAndSanitizer,
@@ -92,7 +88,7 @@ contract GenericStablecoinDecoderAndSanitizer is
     )
         external
         pure
-        override(ERC4626DecoderAndSanitizer, BalancerV2DecoderAndSanitizer)
+        override(CurveDecoderAndSanitizer, ERC4626DecoderAndSanitizer, BalancerV2DecoderAndSanitizer)
         returns (bytes memory addressesFound)
     {
         addressesFound = abi.encodePacked(receiver);
@@ -101,7 +97,7 @@ contract GenericStablecoinDecoderAndSanitizer is
     function withdraw(uint256)
         external
         pure
-        override(NativeWrapperDecoderAndSanitizer, BalancerV2DecoderAndSanitizer)
+        override(CurveDecoderAndSanitizer, NativeWrapperDecoderAndSanitizer, BalancerV2DecoderAndSanitizer)
         returns (bytes memory addressesFound)
     {
         // Nothing to sanitize or return
