@@ -7,6 +7,8 @@ import { ManagerWithMerkleVerification } from "src/base/Roles/ManagerWithMerkleV
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
 import { TransitStation } from "src/transit/TransitStation.sol";
 import { BaseScript } from "script/Base.s.sol";
+import { ILayerZeroEndpointV2 } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { SetConfigParam } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
 import "src/helper/Constants.sol";
 
 /// @notice Production deployment for a Transit Station, with its BoringVault + Manager combo.
@@ -42,6 +44,18 @@ contract DeployTransitStation is BaseScript {
     bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
     bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
     bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation");
+
+    // LayerZero config type id for the ULN (DVNs + confirmations) config.
+    uint32 constant CONFIG_TYPE_ULN = 2;
+
+    struct UlnConfig {
+        uint64 confirmations;
+        uint8 requiredDVNCount;
+        uint8 optionalDVNCount;
+        uint8 optionalDVNThreshold;
+        address[] requiredDVNs;
+        address[] optionalDVNs;
+    }
 
     RolesAuthority public rolesAuthority;
     BoringVault public boringVault;
@@ -127,8 +141,10 @@ contract DeployTransitStation is BaseScript {
         if (peerEid != 0) {
             transitStation.setPeer(peerEid, bytes32(uint256(uint160(address(transitStation)))));
             transitStation.setMessageGasLimit(peerEid, MESSAGE_GAS_LIMIT);
+            // Set DVNs + confirmations while the broadcaster is still the LZ delegate (before the setDelegate below).
+            _configureLZ(peerEid);
         } else {
-            console.log("WARNING: no peer EID set; configure the LZ peer + gas limit post-deploy");
+            console.log("WARNING: no peer EID set; configure the LZ peer + gas limit + DVNs post-deploy");
         }
         transitStation.setDelegate(getMultisig());
 
@@ -137,9 +153,9 @@ contract DeployTransitStation is BaseScript {
 
         // ==================== OWNERSHIP ====================
         // When reusing an existing combo, drop the vault/manager/authority transfers (already multisig-owned).
-        rolesAuthority.transferOwnership(getMultisig());
-        boringVault.transferOwnership(getMultisig());
-        manager.transferOwnership(getMultisig());
+        // rolesAuthority.transferOwnership(getMultisig());
+        // boringVault.transferOwnership(getMultisig());
+        // manager.transferOwnership(getMultisig());
         transitStation.transferOwnership(getMultisig());
 
         console.log("RolesAuthority:", address(rolesAuthority));
@@ -165,15 +181,90 @@ contract DeployTransitStation is BaseScript {
     }
 
     function _peerEid() internal view returns (uint32) {
-        // TODO: return the production peer EID for each chain this station bridges with. 0 skips LZ peer wiring
-        // (configure it post-deploy once the peer station exists).
-        if (block.chainid == 1) return 0; // Ethereum mainnet — set the peer EID here
+        if (block.chainid == 1) return 30_416; // Ethereum mainnet — peer is RH
+        if (block.chainid == 4663) return 30_101; // RH mainnet — peer is Ethereum
         return 0;
     }
 
     function _lzEndpoint() internal view returns (address) {
         if (block.chainid == 1) return 0x1a44076050125825900e736c501f859c50fE728c; // Ethereum mainnet (LZ V2)
+        if (block.chainid == 4663) return 0xAaB5A48CFC03Efa9cC34A2C1aAcCCB84b4b770e4; // RH mainnet
         revert("DeployTransitStation: no LZ endpoint for this chain");
+    }
+
+    /// @notice Pushes the station's ULN security config (required DVNs + block confirmations) onto the
+    ///         default send and receive libraries for `peerEid`.
+    /// @dev Must run while the broadcaster is still the LZ delegate (before `setDelegate(getMultisig())`). The
+    ///      OAppAuth constructor sets the delegate to the owner — the broadcaster — at deploy, so this is the
+    /// window.
+    function _configureLZ(uint32 peerEid) internal {
+        ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(_lzEndpoint());
+
+        address sendLib = endpoint.defaultSendLibrary(peerEid);
+        address receiveLib = endpoint.defaultReceiveLibrary(peerEid);
+        require(sendLib != address(0), "DeployTransitStation: no default sendLib for peerEid");
+        require(receiveLib != address(0), "DeployTransitStation: no default receiveLib for peerEid");
+
+        address[] memory requiredDVNs = sortAddresses(_requiredDVNs());
+        uint64 confirmations = _dvnConfirmations();
+        require(confirmations != 0, "DeployTransitStation: confirmations is 0");
+        require(requiredDVNs.length != 0, "DeployTransitStation: no required DVNs");
+
+        // Optional DVNs are intentionally unused: count and threshold 0, empty array.
+        bytes memory ulnConfigBytes = abi.encode(
+            UlnConfig({
+                confirmations: confirmations,
+                requiredDVNCount: uint8(requiredDVNs.length),
+                optionalDVNCount: 0,
+                optionalDVNThreshold: 0,
+                requiredDVNs: requiredDVNs,
+                optionalDVNs: new address[](0)
+            })
+        );
+
+        SetConfigParam[] memory setConfigParams = new SetConfigParam[](1);
+        setConfigParams[0] = SetConfigParam(peerEid, CONFIG_TYPE_ULN, ulnConfigBytes);
+
+        endpoint.setConfig(address(transitStation), sendLib, setConfigParams);
+        endpoint.setConfig(address(transitStation), receiveLib, setConfigParams);
+
+        console.log("LZ ULN config set for peer EID:", peerEid);
+    }
+
+    function _requiredDVNs() internal view returns (address[] memory dvns) {
+        dvns = new address[](3);
+        if (block.chainid == 1) {
+            dvns[0] = 0x589dEDbD617e0CBcB916A9223F4d1300c294236b; // LZ labs
+            dvns[1] = 0xa59BA433ac34D2927232918Ef5B2eaAfcF130BA5; // Nethermind
+            dvns[2] = 0x380275805876Ff19055EA900CDb2B46a94ecF20D; // Horizen
+        }
+        if (block.chainid == 4663) {
+            dvns[0] = 0xd01ae6905d48315f7bE10C7330aeCF8360Ef5b12; // LZ labs
+            dvns[1] = 0x0Ffe02DF012299A370D5dd69298A5826EAcaFdF8; // Nethermind
+            dvns[2] = 0x1258A278519c7f4bd997a9c3BFd4Aa802a028D89; // Horizen
+        }
+    }
+
+    function _dvnConfirmations() internal view returns (uint64) {
+        if (block.chainid == 1) return 15; // Ethereum mainnet
+        if (block.chainid == 4663) return 20; // RH mainnet
+        return 0;
+    }
+
+    /// @dev LayerZero requires the DVN array sorted ascending with no duplicates.
+    function sortAddresses(address[] memory addresses) internal pure returns (address[] memory) {
+        uint256 length = addresses.length;
+        if (length < 2) return addresses;
+        for (uint256 i; i < length - 1; ++i) {
+            for (uint256 j; j < length - i - 1; ++j) {
+                if (addresses[j] > addresses[j + 1]) {
+                    address temp = addresses[j];
+                    addresses[j] = addresses[j + 1];
+                    addresses[j + 1] = temp;
+                }
+            }
+        }
+        return addresses;
     }
 
 }
