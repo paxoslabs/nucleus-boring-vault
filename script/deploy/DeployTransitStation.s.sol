@@ -23,12 +23,12 @@ contract DeployTransitStation is BaseScript {
     // Backend quote signer (zero-checked in the constructor, so a fresh deploy reverts until set).
     address constant QUOTE_SIGNER = address(0xE4a40e9E04eb7F33368D998FD423073b778Ce420);
     // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
-    address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault
+    // address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault
 
     // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
     address constant EXISTING_ROLES_AUTHORITY = address(0x3B4decc43d2173280198B46532Ef570062FCc8f5);
     address constant EXISTING_BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
-    address constant EXISTING_MANAGER = address(0x666156ab52bb9984F5c3985726f048Dd4A73887a);
+    // address constant EXISTING_MANAGER = address(0x666156ab52bb9984F5c3985726f048Dd4A73887a);
 
     // BoringVault metadata (only used when deploying fresh).
     string constant NAME = "Transit Vault";
@@ -47,9 +47,9 @@ contract DeployTransitStation is BaseScript {
 
     // ============================== SALTS ==============================
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
-    bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
+    // bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
+    // bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
+    // bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
     bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation");
 
     // LayerZero config type id for the ULN (DVNs + confirmations) config.
@@ -66,13 +66,13 @@ contract DeployTransitStation is BaseScript {
 
     RolesAuthority public rolesAuthority;
     BoringVault public boringVault;
-    ManagerWithMerkleVerification public manager;
+    // ManagerWithMerkleVerification public manager;
     TransitStation public transitStation;
 
     function run() public broadcast {
         rolesAuthority = RolesAuthority(EXISTING_ROLES_AUTHORITY);
         boringVault = BoringVault(payable(EXISTING_BORING_VAULT));
-        manager = ManagerWithMerkleVerification(EXISTING_MANAGER);
+        // manager = ManagerWithMerkleVerification(EXISTING_MANAGER);
         // Commented out because we are connecting to previously deployed vaults
         // ==================== DEPLOY VAULT / MANAGER COMBO ====================
         // rolesAuthority = RolesAuthority(
@@ -167,7 +167,7 @@ contract DeployTransitStation is BaseScript {
 
         console.log("RolesAuthority:", address(rolesAuthority));
         console.log("BoringVault:", address(boringVault));
-        console.log("Manager:", address(manager));
+        // console.log("Manager:", address(manager));
         console.log("TransitStation:", address(transitStation));
     }
 
