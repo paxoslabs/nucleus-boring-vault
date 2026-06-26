@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.21;
 
-import { Pausable } from "./Pausable.sol";
+import { Pausable } from "src/helper/Pausable.sol";
 import { VerboseAuth, Authority } from "./VerboseAuth.sol";
 import { IAccessAuthorityHook } from "src/interfaces/IAccessAuthorityHook.sol";
 

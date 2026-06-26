@@ -27,3 +27,4 @@ uint8 constant DEPOSITOR_ROLE = 7;
 uint8 constant SELF_BURN_ROLE = 8;
 uint8 constant WITHDRAW_QUEUE_PROCESSOR_ROLE = 9;
 uint8 constant FREEZE_MANAGER_ROLE = 10;
+uint8 constant TRANSIT_EXECUTOR_ROLE = 11;

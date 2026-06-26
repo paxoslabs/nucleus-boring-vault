@@ -7,6 +7,8 @@ import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
 
+import { TransitStation } from "src/transit/TransitStation.sol";
+
 abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     error NucleusDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
@@ -164,6 +166,38 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     // @desc process orders using the one to one queue
     function processOrders(uint256 ordersToProcess) external pure returns (bytes memory addressesFound) {
+        // Nothing to decode
+    }
+
+    // @desc Transit Station submit order
+    // @tag destEID:uint32:destination chain EID (LayerZero)
+    // @tag offerAsset:address:offer asset
+    // @tag wantAsset:address:want asset
+    // @tag receiver:address:receiver
+    // @tag integratorFeeReceiver:address:integrator fee receiver
+    function submitOrder(
+        TransitStation.Quote calldata quote,
+        bytes calldata signature
+    )
+        external
+        returns (bytes memory addressesFound)
+    {
+        addressesFound = abi.encodePacked(
+            quote.route.destEID,
+            quote.route.offerAsset,
+            quote.route.wantAsset,
+            quote.receiver,
+            quote.integratorFeeReceiver
+        );
+    }
+
+    // @desc Transit Station execute pending orders
+    // @tag wantAsset:address[]:the want asset of each fill batch
+    function executePendingOrders(TransitStation.FillBatch[] calldata batches)
+        external
+        pure
+        returns (bytes memory addressesFound)
+    {
         // Nothing to decode
     }
 
