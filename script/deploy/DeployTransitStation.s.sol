@@ -122,7 +122,7 @@ contract DeployTransitStation is BaseScript {
                             broadcaster,
                             Authority(address(rolesAuthority)),
                             _lzEndpoint(),
-                            getMultisig(), // protocolFeeRecipient
+                            boringVault, // protocolFeeRecipient
                             QUOTE_SIGNER,
                             address(boringVault), // offerReceiver
                             address(boringVault) // wantAssetSource
