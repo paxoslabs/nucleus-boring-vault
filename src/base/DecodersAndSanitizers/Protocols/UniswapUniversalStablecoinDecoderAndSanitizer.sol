@@ -22,24 +22,23 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     //============================== ERRORS ===============================
 
     error UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
-    error UniswapUniversalStablecoinDecoderAndSanitizer__ExpectedSwapThenSweep(uint256 commandCount);
-    error UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
-    error UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommandLength(uint256 commandCount);
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(address token);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(address recipient);
-    error UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256 command);
     error UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(uint256 action);
     error UniswapUniversalStablecoinDecoderAndSanitizer__SingleHopOnly();
     error UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
+    error UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedActionLength(uint256 actionLength);
 
     //============================== COMMAND IDS ===============================
     // From the modern (V4) Uniswap Commands.sol. A command byte's low 7 bits (0x7f) are the command type; the
-    // high bit (0x80) is the allow-revert flag.
+    // high bit (0x80) is the allow-revert flag.  The constants below are the
+    // full 8-bit values expected by the decoder (allow-revert flag unset).
 
-    bytes1 internal constant COMMAND_TYPE_MASK = 0x7f;
-    bytes1 internal constant FLAG_ALLOW_REVERT = 0x80;
+    bytes1 internal constant COMMAND_TYPE_MASK = 0xff;
     bytes1 internal constant COMMAND_SWEEP = 0x04;
-    bytes1 internal constant V4_SWAP = 0x10;
+    bytes1 internal constant COMMAND_V4_SWAP = 0x10;
 
     //============================== V4 SWAP ACTION IDS ===============================
     // From Uniswap v4-periphery Actions.sol.
@@ -110,7 +109,8 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
     //============================== COMMAND DISPATCH ===============================
 
     /// @dev The program must be exactly [V4_SWAP, SWEEP], neither allowing revert, and the SWEEP must return the
-    ///      swap's output currency to the vault. The swept token and recipient are committed to the merkle leaf.
+    ///      swap's output currency to the vault. The sweep recipient is constrained to the vault (or the MSG_SENDER
+    ///      sentinel that resolves to it), so only the swept token and the swap's committed price floor are returned.
     function _decodeCommands(
         bytes calldata commands,
         bytes[] calldata inputs
@@ -119,66 +119,63 @@ abstract contract UniswapUniversalStablecoinDecoderAndSanitizer is BaseDecoderAn
         view
         returns (bytes memory addressesFound)
     {
-        if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
         // Exact-in single-hop: one swap, one sweep of the output. Nothing more, nothing less.
         if (commands.length != 2) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__ExpectedSwapThenSweep(commands.length);
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommandLength(commands.length);
         }
+        if (commands.length != inputs.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
 
-        bytes1 swapCommand = commands[0];
-        bytes1 sweepCommand = commands[1];
-        // Neither command may swallow its own revert; a failure must revert the whole tx.
-        if (swapCommand & FLAG_ALLOW_REVERT != 0) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256(uint8(swapCommand)));
+        if (commands[0] & COMMAND_TYPE_MASK != COMMAND_V4_SWAP) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
-        if (sweepCommand & FLAG_ALLOW_REVERT != 0) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__AllowRevertNotPermitted(uint256(uint8(sweepCommand)));
-        }
-        if (swapCommand & COMMAND_TYPE_MASK != V4_SWAP) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__SwapMustComeFirst();
-        }
-        if (sweepCommand & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
-            revert UniswapUniversalStablecoinDecoderAndSanitizer__MissingSweep();
+        if (commands[1] & COMMAND_TYPE_MASK != COMMAND_SWEEP) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedCommand();
         }
 
         (address currencyOut, uint256 price) = _handleV4Swap(inputs[0]);
 
         // SWEEP input = (address token, address recipient, uint256 amountMin). The swap's output must be swept to
-        // the vault, so it cannot be left in the router.
+        // the vault, so it cannot be left in the router.  The amountMin parameter is not checked because, for a single-hop
+        // swap, it is identical to the swap command's amountOutMinimum, which is checked.
         (address token, address recipient,) = abi.decode(inputs[1], (address, address, uint256));
         if (token != currencyOut) revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepTokenNotOutput(token);
         if (recipient != boringVault && recipient != ADDRESS_MSG_SENDER) {
             revert UniswapUniversalStablecoinDecoderAndSanitizer__SweepRecipientNotVault(recipient);
         }
-        addressesFound = abi.encodePacked(price, token, recipient);
+
+        addressesFound = abi.encodePacked(price, token);
     }
 
     //============================== V4 SWAP ACTION DISPATCH ===============================
 
-    /// @dev Requires exactly one SWAP_EXACT_IN_SINGLE plus only SETTLE_ALL / TAKE_ALL actions, reverting on anything
-    ///      else. Decodes the swap's pool key + direction (output currency, for the sweep check) and its
-    ///      amounts (the committed price floor); Uniswap reverts on its own if the deltas are not settled, so
-    ///      settle/take presence is not checked here.
+    /// @dev Requires exactly three actions: SWAP_EXACT_IN_SINGLE followed by SETTLE_ALL and TAKE_ALL. Decodes
+    ///      the swap's pool key + direction (output currency, for the sweep check) and its amounts (the committedprice floor);
+    ///      Uniswap reverts on its own if the deltas are not settled, so settle/take presence is not checked here.
     function _handleV4Swap(bytes calldata input) internal pure returns (address currencyOut, uint256 price) {
         (bytes memory actions, bytes[] memory params) = abi.decode(input, (bytes, bytes[]));
         if (actions.length != params.length) revert UniswapUniversalStablecoinDecoderAndSanitizer__LengthMismatch();
-        bool swapSeen;
-        for (uint256 i; i < actions.length; ++i) {
-            uint256 action = uint8(actions[i]);
-            if (action == SWAP_EXACT_IN_SINGLE) {
-                if (swapSeen) revert UniswapUniversalStablecoinDecoderAndSanitizer__SingleHopOnly();
-                swapSeen = true;
-                DecoderCustomTypes.V4ExactInputSingleParams memory p =
-                    abi.decode(params[i], (DecoderCustomTypes.V4ExactInputSingleParams));
-                currencyOut = p.zeroForOne ? p.poolKey.currency1 : p.poolKey.currency0;
-                // Reverts on amountOutMinimum == 0 (a swap with no output floor is unsafe and should never be
-                // approved).
-                price = (uint256(p.amountIn) * PRICE_SCALE) / p.amountOutMinimum;
-            } else if (action != SETTLE_ALL && action != TAKE_ALL) {
-                revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action);
-            }
+        if (actions.length != 3) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnexpectedActionLength(actions.length);
         }
-        if (!swapSeen) revert UniswapUniversalStablecoinDecoderAndSanitizer__NoSwapAction();
+
+        uint256 action0 = uint8(actions[0]);
+        if (action0 != SWAP_EXACT_IN_SINGLE) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action0);
+        }
+        DecoderCustomTypes.V4ExactInputSingleParams memory p =
+            abi.decode(params[0], (DecoderCustomTypes.V4ExactInputSingleParams));
+        currencyOut = p.zeroForOne ? p.poolKey.currency1 : p.poolKey.currency0;
+        // Reverts on amountOutMinimum == 0 (a swap with no output floor is unsafe and should never be approved).
+        price = (uint256(p.amountIn) * PRICE_SCALE) / p.amountOutMinimum;
+
+        uint256 action1 = uint8(actions[1]);
+        if (action1 != SETTLE_ALL && action1 != TAKE_ALL) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action1);
+        }
+        uint256 action2 = uint8(actions[2]);
+        if (action2 != SETTLE_ALL && action2 != TAKE_ALL) {
+            revert UniswapUniversalStablecoinDecoderAndSanitizer__UnsupportedAction(action2);
+        }
     }
 
 }
