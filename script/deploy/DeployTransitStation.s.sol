@@ -210,7 +210,7 @@ contract DeployTransitStation is BaseScript {
 
     function _lzEndpoint() internal view returns (address) {
         if (block.chainid == 1) return 0x1a44076050125825900e736c501f859c50fE728c; // Ethereum mainnet (LZ V2)
-        if (block.chainid == 4663) return 0xAaB5A48CFC03Efa9cC34A2C1aAcCCB84b4b770e4; // RH mainnet
+        if (block.chainid == 4663) return 0x6F475642a6e85809B1c36Fa62763669b1b48DD5B; // RH mainnet
         revert("DeployTransitStation: no LZ endpoint for this chain");
     }
 
