@@ -26,9 +26,9 @@ contract DeployTransitStation is BaseScript {
     address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault
 
     // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
-    address constant EXISTING_ROLES_AUTHORITY = address(0x94dF457c3628233E2FD1B62FcfaA2A5a529644a4);
+    address constant EXISTING_ROLES_AUTHORITY = address(0x3B4decc43d2173280198B46532Ef570062FCc8f5);
     address constant EXISTING_BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
-    address constant EXISTING_MANAGER = address(0x289Ea9326f2f8b99E18F7980de3b4AfDc7f9Bbb0);
+    address constant EXISTING_MANAGER = address(0x666156ab52bb9984F5c3985726f048Dd4A73887a);
 
     // BoringVault metadata (only used when deploying fresh).
     string constant NAME = "Transit Vault";
