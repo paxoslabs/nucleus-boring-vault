@@ -136,12 +136,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
     event OrderSubmitted(
-        bytes32 indexed uuid,
-        uint32 sourceEID,
-        Route route,
-        OrderTerms terms,
-        address indexed user,
-        bytes32 indexed distributorCode
+        bytes32 indexed uuid, uint32 sourceEID, Quote quote, address indexed user, bytes32 indexed distributorCode
     );
 
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
@@ -565,7 +560,7 @@ contract TransitStation is OAppAuth, Pausable {
             _sendOrder(quote.route.destEID, terms);
         }
 
-        emit OrderSubmitted(uuid, thisChainEID, quote.route, terms, msg.sender, quote.distributorCode);
+        emit OrderSubmitted(uuid, thisChainEID, quote, msg.sender, quote.distributorCode);
     }
 
     /// @dev Validates the quote, pulls the offer asset, and returns the EIP-712 digest (used as the order UUID) plus
