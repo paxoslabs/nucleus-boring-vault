@@ -38,6 +38,13 @@ contract DeployTransitStation is BaseScript {
     uint64 constant MESSAGE_GAS_LIMIT = 400_000;
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
+    // ---- Route assets (offerAsset/wantAsset for setRouteApprovals) ----
+    address constant USDC_ETH = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant PYUSD_ETH = 0x6c3ea9036406852006290770BEdFcAbA0e23A0e8;
+    address constant USDT_ETH = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+    address constant USDG_ETH = 0xe343167631d89B6Ffc58B88d6b7fB0228795491D;
+    address constant USDG_RH = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
+
     // ============================== SALTS ==============================
 
     bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
@@ -164,18 +171,33 @@ contract DeployTransitStation is BaseScript {
         console.log("TransitStation:", address(transitStation));
     }
 
-    /// TODO: Fill with this chain's production routes: {destEID, offerAsset, wantAsset}. `destEID` is the station's
-    ///      own EID (`transitStation.thisChainEID()`) for a same-chain swap, or the peer EID for cross-chain. Resize
-    ///      the array and set each entry. Left empty by default; if so, configure post-deploy via setRouteApprovals.
     function _approveRoutes() internal {
+        uint32 peerEid = _peerEid();
         TransitStation.Route[] memory routes = new TransitStation.Route[](0);
-        bool[] memory approved = new bool[](0);
-        // Example (resize the arrays above to match):
-        // routes[0] = TransitStation.Route({ destEID: _peerEid(), offerAsset: 0x..., wantAsset: 0x... });
-        // approved[0] = true;
+
+        if (block.chainid == 1) {
+            // Ethereum source: offer an ETH stablecoin, receive USDG on RH.
+            routes = new TransitStation.Route[](4);
+            routes[0] = TransitStation.Route({ destEID: peerEid, offerAsset: USDC_ETH, wantAsset: USDG_RH });
+            routes[1] = TransitStation.Route({ destEID: peerEid, offerAsset: PYUSD_ETH, wantAsset: USDG_RH });
+            routes[2] = TransitStation.Route({ destEID: peerEid, offerAsset: USDT_ETH, wantAsset: USDG_RH });
+            routes[3] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_ETH, wantAsset: USDG_RH });
+        } else if (block.chainid == 4663) {
+            // Robinhood source: offer USDG on RH, receive an ETH stablecoin. No PYUSD return route.
+            routes = new TransitStation.Route[](3);
+            routes[0] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDC_ETH });
+            routes[1] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDT_ETH });
+            routes[2] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDG_ETH });
+        }
+
         if (routes.length == 0) {
             console.log("WARNING: no routes approved in-script; configure via setRouteApprovals");
             return;
+        }
+
+        bool[] memory approved = new bool[](routes.length);
+        for (uint256 i; i < routes.length; ++i) {
+            approved[i] = true;
         }
         transitStation.setRouteApprovals(routes, approved);
     }
