@@ -169,7 +169,7 @@ contract TransitStation is OAppAuth, Pausable {
     event RouteApprovalSet(Route route, bool indexed approved);
     event TokensRecovered(ERC20 token, uint256 amount);
     event ETHRecovered(uint256 amount);
-    event UUIDForceSetUsed();
+    event UUIDForceSetUsed(bytes32 indexed uuid);
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
