@@ -20,7 +20,7 @@ contract DeployTransitStation is BaseScript {
 
     // ============================== FILL PER DEPLOYMENT ==============================
 
-    // Backend quote signer (zero-checked in the constructor, so a fresh deploy reverts until set).
+    // Backend quote signer
     address constant QUOTE_SIGNER = address(0xE4a40e9E04eb7F33368D998FD423073b778Ce420);
     // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
     // address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault

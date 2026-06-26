@@ -360,7 +360,7 @@ contract TransitStation is OAppAuth, Pausable {
     }
 
     /// @notice Admin tombstone of a particular uuid. If an order is stuck and in bridging and manually refunded, we can
-    /// block it from ever becoming received
+    /// block it from ever being received
     /// @param uuid to set as used in usedDigests mapping
     /// @custom:access OWNER should be granted authority — allows blocking of any order uuid from beign received
     function forceSetUsedDigestTrue(bytes32 uuid) external requiresAuth {
