@@ -240,7 +240,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param quote Backend-priced swap terms.
     /// @param signature EIP-712 signature over `quote` by `quoteSigner`.
     /// @return uuid Identifier of the created order.
-    /// @dev `payable` to fund the LZ native fee on cross-chain orders (unused/refundable for same-chain).
+    /// @dev `payable` to fund the LZ native fee on cross-chain orders (for same-chain msg.value must be == 0).
     /// @custom:access PUBLIC capability should be granted — the entrypoint to submit orders; the caller funds their
     /// own offer and the want goes to the quote's fixed `receiver`, so misuse only self-griefs.
     function submitOrder(
