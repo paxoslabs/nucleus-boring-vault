@@ -136,12 +136,7 @@ contract TransitStation is OAppAuth, Pausable {
 
     /// @notice Emitted once a submitted order has been fully collected and either queued locally or bridged
     event OrderSubmitted(
-        bytes32 indexed uuid,
-        uint32 sourceEID,
-        Route route,
-        OrderTerms terms,
-        address indexed user,
-        bytes32 indexed distributorCode
+        bytes32 indexed uuid, uint32 sourceEID, Quote quote, address indexed user, bytes32 indexed distributorCode
     );
 
     /// @notice Emitted when an order is dispatched cross-chain. Carries the exact bridged payload plus the LayerZero
@@ -169,6 +164,7 @@ contract TransitStation is OAppAuth, Pausable {
     event RouteApprovalSet(Route route, bool indexed approved);
     event TokensRecovered(ERC20 token, uint256 amount);
     event ETHRecovered(uint256 amount);
+    event UUIDForceSetUsed(bytes32 indexed uuid);
 
     error GasLimitNotSet(uint32 eid);
     error OrderNotFound(bytes32 uuid);
@@ -239,7 +235,7 @@ contract TransitStation is OAppAuth, Pausable {
     /// @param quote Backend-priced swap terms.
     /// @param signature EIP-712 signature over `quote` by `quoteSigner`.
     /// @return uuid Identifier of the created order.
-    /// @dev `payable` to fund the LZ native fee on cross-chain orders (unused/refundable for same-chain).
+    /// @dev `payable` to fund the LZ native fee on cross-chain orders (for same-chain msg.value must be == 0).
     /// @custom:access PUBLIC capability should be granted — the entrypoint to submit orders; the caller funds their
     /// own offer and the want goes to the quote's fixed `receiver`, so misuse only self-griefs.
     function submitOrder(
@@ -361,6 +357,15 @@ contract TransitStation is OAppAuth, Pausable {
         pendingOrderIds.remove(uuid);
         delete pendingOrders[uuid];
         emit OrderForceRemoved(uuid, order);
+    }
+
+    /// @notice Admin tombstone of a particular uuid. If an order is stuck and in bridging and manually refunded, we can
+    /// block it from ever being received
+    /// @param uuid to set as used in usedDigests mapping
+    /// @custom:access OWNER should be granted authority — allows blocking of any order uuid from beign received
+    function forceSetUsedDigestTrue(bytes32 uuid) external requiresAuth {
+        usedDigests[uuid] = true;
+        emit UUIDForceSetUsed(uuid);
     }
 
     /// @notice Sweep stray ETH to the owner (the station is not meant to hold ETH between txs).
@@ -555,7 +560,7 @@ contract TransitStation is OAppAuth, Pausable {
             _sendOrder(quote.route.destEID, terms);
         }
 
-        emit OrderSubmitted(uuid, thisChainEID, quote.route, terms, msg.sender, quote.distributorCode);
+        emit OrderSubmitted(uuid, thisChainEID, quote, msg.sender, quote.distributorCode);
     }
 
     /// @dev Validates the quote, pulls the offer asset, and returns the EIP-712 digest (used as the order UUID) plus

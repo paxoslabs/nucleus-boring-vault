@@ -192,11 +192,10 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
     }
 
     // @desc Transit Station execute pending orders
-    function executePendingOrders(
-        bytes32[] calldata uuids,
-        uint256[] calldata amounts
-    )
+    // @tag wantAsset:address[]:the want asset of each fill batch
+    function executePendingOrders(TransitStation.FillBatch[] calldata batches)
         external
+        pure
         returns (bytes memory addressesFound)
     {
         // Nothing to decode
