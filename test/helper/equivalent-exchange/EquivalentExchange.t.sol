@@ -436,4 +436,125 @@ contract EquivalentExchangeTest is Test {
         vm.stopPrank();
     }
 
+    function test_Execute_TokenWithMoreThan18Decimals() external {
+        address recipient = makeAddr("recipient");
+        tERC20 token = new tERC20(24);
+        deal(address(token), owner, 1e24);
+
+        ERC20[] memory tokens = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(token));
+        amountsIn[0] = 1e24;
+        targets[0] = address(token);
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, recipient, 0.5e24);
+
+        // Normalized accounting for 24-decimal token:
+        // totalIn  = 1e24 / 1e6 = 1e18
+        // totalOut = (1e24 - 0.5e24) / 1e6 = 0.5e18
+        // The invariant would fail without a subsidy, so we use an address(0) subsidy provider
+        // which causes the subsidy pull to revert.
+        vm.startPrank(owner);
+        token.approve(address(exchange), 1e24);
+
+        vm.expectRevert("TRANSFER_FROM_FAILED");
+        exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(token)));
+        vm.stopPrank();
+
+        // Now run the same route with no transfer so the invariant holds.
+        targets = new address[](0);
+        targetData = new bytes[](0);
+
+        vm.startPrank(owner);
+        token.approve(address(exchange), 1e24);
+        exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(owner), 1e24, "owner should receive back all 24-decimal tokens");
+        assertEq(token.balanceOf(address(exchange)), 0, "exchange should be empty");
+    }
+
+    function test_Execute_SubsidyTokenWithDifferentDecimals() external {
+        address recipient = makeAddr("recipient");
+        address subsidyProvider = makeAddr("subsidyProvider");
+        tERC20 inputToken = new tERC20(18);
+        tERC20 subsidyToken = new tERC20(6);
+
+        deal(address(inputToken), owner, 1e18);
+        deal(address(subsidyToken), subsidyProvider, 1e6);
+
+        ERC20[] memory tokens = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(inputToken));
+        amountsIn[0] = 1e18;
+        targets[0] = address(inputToken);
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, recipient, 0.5e18);
+
+        // totalIn  = 1e18
+        // totalOut = 0.5e18
+        // shortfall = 0.5e18 normalized -> 0.5e6 units of 6-decimal subsidy token
+
+        vm.prank(subsidyProvider);
+        subsidyToken.approve(address(exchange), 1e6);
+
+        vm.startPrank(owner);
+        inputToken.approve(address(exchange), 1e18);
+        exchange.execute(tokens, amountsIn, targets, targetData, subsidyProvider, ERC20(address(subsidyToken)));
+        vm.stopPrank();
+
+        assertEq(inputToken.balanceOf(recipient), 0.5e18, "recipient should receive half of input token");
+        assertEq(inputToken.balanceOf(owner), 0.5e18, "owner should receive remaining input token");
+        assertEq(subsidyToken.balanceOf(owner), 0.5e6, "owner should receive 6-decimal subsidy");
+        assertEq(subsidyToken.balanceOf(subsidyProvider), 0.5e6, "subsidy provider should pay half of 6-decimal tokens");
+        assertEq(inputToken.balanceOf(address(exchange)), 0, "exchange should have no input token");
+        assertEq(subsidyToken.balanceOf(address(exchange)), 0, "exchange should have no subsidy token");
+    }
+
+    function test_Execute_DenormalizeRoundsUp() external {
+        address subsidyProvider = makeAddr("subsidyProvider");
+        address recipient = makeAddr("recipient");
+        tERC20 inputToken = new tERC20(18);
+        tERC20 subsidyToken = new tERC20(6);
+
+        deal(address(inputToken), owner, 1e18);
+        deal(address(subsidyToken), subsidyProvider, 1e6);
+
+        ERC20[] memory tokens = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(inputToken));
+        amountsIn[0] = 1e18;
+        targets[0] = address(inputToken);
+        // Transfer out 1 wei to create a shortfall of exactly 1 normalized unit.
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, recipient, 1);
+
+        // totalIn  = 1e18
+        // totalOut = 1e18 - 1
+        // shortfall = 1 normalized unit
+        // _denormalize(1, 6) rounds up to 1 unit of the 6-decimal subsidy token.
+        // _normalize(1, 6) = 1e12, so totalOut after subsidy >= totalIn.
+
+        vm.prank(subsidyProvider);
+        subsidyToken.approve(address(exchange), 1e6);
+
+        vm.startPrank(owner);
+        inputToken.approve(address(exchange), 1e18);
+        exchange.execute(tokens, amountsIn, targets, targetData, subsidyProvider, ERC20(address(subsidyToken)));
+        vm.stopPrank();
+
+        assertEq(inputToken.balanceOf(recipient), 1, "recipient should receive 1 wei");
+        assertEq(inputToken.balanceOf(owner), 1e18 - 1, "owner should receive all but 1 wei of input");
+        assertEq(subsidyToken.balanceOf(owner), 1, "owner should receive 1 unit of 6-decimal subsidy");
+        assertEq(subsidyToken.balanceOf(subsidyProvider), 1e6 - 1, "subsidy provider should pay 1 unit");
+        assertEq(inputToken.balanceOf(address(exchange)), 0, "exchange should have no input token");
+        assertEq(subsidyToken.balanceOf(address(exchange)), 0, "exchange should have no subsidy token");
+    }
+
 }
