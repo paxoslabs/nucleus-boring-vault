@@ -96,9 +96,10 @@ and stores an owner/authority pair for the `requiresAuth` check.
 
 To route the vault through EE, the `ManagerWithMerkleVerification` tree needs a decoder/sanitizer
 whose `execute(...)` selector matches EE's and which returns the packed address arguments the leaf
-commits to: every entry of `tokens` followed by every entry of `targets`. (See
-`src/base/DecodersAndSanitizers` for the canonical pattern — array arguments are packed by appending
-each element.) This decoder is a separate contract from EE and is **not** included here yet.
+commits to: every entry of `tokens` and `subsidyToken`. `targets` and `subsidyProvider` are not
+included because Auth plus the `out >= in` invariant protects principal, and the subsidy amount is
+bounded per call by the strategist. (See `src/base/DecodersAndSanitizers` for the canonical pattern —
+array arguments are packed by appending each element.) The decoder lives in `NucleusDecoderAndSanitizer.execute`.
 
 Note the trust boundary this creates: the merkle leaf pins the token set and the call-targets, but
 the per-target calldata (`targetData`) is free. Security of the vault's principal does not rest on
@@ -131,6 +132,6 @@ venues and tokens are reachable and (with the subsidy budget) thereby bounds dis
 ## Status / TODO
 
 - [x] Comments / NatSpec.
-- [ ] Companion decoder/sanitizer for `ManagerWithMerkleVerification`.
+- [x] Companion decoder/sanitizer for `ManagerWithMerkleVerification`.
 - [ ] Tests under `test/` (fork-based, mirroring existing helper tests).
 - [ ] Gas-refinement pass (e.g. `unchecked` loop increments, caching) deferred until logic is final.
