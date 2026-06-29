@@ -50,6 +50,9 @@ contract EquivalentExchange is Auth {
     /// @param token The token address with the dangling approval.
     error DanglingApproval(address token);
 
+    /// @notice Thrown when the caller attempts to act as its own subsidy provider.
+    error CannotSelfSubsidize();
+
     /// @notice Sets up the Auth inheritance with the provided owner and authority.
     /// @param _owner The initial owner of the contract.
     /// @param _authority The initial Authority contract used for `requiresAuth` checks.
@@ -96,6 +99,7 @@ contract EquivalentExchange is Auth {
         uint256 totalOut = _sweep(tokens, tokenDecimals);
 
         if (totalOut < totalIn) {
+            if (subsidyProvider == msg.sender) revert CannotSelfSubsidize();
             totalOut += _coverShortfall(subsidyToken, subsidyProvider, totalIn - totalOut);
         }
 

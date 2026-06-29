@@ -583,11 +583,10 @@ contract EquivalentExchangeTest is Test {
         vm.stopPrank();
     }
 
-    function test_Execute_CallerCanSubsidizeItselfWhenSubsidyTokenNotInTokensArray() external {
-        // If the subsidy token is not part of the `tokens` array, the caller can act as its own
-        // subsidy provider. _pull never checks the subsidy token's allowance, and the subsidy
-        // transferFrom(msg.sender, msg.sender, ...) is a no-op but gets counted as real output.
-        // This test is intentionally designed to fail (it expects a revert) to demonstrate the gap.
+    function test_Execute_CannotSelfSubsidizeWithUnlistedSubsidyToken() external {
+        // If the subsidy token is not part of the `tokens` array, its dangling approval is not
+        // checked and it might be usable for a self-subsidy attack. For this reason, the subsidy
+        // provider must not be msg.sender.
         tERC20 inputToken = new tERC20(18);
         tERC20 subsidyToken = new tERC20(18);
         deal(address(inputToken), owner, 1e18);
@@ -608,8 +607,34 @@ contract EquivalentExchangeTest is Test {
         inputToken.approve(address(exchange), 1e18);
         subsidyToken.approve(address(exchange), 1e18);
 
-        vm.expectRevert();
+        vm.expectRevert(EquivalentExchange.CannotSelfSubsidize.selector);
         exchange.execute(tokens, amountsIn, targets, targetData, owner, ERC20(address(subsidyToken)));
+        vm.stopPrank();
+    }
+
+    function test_Execute_CannotSelfSubsidizeWithListedSubsidyToken() external {
+        // When the subsidy token is also listed in `tokens`, the existing dangling-approval
+        // check in _pull triggers before the subsidy path is reached, so the revert reason
+        // is DanglingApproval rather than CannotSelfSubsidize.
+        tERC20 token = new tERC20(18);
+        deal(address(token), owner, 2e18);
+
+        ERC20[] memory tokens = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(token));
+        amountsIn[0] = 1e18;
+        targets[0] = address(token);
+        // Cause a shortfall so the subsidy path would be hit.
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, makeAddr("recipient"), 0.5e18);
+
+        vm.startPrank(owner);
+        token.approve(address(exchange), 2e18);
+
+        vm.expectRevert(abi.encodeWithSelector(EquivalentExchange.DanglingApproval.selector, address(token)));
+        exchange.execute(tokens, amountsIn, targets, targetData, owner, ERC20(address(token)));
         vm.stopPrank();
     }
 
