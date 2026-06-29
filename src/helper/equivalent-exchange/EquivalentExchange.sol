@@ -50,11 +50,6 @@ contract EquivalentExchange is Auth {
     /// @param token The token address with the dangling approval.
     error DanglingApproval(address token);
 
-    /// @notice Thrown when the normalized output value is less than the normalized input value.
-    /// @param totalIn Total normalized value that was pulled from the caller.
-    /// @param totalOut Total normalized value that was returned.
-    error InsufficientReturn(uint256 totalIn, uint256 totalOut);
-
     /// @notice Sets up the Auth inheritance with the provided owner and authority.
     /// @param _owner The initial owner of the contract.
     /// @param _authority The initial Authority contract used for `requiresAuth` checks.
@@ -67,8 +62,8 @@ contract EquivalentExchange is Auth {
     ///      funds out of the caller.
     ///
     ///      If the sweep does not cover `totalIn`, a subsidy is pulled from `subsidyProvider` in
-    ///      `subsidyToken` to cover the shortfall. Any remaining shortfall after the subsidy causes a
-    ///      revert.
+    ///      `subsidyToken` to cover the shortfall. Any remaining shortfall after the subsidy would
+    ///      violate the output >= input invariant and is guarded by an assert.
     ///
     ///      The function is access controlled via `requiresAuth`; actual vault usage is intended to be
     ///      gated upstream by `ManagerWithMerkleVerification`.
@@ -104,7 +99,10 @@ contract EquivalentExchange is Auth {
             totalOut += _coverShortfall(subsidyToken, subsidyProvider, totalIn - totalOut);
         }
 
-        if (totalOut < totalIn) revert InsufficientReturn(totalIn, totalOut);
+        // Invariant: the caller must receive back at least what it put in. This is unreachable with
+        // the current subsidy logic because _coverShortfall either covers the shortfall or reverts;
+        // it is kept as a self-documenting guard against future changes to the subsidy behavior.
+        assert(totalOut >= totalIn);
 
         emit Executed(msg.sender, totalIn, totalOut);
     }
