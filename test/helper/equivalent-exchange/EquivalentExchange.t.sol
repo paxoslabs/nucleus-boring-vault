@@ -583,4 +583,34 @@ contract EquivalentExchangeTest is Test {
         vm.stopPrank();
     }
 
+    function test_Execute_CallerCanSubsidizeItselfWhenSubsidyTokenNotInTokensArray() external {
+        // If the subsidy token is not part of the `tokens` array, the caller can act as its own
+        // subsidy provider. _pull never checks the subsidy token's allowance, and the subsidy
+        // transferFrom(msg.sender, msg.sender, ...) is a no-op but gets counted as real output.
+        // This test is intentionally designed to fail (it expects a revert) to demonstrate the gap.
+        tERC20 inputToken = new tERC20(18);
+        tERC20 subsidyToken = new tERC20(18);
+        deal(address(inputToken), owner, 1e18);
+        deal(address(subsidyToken), owner, 1e18);
+
+        ERC20[] memory tokens = new ERC20[](1);
+        uint256[] memory amountsIn = new uint256[](1);
+        address[] memory targets = new address[](1);
+        bytes[] memory targetData = new bytes[](1);
+
+        tokens[0] = ERC20(address(inputToken));
+        amountsIn[0] = 1e18;
+        targets[0] = address(inputToken);
+        // Cause a shortfall so the subsidy path is hit.
+        targetData[0] = abi.encodeWithSelector(ERC20.transfer.selector, makeAddr("recipient"), 0.5e18);
+
+        vm.startPrank(owner);
+        inputToken.approve(address(exchange), 1e18);
+        subsidyToken.approve(address(exchange), 1e18);
+
+        vm.expectRevert();
+        exchange.execute(tokens, amountsIn, targets, targetData, owner, ERC20(address(subsidyToken)));
+        vm.stopPrank();
+    }
+
 }
