@@ -189,13 +189,14 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     // @desc execute a 1:1 swap route via EquivalentExchange
     // @tag tokens:bytes:packed bytes of every token in the tokens array
+    // @tag subsidyPayer:address:address to submit subsidy tokens and provide subsidies
     // @tag subsidyToken:address:token used for the subsidy
     function execute(
         ERC20[] calldata tokens,
         uint256[] calldata,
         address[] calldata,
         bytes[] calldata,
-        address,
+        address subsidyPayer,
         ERC20 subsidyToken
     )
         external
@@ -207,7 +208,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
             addressesFound = abi.encodePacked(addressesFound, tokens[i]);
         }
 
-        addressesFound = abi.encodePacked(addressesFound, subsidyToken);
+        addressesFound = abi.encodePacked(addressesFound, subsidyPayer, subsidyToken);
     }
 
 }

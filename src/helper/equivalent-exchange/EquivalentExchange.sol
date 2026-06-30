@@ -29,6 +29,9 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 ///        is responsible for only pairing equivalent assets.
 ///      - The caller must grant this contract an allowance for exactly the amounts being pulled; any
 ///        residual allowance after the pull causes a revert.
+///      - The merkle gating of execute() must only allow token approvals to this contract that are required tokens in
+///       each execute() tokens array. It should be impossible to approve a token to be spent and not have it accounted
+/// for in the balance check of an execute
 contract EquivalentExchange is Auth {
 
     using SafeTransferLib for ERC20;
@@ -41,7 +44,13 @@ contract EquivalentExchange is Auth {
     /// @param caller The address that called `execute`.
     /// @param totalIn Total normalized value pulled from the caller.
     /// @param totalOut Total normalized value swept back to the caller (and any subsidy applied).
-    event Executed(address indexed caller, uint256 totalIn, uint256 totalOut);
+    event Executed(
+        address indexed caller,
+        uint256 totalIn,
+        uint256 totalOut,
+        uint256 totalSubsidyAmount,
+        ERC20 indexed subsidyToken
+    );
 
     /// @notice Thrown when two array arguments are expected to have the same length but do not.
     error LengthMismatch();
@@ -108,7 +117,7 @@ contract EquivalentExchange is Auth {
         // it is kept as a self-documenting guard against future changes to the subsidy behavior.
         assert(totalOut >= totalIn);
 
-        emit Executed(msg.sender, totalIn, totalOut);
+        emit Executed(msg.sender, totalIn, totalOut, totalIn - totalOut, subsidyToken);
     }
 
     /// @notice Pulls `amountsIn` of `tokens` from the caller and records their decimal values.
@@ -132,7 +141,7 @@ contract EquivalentExchange is Auth {
             tokenDecimals[i] = decimals;
 
             uint256 amountIn = amountsIn[i];
-            if (amountIn > 0) {
+            if (amountIn != 0) {
                 token.safeTransferFrom(msg.sender, address(this), amountIn);
                 totalIn += _normalize(amountIn, decimals);
             }
@@ -153,7 +162,7 @@ contract EquivalentExchange is Auth {
         for (uint256 i; i < tokens.length; ++i) {
             ERC20 token = tokens[i];
             uint256 balance = token.balanceOf(address(this));
-            if (balance > 0) token.safeTransfer(msg.sender, balance);
+            if (balance != 0) token.safeTransfer(msg.sender, balance);
             totalOut += _normalize(balance, tokenDecimals[i]);
         }
     }
