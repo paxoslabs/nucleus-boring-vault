@@ -24,7 +24,13 @@ contract tERC20 is ERC20 {
 
 contract EquivalentExchangeTest is Test {
 
-    event Executed(address indexed caller, uint256 totalIn, uint256 totalOut);
+    event Executed(
+        address indexed caller,
+        uint256 totalIn,
+        uint256 totalOut,
+        uint256 totalSubsidyAmount,
+        ERC20 indexed subsidyToken
+    );
 
     EquivalentExchange internal exchange;
 
@@ -91,7 +97,9 @@ contract EquivalentExchangeTest is Test {
         bytes[] memory targetData = new bytes[](1);
 
         targets[0] = address(exchange);
-        targetData[0] = abi.encodeWithSelector(EquivalentExchange.execute.selector, tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
+        targetData[0] = abi.encodeWithSelector(
+            EquivalentExchange.execute.selector, tokens, amountsIn, targets, targetData, address(0), ERC20(address(0))
+        );
 
         vm.prank(owner);
         vm.expectRevert("UNAUTHORIZED");
@@ -298,7 +306,11 @@ contract EquivalentExchangeTest is Test {
         assertEq(token.balanceOf(recipient), 0.5e18, "recipient should receive the routed tokens");
         assertEq(token.balanceOf(owner), 1e18, "owner should end with original principal");
         assertEq(token.balanceOf(subsidyProvider), 1.5e18, "subsidy provider should only pay the shortfall");
-        assertEq(token.allowance(subsidyProvider, address(exchange)), 0.5e18, "subsidy allowance should only decrease by shortfall");
+        assertEq(
+            token.allowance(subsidyProvider, address(exchange)),
+            0.5e18,
+            "subsidy allowance should only decrease by shortfall"
+        );
         assertEq(token.balanceOf(address(exchange)), 0, "exchange should be empty");
     }
 
@@ -389,7 +401,7 @@ contract EquivalentExchangeTest is Test {
         tokenB.approve(address(exchange), 1e18);
 
         vm.expectEmit(true, true, true, true);
-        emit Executed(owner, 2e18, 2.5e18);
+        emit Executed(owner, 2e18, 2.5e18, 0, ERC20(address(0)));
         exchange.execute(tokens, amountsIn, targets, targetData, address(0), ERC20(address(0)));
         vm.stopPrank();
     }
@@ -431,7 +443,7 @@ contract EquivalentExchangeTest is Test {
         tokenB.approve(address(exchange), 1e18);
 
         vm.expectEmit(true, true, true, true);
-        emit Executed(owner, 2e18, 2e18);
+        emit Executed(owner, 2e18, 2e18, 0.5e18, ERC20(address(tokenB)));
         exchange.execute(tokens, amountsIn, targets, targetData, subsidyProvider, ERC20(address(tokenB)));
         vm.stopPrank();
     }

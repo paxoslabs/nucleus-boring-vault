@@ -13,6 +13,7 @@ import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 import { MainnetAddresses } from "test/resources/MainnetAddresses.sol";
 
 contract EquivalentExchangeIntegrationTest is Test, MainnetAddresses {
+
     using SafeTransferLib for ERC20;
 
     EquivalentExchange internal exchange;

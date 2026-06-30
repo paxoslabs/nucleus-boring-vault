@@ -43,7 +43,10 @@ contract EquivalentExchange is Auth {
     /// @notice Emitted when an `execute` call completes successfully.
     /// @param caller The address that called `execute`.
     /// @param totalIn Total normalized value pulled from the caller.
-    /// @param totalOut Total normalized value swept back to the caller (and any subsidy applied).
+    /// @param totalOut Total normalized value returned to the caller, inclusive of any subsidy.
+    /// @param totalSubsidyAmount Normalized value of the subsidy pulled from the provider to cover a
+    ///        shortfall; zero when the swap route covered the input on its own.
+    /// @param subsidyToken Token the subsidy was denominated in, as passed to `execute`.
     event Executed(
         address indexed caller,
         uint256 totalIn,
@@ -107,9 +110,11 @@ contract EquivalentExchange is Auth {
 
         uint256 totalOut = _sweep(tokens, tokenDecimals);
 
+        uint256 totalSubsidyAmount;
         if (totalOut < totalIn) {
             if (subsidyProvider == msg.sender) revert CannotSelfSubsidize();
-            totalOut += _coverShortfall(subsidyToken, subsidyProvider, totalIn - totalOut);
+            totalSubsidyAmount = _coverShortfall(subsidyToken, subsidyProvider, totalIn - totalOut);
+            totalOut += totalSubsidyAmount;
         }
 
         // Invariant: the caller must receive back at least what it put in. This is unreachable with
@@ -117,7 +122,7 @@ contract EquivalentExchange is Auth {
         // it is kept as a self-documenting guard against future changes to the subsidy behavior.
         assert(totalOut >= totalIn);
 
-        emit Executed(msg.sender, totalIn, totalOut, totalIn - totalOut, subsidyToken);
+        emit Executed(msg.sender, totalIn, totalOut, totalSubsidyAmount, subsidyToken);
     }
 
     /// @notice Pulls `amountsIn` of `tokens` from the caller and records their decimal values.

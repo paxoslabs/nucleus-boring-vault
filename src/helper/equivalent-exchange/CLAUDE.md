@@ -127,7 +127,8 @@ venues and tokens are reachable and (with the subsidy budget) thereby bounds dis
 - `subsidyToken` — token used to cover any shortfall.
 - Reverts: `LengthMismatch`, `DanglingApproval(token)`, or bubbles a failing call's revert.
 - Asserts `totalOut >= totalIn` after applying any subsidy.
-- Emits `Executed(caller, totalIn, totalOut)` (amounts normalized to 18 dp).
+- Emits `Executed(caller, totalIn, totalOut, totalSubsidyAmount, subsidyToken)` (amounts normalized to
+  18 dp; `totalSubsidyAmount` is the subsidy actually pulled, zero when no shortfall).
 
 ## Status / TODO
 
