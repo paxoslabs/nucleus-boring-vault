@@ -133,5 +133,6 @@ venues and tokens are reachable and (with the subsidy budget) thereby bounds dis
 
 - [x] Comments / NatSpec.
 - [x] Companion decoder/sanitizer for `ManagerWithMerkleVerification`.
-- [ ] Tests under `test/` (fork-based, mirroring existing helper tests).
+- [x] Unit tests (`test/helper/equivalent-exchange/EquivalentExchange.t.sol`).
+- [x] Fork-based integration tests against real venues (`test/helper/equivalent-exchange/integration/EquivalentExchangeIntegration.t.sol`).
 - [ ] Gas-refinement pass (e.g. `unchecked` loop increments, caching) deferred until logic is final.
