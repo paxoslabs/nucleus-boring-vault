@@ -14,7 +14,6 @@ abstract contract KhalaniDecoderAndSanitizer is BaseDecoderAndSanitizer {
     // @tag dstMToken:address:the destination spoke token
     // @tag payoutAddr:address:where the converted token is paid out
     // @tag refundAddr:address:where refunds go if the order fails
-    // @tag feeBps:uint16:the conversion fee in basis points
     // @tag totalMarginBps:uint16:sum of feeBps and lpMarginBps, this is the pre-determined margin of a swap for LPs
     function deposit(
         address token,
@@ -34,15 +33,13 @@ abstract contract KhalaniDecoderAndSanitizer is BaseDecoderAndSanitizer {
             bytes32 integratorId,
             address dstMToken,
             address payoutAddr,
-            address refundAddr,,
-            uint16 feeBps,
+            address refundAddr,,,
             uint16 totalMarginBps,,
         ) = abi.decode(
             conversionPayload, (bytes32, bytes32, address, address, address, uint256, uint16, uint16, uint256, bytes)
         );
-        addressesFound = abi.encodePacked(
-            token, payloadType, integratorId, dstMToken, payoutAddr, refundAddr, feeBps, totalMarginBps
-        );
+        addressesFound =
+            abi.encodePacked(token, payloadType, integratorId, dstMToken, payoutAddr, refundAddr, totalMarginBps);
     }
 
 }
