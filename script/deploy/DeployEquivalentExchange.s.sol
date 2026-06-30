@@ -2,73 +2,42 @@
 pragma solidity 0.8.21;
 
 import { BaseScript } from "../Base.s.sol";
-import { Auth, Authority } from "@solmate/auth/Auth.sol";
-import { RolesAuthority } from "@solmate/auth/authorities/RolesAuthority.sol";
+import { Authority } from "@solmate/auth/Auth.sol";
 import { console2 } from "forge-std/console2.sol";
 import { EquivalentExchange } from "src/helper/equivalent-exchange/EquivalentExchange.sol";
 
-uint8 constant EQUIVALENT_EXCHANGE_CALLER_ROLE = 11; // TODO Consider moving this to src/helper/Constants.sol if this role is reused across scripts or an existing RolesAuthority is used.
-
 contract DeployEquivalentExchange is BaseScript {
 
-    // TODO Decide whether to reuse the vault's existing RolesAuthority or keep this fresh one.
-    // A fresh authority is isolated and simple, but means the BoringVault is governed by two
-    // authorities. Reusing the main vault RolesAuthority avoids that fragmentation but requires
-    // coordinating role numbering and permissions with the full vault deployment.
+    // ============================== FILL PER DEPLOYMENT ==============================
 
-    // TODO Decide whether to keep run() arguments or switch to reading from a deployment-config JSON file,
-    // which is the pattern used by most other deploy scripts in this repo.
-    function run(
-        address boringVault,
-        string memory nameEntropy
-    )
-        external
-        broadcast
-        returns (EquivalentExchange exchange, RolesAuthority rolesAuthority)
-    {
-        require(boringVault != address(0), "boringVault required");
+    // BoringVault to own and exclusively call EquivalentExchange
+    address constant BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
+    // Namespaces the CREATE3 salt for this deployment.
+    string constant NAME_ENTROPY = "Transit";
 
-        address owner = getMultisig();
+    // The BoringVault is set as both owner and sole authorized caller: EquivalentExchange uses no
+    // Authority (address(0)), and Auth's `requiresAuth` admits `msg.sender == owner` directly, so the
+    // vault can call execute() while nothing else can.
+    function run() external broadcast returns (EquivalentExchange exchange) {
+        require(BORING_VAULT != address(0), "BORING_VAULT required");
 
-        bytes32 rolesAuthoritySalt = makeSalt(broadcaster, false, string(abi.encodePacked(nameEntropy, ":RolesAuthority")));
-        bytes32 exchangeSalt = makeSalt(broadcaster, false, string(abi.encodePacked(nameEntropy, ":EquivalentExchange")));
+        bytes32 exchangeSalt =
+            makeSalt(broadcaster, false, string(abi.encodePacked(NAME_ENTROPY, ":EquivalentExchange")));
 
-        // Deploy fresh RolesAuthority with the multisig as owner.
-        rolesAuthority = RolesAuthority(
-            CREATEX.deployCreate3(
-                rolesAuthoritySalt,
-                abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(owner, Authority(address(0))))
-            )
-        );
-
-        // Deploy EquivalentExchange pointing at the fresh authority.
+        // Deploy EquivalentExchange owned by the vault, with no Authority.
         exchange = EquivalentExchange(
             CREATEX.deployCreate3(
                 exchangeSalt,
-                abi.encodePacked(type(EquivalentExchange).creationCode, abi.encode(owner, Authority(rolesAuthority)))
+                abi.encodePacked(type(EquivalentExchange).creationCode, abi.encode(BORING_VAULT, Authority(address(0))))
             )
         );
 
-        // Grant the BoringVault permission to call EquivalentExchange.execute().
-        rolesAuthority.setRoleCapability(
-            EQUIVALENT_EXCHANGE_CALLER_ROLE,
-            address(exchange),
-            EquivalentExchange.execute.selector,
-            true
-        );
-        rolesAuthority.setUserRole(boringVault, EQUIVALENT_EXCHANGE_CALLER_ROLE, true);
-
         // Post-deploy checks.
-        require(rolesAuthority.doesUserHaveRole(boringVault, EQUIVALENT_EXCHANGE_CALLER_ROLE), "boringVault should have role");
-        require(
-            rolesAuthority.canCall(boringVault, address(exchange), EquivalentExchange.execute.selector),
-            "boringVault should be able to call execute"
-        );
+        require(exchange.owner() == BORING_VAULT, "owner should be BORING_VAULT");
+        require(address(exchange.authority()) == address(0), "authority should be unset");
 
-        console2.log("RolesAuthority deployed at: ", address(rolesAuthority));
         console2.log("EquivalentExchange deployed at: ", address(exchange));
-        console2.log("Owner: ", owner);
-        console2.log("BoringVault: ", boringVault);
+        console2.log("Owner (BoringVault): ", BORING_VAULT);
     }
 
 }
