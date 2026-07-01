@@ -285,6 +285,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         event OrderBridged(bytes32 indexed uuid, uint32 indexed destEID, bytes32 guid, TransitStation.OrderTerms terms);
         event OrderBridgeReceived(bytes32 indexed uuid, uint32 indexed srcEID, bytes32 guid, TransitStation.Order order);
         event OrderForceRemoved(bytes32 indexed uuid, TransitStation.Order order);
+        event UUIDForceSetUsed(bytes32 indexed uuid);
         event OrderExecuted(bytes32 indexed uuid, uint256 amount, uint256 remaining);
         event ProtocolFeeRecipientSet(address indexed recipient);
         event QuoteSignerSet(address indexed signer);
@@ -1646,6 +1647,62 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             assertEq(station.pendingOrderCount(), 0);
             assertEq(station.getPendingOrders().length, 0);
+        }
+
+        // ========================================= forceSetUsedDigestTrue =========================================
+
+        function testForceSetUsedDigestTrue_RevertIf_CallerNotAuthorized() external {
+            TransitStation station = _deployDefaultStation();
+
+            address unauthorized = makeAddr("unauthorized");
+            vm.prank(unauthorized);
+            vm.expectRevert("UNAUTHORIZED");
+            station.forceSetUsedDigestTrue(keccak256("some-uuid"));
+        }
+
+        function testForceSetUsedDigestTrue_SetsUsedDigestAndEmits() external {
+            TransitStation station = _deployDefaultStation();
+            bytes32 uuid = keccak256("tombstone-me");
+
+            assertFalse(station.usedDigests(uuid));
+
+            vm.expectEmit(true, false, false, true);
+            emit UUIDForceSetUsed(uuid);
+
+            vm.prank(owner);
+            station.forceSetUsedDigestTrue(uuid);
+
+            assertTrue(station.usedDigests(uuid));
+        }
+
+        /// @notice A tombstoned uuid can never be received: `lzReceive` of that digest reverts and nothing queues.
+        /// @dev Mirrors the intended use — an order stuck in bridging is manually refunded, then blocked from landing.
+        function testForceSetUsedDigestTrue_BlocksLzReceiveOfSameDigest() external {
+            TransitStation station = _deployDefaultStation();
+
+            // Register the peer so the cross-chain origin is authorized and the only thing that can revert
+            // `lzReceive` is the `usedDigests` tombstone.
+            bytes32 registeredPeer = bytes32(uint256(uint160(address(station))));
+            vm.prank(owner);
+            station.setPeer(DEST_EID, registeredPeer);
+
+            TransitStation.OrderTerms memory terms = _defaultOrderTerms();
+            bytes memory payload = abi.encode(terms);
+            Origin memory origin = Origin({ srcEid: DEST_EID, sender: registeredPeer, nonce: 1 });
+
+            // Admin tombstones the uuid before the bridged message arrives.
+            vm.prank(owner);
+            station.forceSetUsedDigestTrue(terms.uuid);
+            assertTrue(station.usedDigests(terms.uuid));
+
+            // Delivery of that exact digest is now rejected as a duplicate push.
+            vm.prank(address(endpoint));
+            vm.expectRevert(TransitStation.DuplicatePushAttempt.selector);
+            station.lzReceive(origin, bytes32(0), payload, address(0), "");
+
+            // Nothing was queued.
+            assertEq(station.pendingOrderCount(), 0);
+            assertFalse(station.pendingOrderIdsContains(terms.uuid));
         }
 
         // ========================================= ADMIN & UTILITY REVERTS =========================================
