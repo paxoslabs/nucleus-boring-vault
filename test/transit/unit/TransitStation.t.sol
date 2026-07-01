@@ -277,8 +277,7 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         event OrderSubmitted(
             bytes32 indexed uuid,
             uint32 sourceEID,
-            TransitStation.Route route,
-            TransitStation.OrderTerms terms,
+            TransitStation.Quote quote,
             address indexed user,
             bytes32 indexed distributorCode
         );
@@ -2042,16 +2041,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             bytes memory signature = _signQuote(station, quote);
             bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
-            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
-                uuid: uuid,
-                wantAsset: address(wantAsset),
-                receiver: user,
-                offerAsset: address(offerAsset),
-                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT_NORMALIZED
-            });
-
             vm.expectEmit(true, true, true, true);
-            emit OrderSubmitted(uuid, endpoint.eid(), quote.route, expectedTerms, user, bytes32(0));
+            emit OrderSubmitted(uuid, endpoint.eid(), quote, user, quote.distributorCode);
 
             vm.prank(user);
             station.submitOrder{ value: 0 }(quote, signature);
@@ -2070,18 +2061,10 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             bytes memory signature = _signQuote(station, quote);
             bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
 
-            TransitStation.OrderTerms memory expectedTerms = TransitStation.OrderTerms({
-                uuid: uuid,
-                wantAsset: address(wantAsset),
-                receiver: user,
-                offerAsset: address(offerAsset),
-                offerAmountNormalized18AfterFees: DEFAULT_OFFER_AMOUNT_NORMALIZED
-            });
-
             vm.deal(user, LZ_QUOTE_FEE);
 
             vm.expectEmit(true, true, true, true);
-            emit OrderSubmitted(uuid, endpoint.eid(), quote.route, expectedTerms, user, bytes32(0));
+            emit OrderSubmitted(uuid, endpoint.eid(), quote, user, quote.distributorCode);
 
             vm.prank(user);
             station.submitOrder{ value: LZ_QUOTE_FEE }(quote, signature);
