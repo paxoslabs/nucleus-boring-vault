@@ -5,6 +5,7 @@ import { BaseDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/BaseDeco
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
+import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
 
 import { TransitStation } from "src/transit/TransitStation.sol";
 
@@ -191,14 +192,57 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
     }
 
     // @desc Transit Station execute pending orders
-    function executePendingOrders(
-        bytes32[] calldata uuids,
-        uint256[] calldata amounts
-    )
+    // @tag wantAsset:address[]:the want asset of each fill batch
+    function executePendingOrders(TransitStation.FillBatch[] calldata batches)
         external
+        pure
         returns (bytes memory addressesFound)
     {
         // Nothing to decode
+    }
+
+    // @desc submit an order to the withdraw queue
+    // @tag wantAsset:address:ERC20 asset being requested
+    // @tag receiver:address:receiver of the NFT receipt
+    // @tag refundReceiver:address:receiver of refunds
+    // @tag approvalMethod:uint8:token approval mechanism
+    // @tag submitWithSignature:bool:whether order includes depositor signature
+    function submitOrder(IWithdrawQueue.SubmitOrderParams calldata params)
+        external
+        pure
+        returns (bytes memory argumentsFound)
+    {
+        argumentsFound = abi.encodePacked(
+            params.wantAsset,
+            params.receiver,
+            params.refundReceiver,
+            params.signatureParams.approvalMethod,
+            params.signatureParams.submitWithSignature
+        );
+    }
+
+    // @desc execute a 1:1 swap route via EquivalentExchange
+    // @tag tokens:bytes:packed bytes of every token in the tokens array
+    // @tag subsidyPayer:address:address to submit subsidy tokens and provide subsidies
+    // @tag subsidyToken:address:token used for the subsidy
+    function execute(
+        ERC20[] calldata tokens,
+        uint256[] calldata,
+        address[] calldata,
+        bytes[] calldata,
+        address subsidyPayer,
+        ERC20 subsidyToken
+    )
+        external
+        pure
+        returns (bytes memory addressesFound)
+    {
+        uint256 tokensLength = tokens.length;
+        for (uint256 i; i < tokensLength; ++i) {
+            addressesFound = abi.encodePacked(addressesFound, tokens[i]);
+        }
+
+        addressesFound = abi.encodePacked(addressesFound, subsidyPayer, subsidyToken);
     }
 
 }

@@ -1,7 +1,7 @@
 {
   "nameEntropy": "bkeyUSDGt2.2",
-  "base": "0x25bB581e8f56fD1F1ED29C48324727aD1b3A4c68",
-  "protocolAdmin": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
+  "base": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "protocolAdmin": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
   "boringVaultAndBaseDecimals": "6",
   "boringVault": {
     "boringVaultName": "BKey USDG Treasury Account",
@@ -15,7 +15,7 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "accountant": {
-    "payoutAddress": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
+    "payoutAddress": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
     "allowedExchangeRateChangeUpper": "10000",
     "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
@@ -26,21 +26,20 @@
   "teller": {
     "maxGasForPeer": 100000,
     "minGasForPeer": 0,
-    "peerEid": 30101,
+    "peerEid": 40245,
     "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
     "withdrawAssets": [
-      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     ],
     "depositAssets": [
-      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
     ],
     "dvnIfNoDefault": {
       "required": [
-        "0x9e059a54699a285714207b43b055483e78faac25"
+        "0x8eebf8b423b73bfca51a1db4b7354aa0bfca9193"
       ],
       "optional": [
-        "0xcd37ca043f8479064e10635020c65ffc005d36f6",
-        "0xcdf31d62140204c08853b547e64707110fbc6680"
+        "0x68802e01d6321d5159208478f297d7007a7516ed",
+        "0xdd7b5e1db4aafd5c8ec3b764efb8ed265aa5445b",
+        "0x9efba56c8598853e5b40fd9a66b54a6c163742d7"
       ],
       "blockConfirmationsRequiredIfNoDefault": 15,
       "optionalThreshold": 1
@@ -62,7 +61,7 @@
   "withdrawQueue": {
     "name": "BKey USDG Treasury Account Withdraw Queue",
     "symbol": "bkeyUSDGtQ",
-    "feeRecipient": "0xE5a5F3A6C88B894710992e1C2626be0DEB99566E",
+    "feeRecipient": "0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001",
     "feePercentage": "0",
     "minimumOrderSize": "5000000",
     "processorAddress": "0xaa77cD1Ca296a537FE6b4847e5CfBF4a0A44c7b1"
