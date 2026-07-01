@@ -293,6 +293,8 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
         event WantAssetSourceSet(address indexed wantAssetSource);
         event MessageGasLimitSet(uint32 indexed eid, uint64 gasLimit);
         event RouteApprovalSet(TransitStation.Route route, bool indexed approved);
+        event ETHRecovered(uint256 amount);
+        event TokensRecovered(ERC20 token, uint256 amount);
 
         function setUp() public {
             rolesAuthority = new RolesAuthority(owner, Authority(address(0)));
@@ -2357,6 +2359,30 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
             vm.prank(owner);
             station.setRouteApprovals(routes, approved);
+        }
+
+        function testRecoverETH_EmitsETHRecovered() external {
+            TransitStation station = _deployDefaultStation();
+            vm.deal(address(station), 1 ether);
+
+            // Event carries no indexed fields; match on data only.
+            vm.expectEmit(false, false, false, true);
+            emit ETHRecovered(1 ether);
+
+            vm.prank(owner);
+            station.recoverETH(1 ether);
+        }
+
+        function testRecoverTokens_EmitsTokensRecovered() external {
+            TransitStation station = _deployDefaultStation();
+            deal(address(offerAsset), address(station), 1e18);
+
+            // Event carries no indexed fields; match on data only.
+            vm.expectEmit(false, false, false, true);
+            emit TokensRecovered(offerAsset, 1e18);
+
+            vm.prank(owner);
+            station.recoverTokens(offerAsset, 1e18);
         }
 
     }
