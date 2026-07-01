@@ -122,7 +122,9 @@ abstract contract BaseScript is Script {
         } else if (block.chainid == 1_380_012_617) {
             return 0x6d0C5a20ac08ED00256aD224F74Ca53afF3D011d;
         } else if (block.chainid == 11_155_111) {
-            return 0xC48f1361f309C62D9070f7D45E2Ad27dB2Eb3b2E;
+            return 0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001;
+        } else if (block.chainid == 46_630) {
+            return 0xdEADdE9539A00Bbd9A8494f45EB38aEe89d7C001;
         } else if (block.chainid == 8453) {
             return 0xE5a5F3A6C88B894710992e1C2626be0DEB99566E;
         } else if (block.chainid == 10) {
