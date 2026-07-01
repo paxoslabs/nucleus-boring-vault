@@ -2076,6 +2076,64 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
             assertEq(station.pendingOrderCount(), 2);
         }
 
+        function testGetPendingOrderIds_ReturnsCorrectIds() external {
+            TransitStation station = _deployDefaultStation();
+            TransitStation.Quote memory quote = _defaultQuote();
+
+            // Empty case.
+            assertEq(station.getPendingOrderIds().length, 0);
+
+            // Queue three orders with distinct salts (each salt yields a distinct digest/uuid).
+            bytes32[] memory expected = new bytes32[](3);
+            for (uint256 i; i < 3; ++i) {
+                quote.salt = bytes32(i);
+                bytes memory signature = _signQuote(station, quote);
+                expected[i] =
+                    keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
+                vm.prank(user);
+                station.submitOrder{ value: 0 }(quote, signature);
+            }
+
+            // Insertion order is preserved while nothing has been removed.
+            bytes32[] memory ids = station.getPendingOrderIds();
+            assertEq(ids.length, 3);
+            assertEq(ids[0], expected[0]);
+            assertEq(ids[1], expected[1]);
+            assertEq(ids[2], expected[2]);
+
+            // Removing a middle order shrinks the set and drops only that id.
+            vm.prank(owner);
+            station.forceRemovePendingOrder(expected[1]);
+
+            ids = station.getPendingOrderIds();
+            assertEq(ids.length, 2);
+            assertTrue(station.pendingOrderIdsContains(expected[0]));
+            assertFalse(station.pendingOrderIdsContains(expected[1]));
+            assertTrue(station.pendingOrderIdsContains(expected[2]));
+        }
+
+        function testPendingOrderIdsContains_ReflectsMembership() external {
+            TransitStation station = _deployDefaultStation();
+            TransitStation.Quote memory quote = _defaultQuote();
+            bytes memory signature = _signQuote(station, quote);
+            bytes32 uuid = keccak256(abi.encodePacked(hex"1901", _domainSeparator(station), station.hashQuote(quote)));
+
+            // False before the order exists (both the target uuid and an unrelated one).
+            assertFalse(station.pendingOrderIdsContains(uuid));
+            assertFalse(station.pendingOrderIdsContains(keccak256("never-queued")));
+
+            vm.prank(user);
+            station.submitOrder{ value: 0 }(quote, signature);
+
+            // True while the order is pending.
+            assertTrue(station.pendingOrderIdsContains(uuid));
+
+            // False again once the order leaves the pending set.
+            vm.prank(owner);
+            station.forceRemovePendingOrder(uuid);
+            assertFalse(station.pendingOrderIdsContains(uuid));
+        }
+
         function testQuoteSend_ReturnsNativeFee() external {
             TransitStation station = _deployDefaultStationWithCrossChainRoute();
 
