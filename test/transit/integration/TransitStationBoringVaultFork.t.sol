@@ -26,7 +26,7 @@ contract TransitStationBoringVaultForkTest is Test, MainnetAddresses {
     uint8 internal constant MANGER_INTERNAL_ROLE = 3;
     uint8 internal constant ADMIN_ROLE = 4;
 
-    uint256 internal constant OFFER_AMOUNT = 1_000e6; // USDC (6 dec)
+    uint256 internal constant OFFER_AMOUNT = 1000e6; // USDC (6 dec)
     uint256 internal constant PROTOCOL_FEE = 5e6; // 0.5% == MAX_PROTOCOL_FEE_BPS
     uint256 internal constant INTEGRATOR_FEE = 10e6; // 1%
     uint256 internal constant NET = OFFER_AMOUNT - PROTOCOL_FEE - INTEGRATOR_FEE; // 985e6 USDC
@@ -56,7 +56,13 @@ contract TransitStationBoringVaultForkTest is Test, MainnetAddresses {
         manager = new ManagerWithMerkleVerification(address(this), address(boringVault), address(0));
         decoder = new GenericDecoderAndSanitizer(address(boringVault), uniswapV3NonFungiblePositionManager);
         station = new TransitStation(
-            address(this), rolesAuthority, LZ_ENDPOINT, protocolFeeRecipient, quoteSigner, offerReceiver, wantAssetSource
+            address(this),
+            rolesAuthority,
+            LZ_ENDPOINT,
+            protocolFeeRecipient,
+            quoteSigner,
+            offerReceiver,
+            wantAssetSource
         );
 
         boringVault.setAuthority(rolesAuthority);
@@ -67,7 +73,10 @@ contract TransitStationBoringVaultForkTest is Test, MainnetAddresses {
             MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
         );
         rolesAuthority.setRoleCapability(
-            STRATEGIST_ROLE, address(manager), ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector, true
+            STRATEGIST_ROLE,
+            address(manager),
+            ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
+            true
         );
         rolesAuthority.setRoleCapability(
             MANGER_INTERNAL_ROLE,
@@ -139,9 +148,18 @@ contract TransitStationBoringVaultForkTest is Test, MainnetAddresses {
         return abi.encodePacked(r, s, v);
     }
 
-    /// @dev Reconstruct a manage leaf exactly as `ManagerWithMerkleVerification._verifyManageProof` does: staticcall the
-    ///      decoder with the real calldata to get the packed argument addresses, then hash the leaf tuple.
-    function _leaf(address target, bool valueNonZero, bytes4 selector, bytes memory data) internal view returns (bytes32) {
+    /// @dev Reconstruct a manage leaf exactly as `ManagerWithMerkleVerification._verifyManageProof` does: staticcall
+    /// the decoder with the real calldata to get the packed argument addresses, then hash the leaf tuple.
+    function _leaf(
+        address target,
+        bool valueNonZero,
+        bytes4 selector,
+        bytes memory data
+    )
+        internal
+        view
+        returns (bytes32)
+    {
         (bool ok, bytes memory ret) = address(decoder).staticcall(data);
         require(ok, "decoder staticcall failed");
         bytes memory packed = abi.decode(ret, (bytes));
