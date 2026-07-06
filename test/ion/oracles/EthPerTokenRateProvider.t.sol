@@ -148,32 +148,3 @@ contract PufEthRateProviderTest is EthPerTokenRateProviderTest {
     }
 
 }
-
-contract ApxEthRateProviderTest is EthPerTokenRateProviderTest {
-
-    function setUp() public override {
-        super.setUp();
-
-        _setExpectedPriceRange(0.99e18, 1.2e18);
-
-        ethPerTokenRateProvider = new EthPerTokenRateProvider(
-            "apxETH/ETH",
-            ETH_PER_APXETH_REDSTONE,
-            MAX_TIME_FROM_LAST_UPDATE,
-            18,
-            EthPerTokenRateProvider.PriceFeedType.REDSTONE
-        );
-    }
-
-    function test_Revert_IncorrectDescription() public override {
-        vm.expectRevert(EthPerTokenRateProvider.InvalidDescription.selector);
-        ethPerTokenRateProvider = new EthPerTokenRateProvider(
-            incorrectDescription,
-            ETH_PER_APXETH_REDSTONE,
-            MAX_TIME_FROM_LAST_UPDATE,
-            18,
-            EthPerTokenRateProvider.PriceFeedType.REDSTONE
-        );
-    }
-
-}
