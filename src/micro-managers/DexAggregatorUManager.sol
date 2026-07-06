@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { UManager, FixedPointMathLib, ERC20 } from "src/micro-managers/UManager.sol";
+import { RateLimitUManager } from "src/micro-managers/RateLimitUManager.sol";
+import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { AggregationRouterV5 } from "src/interfaces/AggregationRouterV5.sol";
 import { PriceRouter } from "src/interfaces/PriceRouter.sol";
 
@@ -11,7 +13,7 @@ import { PriceRouter } from "src/interfaces/PriceRouter.sol";
  * - AggregationRouterV5.swap, with all desired addresses.
  * @custom:security-contact security@molecularlabs.io
  */
-contract DexAggregatorUManager is UManager {
+contract DexAggregatorUManager is RateLimitUManager {
 
     using FixedPointMathLib for uint256;
 
@@ -54,7 +56,7 @@ contract DexAggregatorUManager is UManager {
         address _router,
         address _priceRouter
     )
-        UManager(_owner, _manager, _boringVault)
+        RateLimitUManager(_owner, _manager, _boringVault)
     {
         router = AggregationRouterV5(_router);
         priceRouter = PriceRouter(_priceRouter);

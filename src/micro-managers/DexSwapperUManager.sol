@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import { UManager, FixedPointMathLib, ERC20 } from "src/micro-managers/UManager.sol";
+import { RateLimitUManager } from "src/micro-managers/RateLimitUManager.sol";
+import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
+import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { PriceRouter } from "src/interfaces/PriceRouter.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
@@ -13,7 +15,7 @@ import { BalancerVault } from "src/interfaces/BalancerVault.sol";
  * - IUniswapV3Router.exactInput(params), with all desired paths.
  * @custom:security-contact security@molecularlabs.io
  */
-contract DexSwapperUManager is UManager {
+contract DexSwapperUManager is RateLimitUManager {
 
     using FixedPointMathLib for uint256;
 
@@ -75,7 +77,7 @@ contract DexSwapperUManager is UManager {
         address _balancerVault,
         address _priceRouter
     )
-        UManager(_owner, _manager, _boringVault)
+        RateLimitUManager(_owner, _manager, _boringVault)
     {
         router = IUniswapV3Router(_router);
         balancerVault = BalancerVault(_balancerVault);

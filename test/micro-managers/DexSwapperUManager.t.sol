@@ -15,7 +15,7 @@ import { BalancerVault } from "src/interfaces/BalancerVault.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { DexSwapperUManager, UManager } from "src/micro-managers/DexSwapperUManager.sol";
+import { DexSwapperUManager, RateLimitUManager } from "src/micro-managers/DexSwapperUManager.sol";
 import { PriceRouter } from "src/interfaces/PriceRouter.sol";
 
 import { Test, stdStorage, StdStorage, stdError, console } from "@forge-std/Test.sol";
@@ -320,7 +320,7 @@ contract DexSwapperUManagerTest is Test, MainnetAddresses {
         fees[0] = 500;
 
         // Rate limit set to zero, so call reverts.
-        vm.expectRevert(abi.encodeWithSelector(UManager.UManager__CallCountExceeded.selector));
+        vm.expectRevert(abi.encodeWithSelector(RateLimitUManager.RateLimitUManager__CallCountExceeded.selector));
         dexSwapperUManager.swapWithUniswapV3(manageProofs, decodersAndSanitizers, path, fees, 10e18, 0, block.timestamp);
     }
 
