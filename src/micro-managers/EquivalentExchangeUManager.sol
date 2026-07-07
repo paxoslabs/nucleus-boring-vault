@@ -156,7 +156,7 @@ contract EquivalentExchangeUManager is UManager {
      * @param shortfall Shortfall in 18-decimal normalized units.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy.
-     * @return subsidyNormalized Total normalized value of subsidy transferred.
+     * @return subsidyAmountNormalized Total normalized value of subsidy transferred.
      */
     function _coverShortfall(
         uint256 shortfall,
@@ -164,7 +164,7 @@ contract EquivalentExchangeUManager is UManager {
         ERC20 subsidyToken
     )
         internal
-        returns (uint256 subsidyNormalized)
+        returns (uint256 subsidyAmountNormalized)
     {
         if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
 
@@ -176,16 +176,15 @@ contract EquivalentExchangeUManager is UManager {
 
         if (normalizedAvailable < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
 
-        uint256 useAmountNormalized = normalizedAvailable < shortfall ? normalizedAvailable : shortfall;
-        uint256 useAmount = _denormalize(useAmountNormalized, decimals);
+        uint256 subsidyAmount = _denormalize(shortfall, decimals);
 
         // Defensive: never transfer more than the available amount we observed.
-        if (useAmount > available) useAmount = available;
+        if (subsidyAmount > available) subsidyAmount = available;
 
-        subsidyToken.safeTransferFrom(subsidyPayer, boringVault, useAmount);
+        subsidyToken.safeTransferFrom(subsidyPayer, boringVault, subsidyAmount);
 
         // Re-normalize the actual amount transferred for accounting.
-        subsidyNormalized = _normalize(useAmount, decimals);
+        subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
     }
 
     /**
