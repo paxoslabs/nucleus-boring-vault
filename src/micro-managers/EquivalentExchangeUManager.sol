@@ -15,12 +15,10 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
  * @notice UManager that executes a merkle-verified batch of BoringVault actions
  *         and enforces an EquivalentExchange-style value invariant across a
  *         stored basket of value-equivalent tokens.
- * @dev Subsidy, if required, is sourced from the UManager's own balances of
- *      basket tokens. The caller provides an ordered `subsidyTokens` array
- *      specifying which basket-token balances to use and in what order. The
- *      UManager must be pre-funded with any tokens that may be needed to cover
- *      shortfalls; if the provided subsidy tokens are insufficient, the call
- *      reverts.
+ * @dev Subsidy, if required, is sourced from the UManager's own balance of a
+ *      single subsidy token. The UManager must be pre-funded with any tokens
+ *      that may be needed to cover shortfalls; if the provided subsidy token is
+ *      insufficient, the call reverts.
  */
 contract EquivalentExchangeUManager is UManager {
 
@@ -39,16 +37,9 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__InsufficientSubsidy();
 
     event BasketTokensUpdated(ERC20[] tokens);
-    event Executed(
-        address indexed caller,
-        uint256 totalBefore,
-        uint256 totalAfter,
-        uint256 subsidyNormalized
-    );
+    event Executed(address indexed caller, uint256 totalBefore, uint256 totalAfter, uint256 subsidyNormalized);
 
-    constructor(address _owner, address _manager, address _boringVault)
-        UManager(_owner, _manager, _boringVault)
-    { }
+    constructor(address _owner, address _manager, address _boringVault) UManager(_owner, _manager, _boringVault) { }
 
     /**
      * @notice Sets the basket of value-equivalent tokens used for accounting.
@@ -87,15 +78,15 @@ contract EquivalentExchangeUManager is UManager {
     /**
      * @notice Executes a merkle-verified batch of BoringVault actions and
      *         enforces that the vault's aggregate basket value does not decrease.
-     * @dev Subsidy, if needed, is pulled from the UManager's own balances of
-     *      the indicated subsidy tokens in order until the shortfall is covered.
+     * @dev Subsidy, if needed, is pulled from the UManager's own balance of
+     *      the indicated subsidy token.
      * @param manageProofs Merkle proofs for each manage call.
      * @param decodersAndSanitizers Decoder/sanitizer for each manage call.
      * @param targets Targets for each manage call.
      * @param targetData Calldata for each manage call.
      * @param values ETH values for each manage call.
-     * @param subsidyTokens Ordered list of tokens to use as subsidy. Each must
-     *        be a basket token and must belong to this UManager.
+     * @param subsidyToken Token to use as subsidy. Must be a basket token and
+     *        must belong to this UManager.
      */
     function execute(
         bytes32[][] calldata manageProofs,
@@ -103,7 +94,7 @@ contract EquivalentExchangeUManager is UManager {
         address[] calldata targets,
         bytes[] calldata targetData,
         uint256[] calldata values,
-        ERC20[] calldata subsidyTokens
+        ERC20 subsidyToken
     )
         external
         requiresAuth
@@ -111,10 +102,8 @@ contract EquivalentExchangeUManager is UManager {
     {
         uint256 targetsLength = targets.length;
         if (
-            targetsLength != manageProofs.length
-                || targetsLength != decodersAndSanitizers.length
-                || targetsLength != targetData.length
-                || targetsLength != values.length
+            targetsLength != manageProofs.length || targetsLength != decodersAndSanitizers.length
+                || targetsLength != targetData.length || targetsLength != values.length
         ) {
             revert EquivalentExchangeUManager__LengthMismatch();
         }
@@ -126,18 +115,16 @@ contract EquivalentExchangeUManager is UManager {
         uint256 totalBefore = _totalBasketValue(boringVault);
 
         // Execute the merkle-verified action batch directly from BoringVault.
-        manager.manageVaultWithMerkleVerification(
-            manageProofs, decodersAndSanitizers, targets, targetData, values
-        );
+        manager.manageVaultWithMerkleVerification(manageProofs, decodersAndSanitizers, targets, targetData, values);
 
         // Snapshot vault's basket value after the rebalance.
         uint256 totalAfter = _totalBasketValue(boringVault);
 
-        // Cover any shortfall using the indicated subsidy tokens.
+        // Cover any shortfall using the indicated subsidy token.
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
-            subsidyNormalized = _coverShortfall(shortfall, subsidyTokens);
+            subsidyNormalized = _coverShortfall(shortfall, subsidyToken);
             totalAfter += subsidyNormalized;
         }
 
@@ -148,7 +135,6 @@ contract EquivalentExchangeUManager is UManager {
 
         emit Executed(msg.sender, totalBefore, totalAfter, subsidyNormalized);
     }
-
 
     /**
      * @notice Returns the total normalized value of the basket held by `account`.
@@ -163,46 +149,34 @@ contract EquivalentExchangeUManager is UManager {
 
     /**
      * @notice Attempts to cover a normalized shortfall by transferring subsidy
-     *         tokens held by this contract to the vault.
-     * @dev Iterates through `subsidyTokens` in order. Each token must be a
-     *      basket token. For each token, it transfers the lesser of the UManager
-     *      balance or the amount needed (denormalized to the token's decimals).
+     *         held by this contract to the vault.
+     * @dev The subsidy token must be a basket token. Transfers the lesser of the
+     *      UManager balance or the amount needed (denormalized to the token's
+     *      decimals).
      * @param shortfall Shortfall in 18-decimal normalized units.
-     * @param subsidyTokens Ordered list of tokens to use as subsidy.
+     * @param subsidyToken Token to use as subsidy.
      * @return subsidyNormalized Total normalized value of subsidy transferred.
      */
-    function _coverShortfall(uint256 shortfall, ERC20[] calldata subsidyTokens)
-        internal
-        returns (uint256 subsidyNormalized)
-    {
-        uint256 length = subsidyTokens.length;
-        uint256 remaining = shortfall;
+    function _coverShortfall(uint256 shortfall, ERC20 subsidyToken) internal returns (uint256 subsidyNormalized) {
+        if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
 
-        for (uint256 i; i < length; ++i) {
-            if (remaining == 0) break;
+        uint256 balance = subsidyToken.balanceOf(address(this));
+        if (balance == 0) revert EquivalentExchangeUManager__InsufficientSubsidy();
 
-            ERC20 token = subsidyTokens[i];
-            if (!basketTokens.contains(address(token))) revert EquivalentExchangeUManager__TokenNotInBasket();
+        uint8 decimals = subsidyToken.decimals();
+        uint256 normalizedBalance = _normalize(balance, decimals);
+        uint256 useNormalized = normalizedBalance < shortfall ? normalizedBalance : shortfall;
+        uint256 useAmount = _denormalize(useNormalized, decimals);
 
-            uint256 balance = token.balanceOf(address(this));
-            if (balance == 0) continue;
+        // Defensive: never transfer more than the balance we observed.
+        if (useAmount > balance) useAmount = balance;
 
-            uint8 decimals = token.decimals();
-            uint256 normalizedBalance = _normalize(balance, decimals);
-            uint256 useNormalized = normalizedBalance < remaining ? normalizedBalance : remaining;
-            uint256 useAmount = _denormalize(useNormalized, decimals);
+        subsidyToken.safeTransfer(boringVault, useAmount);
 
-            // Defensive: never transfer more than the balance we observed.
-            if (useAmount > balance) useAmount = balance;
+        // Re-normalize the actual amount transferred for accounting.
+        subsidyNormalized = _normalize(useAmount, decimals);
 
-            token.safeTransfer(boringVault, useAmount);
-
-            // Re-normalize the actual amount transferred for accounting.
-            subsidyNormalized += _normalize(useAmount, decimals);
-            remaining = shortfall > subsidyNormalized ? shortfall - subsidyNormalized : 0;
-        }
-
-        if (remaining != 0) revert EquivalentExchangeUManager__InsufficientSubsidy();
+        if (subsidyNormalized < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
     }
 
     /**
