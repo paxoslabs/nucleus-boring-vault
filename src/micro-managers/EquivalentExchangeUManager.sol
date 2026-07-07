@@ -5,9 +5,6 @@ import { UManager, ERC20 } from "src/micro-managers/UManager.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-// TODO: note that this is not compatible with inherited UManager rate limiting
-//       behavior because `execute` can include an arbitrary number of calls
-
 /**
  * @title EquivalentExchangeUManager
  * @notice UManager that executes a merkle-verified batch of BoringVault actions
