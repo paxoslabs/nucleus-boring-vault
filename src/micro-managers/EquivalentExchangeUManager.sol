@@ -186,8 +186,6 @@ contract EquivalentExchangeUManager is UManager {
 
         // Re-normalize the actual amount transferred for accounting.
         subsidyNormalized = _normalize(useAmount, decimals);
-
-        if (subsidyNormalized < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
     }
 
     /**
