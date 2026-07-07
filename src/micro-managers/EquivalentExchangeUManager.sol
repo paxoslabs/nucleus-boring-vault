@@ -8,17 +8,14 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 // TODO: note that this is not compatible with inherited UManager rate limiting
 //       behavior because `execute` can include an arbitrary number of calls
 
-// TODO: if we decide to keep tokens in this contract, provide a way to get them out
-
 /**
  * @title EquivalentExchangeUManager
  * @notice UManager that executes a merkle-verified batch of BoringVault actions
  *         and enforces an EquivalentExchange-style value invariant across a
  *         stored basket of value-equivalent tokens.
- * @dev Subsidy, if required, is sourced from the UManager's own balance of a
- *      single subsidy token. The UManager must be pre-funded with any tokens
- *      that may be needed to cover shortfalls; if the provided subsidy token is
- *      insufficient, the call reverts.
+ * @dev Subsidy, if required, is pulled from an approval-based subsidy payer.
+ *      The subsidy payer must pre-approve the UManager to spend the subsidy
+ *      token; if the approved/available amount is insufficient, the call reverts.
  */
 contract EquivalentExchangeUManager is UManager {
 
@@ -35,6 +32,7 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__EmptyBasket();
     error EquivalentExchangeUManager__TokenNotInBasket();
     error EquivalentExchangeUManager__InsufficientSubsidy();
+    error EquivalentExchangeUManager__MaxSubsidyExceeded();
 
     event BasketTokensUpdated(ERC20[] tokens);
     event Executed(address indexed caller, uint256 totalBefore, uint256 totalAfter, uint256 subsidyNormalized);
@@ -77,16 +75,19 @@ contract EquivalentExchangeUManager is UManager {
 
     /**
      * @notice Executes a merkle-verified batch of BoringVault actions and
-     *         enforces that the vault's aggregate basket value does not decrease.
-     * @dev Subsidy, if needed, is pulled from the UManager's own balance of
-     *      the indicated subsidy token.
+     *         enforces that the vault's aggregate basket value does not decrease
+     *         beyond the caller-specified maximum subsidy.
+     * @dev Subsidy, if needed, is pulled from the indicated subsidy payer using
+     *      ERC20 transferFrom. The payer must have approved the UManager.
      * @param manageProofs Merkle proofs for each manage call.
      * @param decodersAndSanitizers Decoder/sanitizer for each manage call.
      * @param targets Targets for each manage call.
      * @param targetData Calldata for each manage call.
      * @param values ETH values for each manage call.
-     * @param subsidyToken Token to use as subsidy. Must be a basket token and
-     *        must belong to this UManager.
+     * @param subsidyPayer Address that provides the subsidy tokens via approval.
+     * @param subsidyToken Token to use as subsidy. Must be a basket token.
+     * @param maxSubsidy Maximum normalized subsidy the caller is willing to
+     *        provide for this transaction. Reverts if the shortfall exceeds this.
      */
     function execute(
         bytes32[][] calldata manageProofs,
@@ -94,7 +95,9 @@ contract EquivalentExchangeUManager is UManager {
         address[] calldata targets,
         bytes[] calldata targetData,
         uint256[] calldata values,
-        ERC20 subsidyToken
+        address subsidyPayer,
+        ERC20 subsidyToken,
+        uint256 maxSubsidy
     )
         external
         requiresAuth
@@ -120,11 +123,13 @@ contract EquivalentExchangeUManager is UManager {
         // Snapshot vault's basket value after the rebalance.
         uint256 totalAfter = _totalBasketValue(boringVault);
 
-        // Cover any shortfall using the indicated subsidy token.
+        // Cover any shortfall using the indicated subsidy token, capped by maxSubsidy.
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
-            subsidyNormalized = _coverShortfall(shortfall, subsidyToken);
+            if (shortfall > maxSubsidy) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
+
+            subsidyNormalized = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
             totalAfter += subsidyNormalized;
         }
 
@@ -148,30 +153,40 @@ contract EquivalentExchangeUManager is UManager {
     }
 
     /**
-     * @notice Attempts to cover a normalized shortfall by transferring subsidy
-     *         held by this contract to the vault.
-     * @dev The subsidy token must be a basket token. Transfers the lesser of the
-     *      UManager balance or the amount needed (denormalized to the token's
-     *      decimals).
+     * @notice Covers a normalized shortfall by transferring subsidy from the
+     *         subsidy payer to the vault.
+     * @dev The subsidy token must be a basket token. The payer must have a
+     *      sufficient balance and approval to cover the shortfall.
      * @param shortfall Shortfall in 18-decimal normalized units.
+     * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy.
      * @return subsidyNormalized Total normalized value of subsidy transferred.
      */
-    function _coverShortfall(uint256 shortfall, ERC20 subsidyToken) internal returns (uint256 subsidyNormalized) {
+    function _coverShortfall(
+        uint256 shortfall,
+        address subsidyPayer,
+        ERC20 subsidyToken
+    )
+        internal
+        returns (uint256 subsidyNormalized)
+    {
         if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
 
-        uint256 balance = subsidyToken.balanceOf(address(this));
-        if (balance == 0) revert EquivalentExchangeUManager__InsufficientSubsidy();
-
         uint8 decimals = subsidyToken.decimals();
-        uint256 normalizedBalance = _normalize(balance, decimals);
-        uint256 useNormalized = normalizedBalance < shortfall ? normalizedBalance : shortfall;
-        uint256 useAmount = _denormalize(useNormalized, decimals);
+        uint256 balance = subsidyToken.balanceOf(subsidyPayer);
+        uint256 allowance = subsidyToken.allowance(subsidyPayer, address(this));
+        uint256 available = balance < allowance ? balance : allowance;
+        uint256 normalizedAvailable = _normalize(available, decimals);
 
-        // Defensive: never transfer more than the balance we observed.
-        if (useAmount > balance) useAmount = balance;
+        if (normalizedAvailable < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
 
-        subsidyToken.safeTransfer(boringVault, useAmount);
+        uint256 useAmountNormalized = normalizedAvailable < shortfall ? normalizedAvailable : shortfall;
+        uint256 useAmount = _denormalize(useAmountNormalized, decimals);
+
+        // Defensive: never transfer more than the available amount we observed.
+        if (useAmount > available) useAmount = available;
+
+        subsidyToken.safeTransferFrom(subsidyPayer, boringVault, useAmount);
 
         // Re-normalize the actual amount transferred for accounting.
         subsidyNormalized = _normalize(useAmount, decimals);
