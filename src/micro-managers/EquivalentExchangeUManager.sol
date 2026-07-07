@@ -101,7 +101,6 @@ contract EquivalentExchangeUManager is UManager {
     )
         external
         requiresAuth
-        enforceRateLimit
     {
         uint256 targetsLength = targets.length;
         if (
