@@ -53,10 +53,11 @@ contract EquivalentExchangeUManager is UManager {
      * @dev Callable by OWNER_ROLE / MULTISIG_ROLE.
      */
     function setBasketTokens(ERC20[] calldata tokens) external requiresAuth {
-        // Remove all existing tokens.
+        // Remove all existing tokens by popping from the end. Length shrinks on
+        // each removal, so we must iterate backwards to avoid out-of-bounds reads.
         uint256 existingLength = basketTokens.length();
-        for (uint256 i; i < existingLength; ++i) {
-            basketTokens.remove(basketTokens.at(i));
+        for (uint256 i = existingLength; i > 0; --i) {
+            basketTokens.remove(basketTokens.at(i - 1));
         }
 
         // Add new tokens.
