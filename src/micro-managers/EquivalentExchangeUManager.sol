@@ -131,7 +131,7 @@ contract EquivalentExchangeUManager is UManager {
         assert(totalAfter >= totalBefore);
 
         // Ensure no approvals to basket tokens remain outstanding.
-        _enforceNoDanglingApprovals(targets, targetData);
+        _enforceNoDanglingApprovals(calls);
 
         emit Executed(msg.sender, totalBefore, totalAfter, subsidyNormalized);
     }
@@ -192,27 +192,27 @@ contract EquivalentExchangeUManager is UManager {
      * @notice Ensures that any ERC20#approve calls made by the vault to basket
      *         tokens during the batch have been fully reset to zero by the end
      *         of execution.
-     * @param targets Targets for each manage call.
-     * @param targetData Calldata for each manage call.
+     * @param calls Array of merkle-verified BoringVault actions.
      */
-    function _enforceNoDanglingApprovals(address[] calldata targets, bytes[] calldata targetData) internal view {
-        for (uint256 i; i < targets.length; ++i) {
-            if (!basketTokens.contains(targets[i])) continue;
+    function _enforceNoDanglingApprovals(ManageCall[] calldata calls) internal view {
+        for (uint256 i; i < calls.length; ++i) {
+            ManageCall calldata call = calls[i];
+            if (!basketTokens.contains(call.target)) continue;
 
             // Length check is >= 68 because some token contracts (e.g., compiled
             // with older Solidity versions) may tolerate trailing calldata on
             // low-level calls rather than reverting. approve(address,uint256)
             // requires 4 + 32 + 32 = 68 bytes at minimum.
-            if (targetData[i].length < 68) continue;
+            if (call.targetData.length < 68) continue;
 
-            bytes4 selector = abi.decode(targetData[i][0:4], (bytes4));
+            bytes4 selector = abi.decode(call.targetData[0:4], (bytes4));
             if (selector != ERC20.approve.selector) continue;
 
             // Spender is the first argument of approve(address,uint256), located
             // at byte offset 4 (selector) + 32 (zero-padded address) = 36.
-            address spender = abi.decode(targetData[i][4:36], (address));
+            address spender = abi.decode(call.targetData[4:36], (address));
 
-            if (ERC20(targets[i]).allowance(boringVault, spender) != 0) {
+            if (ERC20(call.target).allowance(boringVault, spender) != 0) {
                 revert EquivalentExchangeUManager__DanglingApproval();
             }
         }
