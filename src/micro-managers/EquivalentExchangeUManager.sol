@@ -34,6 +34,17 @@ contract EquivalentExchangeUManager is UManager {
     event BasketTokensUpdated(ERC20[] tokens);
     event Executed(address indexed caller, uint256 totalBefore, uint256 totalAfter, uint256 subsidyNormalized);
 
+    /**
+     * @notice A single merkle-verified BoringVault action.
+     */
+    struct ManageCall {
+        bytes32[] manageProofs;
+        address decodersAndSanitizers;
+        address target;
+        bytes targetData;
+        uint256 value;
+    }
+
     constructor(address _owner, address _manager, address _boringVault) UManager(_owner, _manager, _boringVault) { }
 
     /**
@@ -76,22 +87,14 @@ contract EquivalentExchangeUManager is UManager {
      *         beyond the caller-specified maximum subsidy.
      * @dev Subsidy, if needed, is pulled from the indicated subsidy payer using
      *      ERC20 transferFrom. The payer must have approved the UManager.
-     * @param manageProofs Merkle proofs for each manage call.
-     * @param decodersAndSanitizers Decoder/sanitizer for each manage call.
-     * @param targets Targets for each manage call.
-     * @param targetData Calldata for each manage call.
-     * @param values ETH values for each manage call.
+     * @param calls Array of merkle-verified BoringVault actions to execute.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
      * @param maxSubsidy Maximum normalized subsidy the caller is willing to
      *        provide for this transaction. Reverts if the shortfall exceeds this.
      */
     function execute(
-        bytes32[][] calldata manageProofs,
-        address[] calldata decodersAndSanitizers,
-        address[] calldata targets,
-        bytes[] calldata targetData,
-        uint256[] calldata values,
+        ManageCall[] calldata calls,
         address subsidyPayer,
         ERC20 subsidyToken,
         uint256 maxSubsidy
@@ -99,14 +102,6 @@ contract EquivalentExchangeUManager is UManager {
         external
         requiresAuth
     {
-        uint256 targetsLength = targets.length;
-        if (
-            targetsLength != manageProofs.length || targetsLength != decodersAndSanitizers.length
-                || targetsLength != targetData.length || targetsLength != values.length
-        ) {
-            revert EquivalentExchangeUManager__LengthMismatch();
-        }
-
         uint256 basketLength = basketTokens.length();
         if (basketLength == 0) revert EquivalentExchangeUManager__EmptyBasket();
 
@@ -114,7 +109,7 @@ contract EquivalentExchangeUManager is UManager {
         uint256 totalBefore = _totalBasketValue(boringVault);
 
         // Execute the merkle-verified action batch directly from BoringVault.
-        manager.manageVaultWithMerkleVerification(manageProofs, decodersAndSanitizers, targets, targetData, values);
+        _manageVaultWithMerkleVerification(calls);
 
         // Snapshot vault's basket value after the rebalance.
         uint256 totalAfter = _totalBasketValue(boringVault);
@@ -185,6 +180,32 @@ contract EquivalentExchangeUManager is UManager {
 
         // Re-normalize the actual amount transferred for accounting.
         subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
+    }
+
+    /**
+     * @notice Unpacks an array of ManageCall structs and forwards the batch to
+     *         ManagerWithMerkleVerification.
+     * @param calls Array of merkle-verified BoringVault actions.
+     */
+    function _manageVaultWithMerkleVerification(ManageCall[] calldata calls) internal {
+        uint256 callsLength = calls.length;
+
+        bytes32[][] memory manageProofs = new bytes32[][](callsLength);
+        address[] memory decodersAndSanitizers = new address[](callsLength);
+        address[] memory targets = new address[](callsLength);
+        bytes[] memory targetData = new bytes[](callsLength);
+        uint256[] memory values = new uint256[](callsLength);
+
+        for (uint256 i; i < callsLength; ++i) {
+            ManageCall calldata call = calls[i];
+            manageProofs[i] = call.manageProofs;
+            decodersAndSanitizers[i] = call.decodersAndSanitizers;
+            targets[i] = call.target;
+            targetData[i] = call.targetData;
+            values[i] = call.value;
+        }
+
+        manager.manageVaultWithMerkleVerification(manageProofs, decodersAndSanitizers, targets, targetData, values);
     }
 
     /**
