@@ -210,7 +210,13 @@ contract EquivalentExchangeUManager is UManager {
 
             // Spender is the first argument of approve(address,uint256), located
             // at byte offset 4 (selector) + 32 (zero-padded address) = 36.
-            address spender = abi.decode(call.targetData[4:36], (address));
+            // Amount is the second argument, spanning the next 32 bytes.
+            (address spender, uint256 amount) = abi.decode(call.targetData[4:68], (address, uint256));
+            // A zero-amount approval cannot create a dangling allowance, so it
+            // does not need to be checked. Note: this only skips the current call;
+            // any preceding or subsequent non-zero approval to the same token and
+            // spender will still be checked normally.
+            if (amount == 0) continue;
 
             if (ERC20(call.target).allowance(boringVault, spender) != 0) {
                 revert EquivalentExchangeUManager__DanglingApproval();
