@@ -30,6 +30,7 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__TokenNotInBasket();
     error EquivalentExchangeUManager__InsufficientSubsidy();
     error EquivalentExchangeUManager__MaxSubsidyExceeded();
+    error EquivalentExchangeUManager__DanglingApproval();
 
     event BasketTokensUpdated(ERC20[] tokens);
     event Executed(address indexed caller, uint256 totalBefore, uint256 totalAfter, uint256 subsidyNormalized);
@@ -129,6 +130,9 @@ contract EquivalentExchangeUManager is UManager {
         // changes to subsidy behavior.
         assert(totalAfter >= totalBefore);
 
+        // Ensure no approvals to basket tokens remain outstanding.
+        _enforceNoDanglingApprovals(calls);
+
         emit Executed(msg.sender, totalBefore, totalAfter, subsidyNormalized);
     }
 
@@ -180,6 +184,44 @@ contract EquivalentExchangeUManager is UManager {
 
         // Re-normalize the actual amount transferred for accounting.
         subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
+    }
+
+    //============================== APPROVAL TRACKING ===============================
+
+    /**
+     * @notice Ensures that any ERC20#approve calls made by the vault to basket
+     *         tokens during the batch have been fully reset to zero by the end
+     *         of execution.
+     * @param calls Array of merkle-verified BoringVault actions.
+     */
+    function _enforceNoDanglingApprovals(ManageCall[] calldata calls) internal view {
+        for (uint256 i; i < calls.length; ++i) {
+            ManageCall calldata call = calls[i];
+            if (!basketTokens.contains(call.target)) continue;
+
+            // Length check is >= 68 because some token contracts (e.g., compiled
+            // with older Solidity versions) may tolerate trailing calldata on
+            // low-level calls rather than reverting. approve(address,uint256)
+            // requires 4 + 32 + 32 = 68 bytes at minimum.
+            if (call.targetData.length < 68) continue;
+
+            bytes4 selector = abi.decode(call.targetData[0:4], (bytes4));
+            if (selector != ERC20.approve.selector) continue;
+
+            // Spender is the first argument of approve(address,uint256), located
+            // at byte offset 4 (selector) + 32 (zero-padded address) = 36.
+            // Amount is the second argument, spanning the next 32 bytes.
+            (address spender, uint256 amount) = abi.decode(call.targetData[4:68], (address, uint256));
+            // A zero-amount approval cannot create a dangling allowance, so it
+            // does not need to be checked. Note: this only skips the current call;
+            // any preceding or subsequent non-zero approval to the same token and
+            // spender will still be checked normally.
+            if (amount == 0) continue;
+
+            if (ERC20(call.target).allowance(boringVault, spender) != 0) {
+                revert EquivalentExchangeUManager__DanglingApproval();
+            }
+        }
     }
 
     /**
