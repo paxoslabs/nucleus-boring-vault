@@ -33,7 +33,13 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__DanglingApproval();
 
     event BasketTokensUpdated(ERC20[] tokens);
-    event Executed(address indexed caller, uint256 totalBefore, uint256 totalAfter, uint256 subsidyNormalized);
+    event Executed(
+        address indexed caller,
+        ERC20 indexed subsidyToken,
+        uint256 totalBeforeNormalized,
+        uint256 totalAfterNormalized,
+        uint256 subsidyNormalized
+    );
 
     /**
      * @notice A single merkle-verified BoringVault action.
@@ -134,7 +140,7 @@ contract EquivalentExchangeUManager is UManager {
         // Ensure no approvals to basket tokens remain outstanding.
         _enforceNoDanglingApprovals(calls);
 
-        emit Executed(msg.sender, totalBefore, totalAfter, subsidyNormalized);
+        emit Executed(msg.sender, subsidyToken, totalBefore, totalAfter, subsidyNormalized);
     }
 
     /**
