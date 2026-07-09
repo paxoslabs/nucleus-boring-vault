@@ -111,6 +111,7 @@ contract EquivalentExchangeUManager is UManager {
     {
         uint256 basketLength = basketTokens.length();
         if (basketLength == 0) revert EquivalentExchangeUManager__EmptyBasket();
+        if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
 
         // Snapshot vault's basket value before the rebalance.
         uint256 totalBefore = _totalBasketValue(boringVault);
@@ -171,8 +172,6 @@ contract EquivalentExchangeUManager is UManager {
         internal
         returns (uint256 subsidyAmountNormalized)
     {
-        if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
-
         uint8 decimals = subsidyToken.decimals();
         uint256 balance = subsidyToken.balanceOf(subsidyPayer);
         uint256 allowance = subsidyToken.allowance(subsidyPayer, address(this));
