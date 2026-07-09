@@ -22,6 +22,9 @@ contract EquivalentExchangeUManager is UManager {
     /// @notice Decimal scale used for normalizing token amounts for 1:1 comparison.
     uint256 internal constant NORMALIZED_DECIMALS = 18;
 
+    /// @notice Selector for increaseAllowance(address,uint256).
+    bytes4 internal constant INCREASE_ALLOWANCE_SELECTOR = 0x39509351;
+
     /// @notice Tokens treated as a value-equivalent basket for the vault.
     EnumerableSet.AddressSet internal basketTokens;
 
@@ -190,9 +193,6 @@ contract EquivalentExchangeUManager is UManager {
         // Re-normalize the actual amount transferred for accounting.
         subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
     }
-
-    /// @notice Selector for increaseAllowance(address,uint256).
-    bytes4 internal constant INCREASE_ALLOWANCE_SELECTOR = 0x39509351;
 
     //============================== APPROVAL TRACKING ===============================
 
