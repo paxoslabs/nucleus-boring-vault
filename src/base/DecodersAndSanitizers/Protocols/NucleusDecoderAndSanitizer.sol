@@ -7,6 +7,8 @@ import { BridgeData } from "src/base/Roles/CrossChain/CrossChainTellerBase.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
 
+import { TransitStation } from "src/transit/TransitStation.sol";
+
 abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
     error NucleusDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
@@ -167,6 +169,38 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         // Nothing to decode
     }
 
+    // @desc Transit Station submit order
+    // @tag destEID:uint32:destination chain EID (LayerZero)
+    // @tag offerAsset:address:offer asset
+    // @tag wantAsset:address:want asset
+    // @tag receiver:address:receiver
+    // @tag integratorFeeReceiver:address:integrator fee receiver
+    function submitOrder(
+        TransitStation.Quote calldata quote,
+        bytes calldata signature
+    )
+        external
+        returns (bytes memory addressesFound)
+    {
+        addressesFound = abi.encodePacked(
+            quote.route.destEID,
+            quote.route.offerAsset,
+            quote.route.wantAsset,
+            quote.receiver,
+            quote.integratorFeeReceiver
+        );
+    }
+
+    // @desc Transit Station execute pending orders
+    // @tag wantAsset:address[]:the want asset of each fill batch
+    function executePendingOrders(TransitStation.FillBatch[] calldata batches)
+        external
+        pure
+        returns (bytes memory addressesFound)
+    {
+        // Nothing to decode
+    }
+
     // @desc submit an order to the withdraw queue
     // @tag wantAsset:address:ERC20 asset being requested
     // @tag receiver:address:receiver of the NFT receipt
@@ -185,6 +219,30 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
             params.signatureParams.approvalMethod,
             params.signatureParams.submitWithSignature
         );
+    }
+
+    // @desc execute a 1:1 swap route via EquivalentExchange
+    // @tag tokens:bytes:packed bytes of every token in the tokens array
+    // @tag subsidyPayer:address:address to submit subsidy tokens and provide subsidies
+    // @tag subsidyToken:address:token used for the subsidy
+    function execute(
+        ERC20[] calldata tokens,
+        uint256[] calldata,
+        address[] calldata,
+        bytes[] calldata,
+        address subsidyPayer,
+        ERC20 subsidyToken
+    )
+        external
+        pure
+        returns (bytes memory addressesFound)
+    {
+        uint256 tokensLength = tokens.length;
+        for (uint256 i; i < tokensLength; ++i) {
+            addressesFound = abi.encodePacked(addressesFound, tokens[i]);
+        }
+
+        addressesFound = abi.encodePacked(addressesFound, subsidyPayer, subsidyToken);
     }
 
 }
