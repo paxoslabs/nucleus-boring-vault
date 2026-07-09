@@ -15,7 +15,7 @@ import { BalancerVault } from "src/interfaces/BalancerVault.sol";
 import { IUniswapV3Router } from "src/interfaces/IUniswapV3Router.sol";
 import { DecoderCustomTypes } from "src/interfaces/DecoderCustomTypes.sol";
 import { RolesAuthority, Authority } from "@solmate/auth/authorities/RolesAuthority.sol";
-import { DexAggregatorUManager, UManager } from "src/micro-managers/DexAggregatorUManager.sol";
+import { DexAggregatorUManager, RateLimitUManager } from "src/micro-managers/DexAggregatorUManager.sol";
 import { PriceRouter } from "src/interfaces/PriceRouter.sol";
 import { AggregationRouterV5 } from "src/interfaces/AggregationRouterV5.sol";
 
@@ -158,7 +158,7 @@ contract DexAggregatorUManagerTest is Test, MainnetAddresses {
 
         // Check rate limit reverts.
         dexAggregatorUManager.setAllowedCallsPerPeriod(1);
-        vm.expectRevert(abi.encodeWithSelector(UManager.UManager__CallCountExceeded.selector));
+        vm.expectRevert(abi.encodeWithSelector(RateLimitUManager.RateLimitUManager__CallCountExceeded.selector));
         dexAggregatorUManager.swapWith1Inch(manageProofs, decodersAndSanitizers, WETH, 100e18, WEETH, swapData);
 
         // uManager should also be able to revoke approvals to router.
