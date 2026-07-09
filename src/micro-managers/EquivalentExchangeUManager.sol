@@ -192,12 +192,15 @@ contract EquivalentExchangeUManager is UManager {
         subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
     }
 
+    /// @notice Selector for increaseAllowance(address,uint256).
+    bytes4 internal constant INCREASE_ALLOWANCE_SELECTOR = 0x39509351;
+
     //============================== APPROVAL TRACKING ===============================
 
     /**
-     * @notice Ensures that any ERC20#approve calls made by the vault to basket
-     *         tokens during the batch have been fully reset to zero by the end
-     *         of execution.
+     * @notice Ensures that any ERC20#approve or ERC20#increaseAllowance calls made
+     *         by the vault to basket tokens during the batch have been fully reset
+     *         to zero by the end of execution.
      * @param calls Array of merkle-verified BoringVault actions.
      */
     function _enforceNoDanglingApprovals(ManageCall[] calldata calls) internal view {
@@ -207,16 +210,18 @@ contract EquivalentExchangeUManager is UManager {
 
             // Length check is >= 68 because some token contracts (e.g., compiled
             // with older Solidity versions) may tolerate trailing calldata on
-            // low-level calls rather than reverting. approve(address,uint256)
-            // requires 4 + 32 + 32 = 68 bytes at minimum.
+            // low-level calls rather than reverting. approve(address,uint256) and
+            // increaseAllowance(address,uint256) both require 4 + 32 + 32 = 68
+            // bytes at minimum.
             if (call.targetData.length < 68) continue;
 
             bytes4 selector = abi.decode(call.targetData[0:4], (bytes4));
-            if (selector != ERC20.approve.selector) continue;
+            if (selector != ERC20.approve.selector && selector != INCREASE_ALLOWANCE_SELECTOR) continue;
 
-            // Spender is the first argument of approve(address,uint256), located
-            // at byte offset 4 (selector) + 32 (zero-padded address) = 36.
-            // Amount is the second argument, spanning the next 32 bytes.
+            // Spender is the first argument, located at byte offset 4 (selector)
+            // + 32 (zero-padded address) = 36. Amount is the second argument,
+            // spanning the next 32 bytes. This layout is identical for approve
+            // and increaseAllowance.
             (address spender, uint256 amount) = abi.decode(call.targetData[4:68], (address, uint256));
             // A zero-amount approval cannot create a dangling allowance, so it
             // does not need to be checked. Note: this only skips the current call;
