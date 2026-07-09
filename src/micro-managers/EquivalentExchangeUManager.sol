@@ -25,7 +25,6 @@ contract EquivalentExchangeUManager is UManager {
     /// @notice Tokens treated as a value-equivalent basket for the vault.
     EnumerableSet.AddressSet internal basketTokens;
 
-    error EquivalentExchangeUManager__LengthMismatch();
     error EquivalentExchangeUManager__EmptyBasket();
     error EquivalentExchangeUManager__TokenNotInBasket();
     error EquivalentExchangeUManager__InsufficientSubsidy();
