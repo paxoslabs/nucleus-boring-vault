@@ -22,7 +22,7 @@ contract DeployBoringVaultAndManager is BaseScript {
         makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: ManagerWithMerkleVerification");
 
     function run() public broadcast {
-        address STRATEGIST_ADDRESS = 0x77C8093B4AA70f614f95A490246bD7C40C47dCF2;
+        address STRATEGIST_ADDRESS = 0xb62C8d83A56626921709493F8f1381dE8339C504;
         // deploy a roles authority
         RolesAuthority rolesAuthority = RolesAuthority(
             CREATEX.deployCreate3(
