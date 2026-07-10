@@ -11,15 +11,15 @@ import "src/helper/Constants.sol";
 
 contract DeployBoringVaultAndManager is BaseScript {
 
-    string constant NAME = "Scheduled Order Vault";
-    string constant SYMBOL = "SOV";
+    string constant NAME = "rewardsV2Interceptor";
+    string constant SYMBOL = "RV2I";
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     uint8 constant DECIMALS = 6;
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxosLabsScheduledOrderVault: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxosLabsScheduledOrderVault: BoringVault");
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "rewardsV2Interceptor: RolesAuthority");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "rewardsV2Interceptor: BoringVault");
     bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
-        makeSalt(broadcaster, false, "PaxosLabsScheduledOrderVault: ManagerWithMerkleVerification");
+        makeSalt(broadcaster, false, "rewardsV2Interceptor: ManagerWithMerkleVerification");
 
     function run() public broadcast {
         address STRATEGIST_ADDRESS = getMultisig();
