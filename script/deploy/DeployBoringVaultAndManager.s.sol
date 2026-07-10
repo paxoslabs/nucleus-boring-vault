@@ -13,7 +13,7 @@ contract DeployBoringVaultAndManager is BaseScript {
 
     string constant NAME = "PaxosLabsRewardsV2Interceptor";
     string constant SYMBOL = "pxlRv2I";
-    address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address constant BALANCER_VAULT = 0x0000000000000000000000000000000000000000;
     uint8 constant DECIMALS = 6;
 
     bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: RolesAuthority");
