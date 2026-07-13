@@ -19,6 +19,12 @@ contract MockERC20 is ERC20 {
         _mint(to, amount);
     }
 
+    /// @notice Non-standard-but-common allowance bump; solmate's ERC20 omits it, so the mock adds it.
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
+        allowance[msg.sender][spender] += addedValue;
+        return true;
+    }
+
 }
 
 /// @notice Stand-in swap route: pulls `amountIn` of `tokenIn` from the caller (the vault) and sends
@@ -50,6 +56,10 @@ contract MockDecoderAndSanitizer is BaseDecoderAndSanitizer {
         returns (bytes memory addressesFound)
     {
         addressesFound = abi.encodePacked(tokenIn, tokenOut, recipient);
+    }
+
+    function increaseAllowance(address spender, uint256) external pure returns (bytes memory addressesFound) {
+        addressesFound = abi.encodePacked(spender);
     }
 
 }
@@ -202,6 +212,54 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         uManager.execute(calls, payer, dai, 0);
     }
 
+    function test_Execute_ApprovalResetToZero_Passes() external {
+        // Approve the swap, then explicitly reset the same allowance to zero in the same batch.
+        (bytes32[] memory approveProof, bytes32[] memory increaseProof) = _setApprovalTestRoot();
+
+        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](2);
+        calls[0] =
+            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 500e6));
+        calls[1] =
+            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0));
+        increaseProof; // unused in this case
+
+        // No tokens move, so the value invariant holds and the reset clears the allowance: no revert.
+        uManager.execute(calls, payer, dai, 0);
+        assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
+    }
+
+    function test_Execute_RevertWhen_DanglingApprovalViaIncreaseAllowance() external {
+        // A non-zero increaseAllowance that is never reset must be caught as a dangling approval.
+        (, bytes32[] memory increaseProof) = _setApprovalTestRoot();
+
+        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](1);
+        calls[0] = _mc(
+            increaseProof,
+            address(usdc),
+            abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+        );
+
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
+        uManager.execute(calls, payer, dai, 0);
+    }
+
+    function test_Execute_IncreaseAllowanceResetToZero_Passes() external {
+        // increaseAllowance then reset to zero via approve(spender, 0) in the same batch.
+        (bytes32[] memory approveProof, bytes32[] memory increaseProof) = _setApprovalTestRoot();
+
+        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](2);
+        calls[0] = _mc(
+            increaseProof,
+            address(usdc),
+            abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+        );
+        calls[1] =
+            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0));
+
+        uManager.execute(calls, payer, dai, 0);
+        assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
+    }
+
     // ============================== merkle gating ==============================
 
     function test_Execute_RevertWhen_ProofInvalid() external {
@@ -221,6 +279,44 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
     }
 
     // ============================== helpers ==============================
+
+    /// @notice Wraps calldata into a merkle-verified ManageCall against the shared decoder.
+    function _mc(
+        bytes32[] memory proof,
+        address target,
+        bytes memory data
+    )
+        internal
+        view
+        returns (EquivalentExchangeUManager.ManageCall memory)
+    {
+        return EquivalentExchangeUManager.ManageCall({
+            manageProofs: proof,
+            decodersAndSanitizers: rawDataDecoderAndSanitizer,
+            target: target,
+            targetData: data,
+            value: 0
+        });
+    }
+
+    /// @notice Gates approve(USDC -> swap) and increaseAllowance(USDC -> swap) under one root, returning
+    ///         each leaf's proof. Two leaves keep the tree even, as the builder requires.
+    function _setApprovalTestRoot() internal returns (bytes32[] memory approveProof, bytes32[] memory increaseProof) {
+        ManageLeaf[] memory leafs = new ManageLeaf[](2);
+
+        leafs[0] = ManageLeaf(address(usdc), false, "approve(address,uint256)", new address[](1));
+        leafs[0].argumentAddresses[0] = address(mockSwap);
+
+        leafs[1] = ManageLeaf(address(usdc), false, "increaseAllowance(address,uint256)", new address[](1));
+        leafs[1].argumentAddresses[0] = address(mockSwap);
+
+        bytes32[][] memory tree = _generateMerkleTree(leafs);
+        manager.setManageRoot(address(uManager), tree[tree.length - 1][0]);
+        bytes32[][] memory proofs = _getProofsUsingTree(leafs, tree);
+
+        approveProof = proofs[0];
+        increaseProof = proofs[1];
+    }
 
     /// @notice Builds the two-call route (approve USDC -> swap, then swap USDC->DAI to the vault),
     ///         sets the corresponding merkle root on the manager, and returns the ManageCall batch.
