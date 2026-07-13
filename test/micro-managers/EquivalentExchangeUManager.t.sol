@@ -9,7 +9,7 @@ import { EquivalentExchangeUManager } from "src/micro-managers/EquivalentExchang
 contract EquivalentExchangeUManagerTest is Test {
 
     // Re-declared so the test can build the expected event for vm.expectEmit.
-    event BasketTokensUpdated(ERC20[] tokens);
+    event BasketTokensUpdated(address[] tokens);
 
     EquivalentExchangeUManager internal uManager;
 
@@ -152,14 +152,27 @@ contract EquivalentExchangeUManagerTest is Test {
 
     // ============================== setBasketTokens: events ==============================
 
-    function test_SetBasketTokens_EmitsEventWithRawInput() external {
-        ERC20[] memory tokens = _arr(tokenA, tokenB);
+    function test_SetBasketTokens_EmitsResultingSet() external {
+        address[] memory expected = new address[](2);
+        expected[0] = address(tokenA);
+        expected[1] = address(tokenB);
 
-        // The event echoes the raw input array (including any duplicates), not the resulting set.
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit BasketTokensUpdated(tokens);
+        emit BasketTokensUpdated(expected);
 
-        uManager.setBasketTokens(tokens);
+        uManager.setBasketTokens(_arr(tokenA, tokenB));
+    }
+
+    function test_SetBasketTokens_EmitsDeduplicatedSet() external {
+        // The event reflects the stored set, so a duplicated input emits only the unique entries.
+        address[] memory expected = new address[](2);
+        expected[0] = address(tokenA);
+        expected[1] = address(tokenB);
+
+        vm.expectEmit(true, true, true, true, address(uManager));
+        emit BasketTokensUpdated(expected);
+
+        uManager.setBasketTokens(_arr(tokenA, tokenA, tokenB));
     }
 
     // ============================== setBasketTokens: access control ==============================

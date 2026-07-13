@@ -34,7 +34,7 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__MaxSubsidyExceeded();
     error EquivalentExchangeUManager__DanglingApproval();
 
-    event BasketTokensUpdated(ERC20[] tokens);
+    event BasketTokensUpdated(address[] tokens);
     event Executed(
         address indexed caller,
         ERC20 indexed subsidyToken,
@@ -74,7 +74,9 @@ contract EquivalentExchangeUManager is UManager {
             basketTokens.add(address(tokens[i]));
         }
 
-        emit BasketTokensUpdated(tokens);
+        // Emit the resulting set (deduplicated, in stored order) rather than the raw input, so the
+        // event is an accurate record of the basket's actual contents.
+        emit BasketTokensUpdated(basketTokens.values());
     }
 
     /**
