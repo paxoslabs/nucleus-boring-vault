@@ -100,14 +100,14 @@ contract EquivalentExchangeUManager is UManager {
      * @param calls Array of merkle-verified BoringVault actions to execute.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
-     * @param maxSubsidy Maximum normalized subsidy the caller is willing to
-     *        provide for this transaction. Reverts if the shortfall exceeds this.
+     * @param maxSubsidyNormalized Maximum normalized (18-decimal) subsidy the caller is willing to
+     *        provide for this transaction. Reverts if the subsidy pulled exceeds this.
      */
     function execute(
         ManageCall[] calldata calls,
         address subsidyPayer,
         ERC20 subsidyToken,
-        uint256 maxSubsidy
+        uint256 maxSubsidyNormalized
     )
         external
         requiresAuth
@@ -125,14 +125,14 @@ contract EquivalentExchangeUManager is UManager {
         // Snapshot vault's basket value after the rebalance.
         uint256 totalAfter = _totalBasketValue(boringVault);
 
-        // Cover any shortfall using the indicated subsidy token, capped by maxSubsidy.
+        // Cover any shortfall using the indicated subsidy token, capped by maxSubsidyNormalized.
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
             subsidyNormalized = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
             // Enforce the caller's hard ceiling against the amount actually pulled, which can exceed
             // `shortfall` when _denormalize rounds up for sub-18-decimal tokens.
-            if (subsidyNormalized > maxSubsidy) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
+            if (subsidyNormalized > maxSubsidyNormalized) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
             totalAfter += subsidyNormalized;
         }
 
