@@ -214,7 +214,7 @@ contract EquivalentExchangeUManager is UManager {
             // bytes at minimum.
             if (call.targetData.length < 68) continue;
 
-            bytes4 selector = abi.decode(call.targetData[0:4], (bytes4));
+            bytes4 selector = bytes4(call.targetData[0:4]);
             if (selector != ERC20.approve.selector && selector != INCREASE_ALLOWANCE_SELECTOR) continue;
 
             // Spender is the first argument, located at byte offset 4 (selector)
