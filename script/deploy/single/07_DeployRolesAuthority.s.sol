@@ -63,14 +63,14 @@ contract DeployRolesAuthority is BaseScript {
     function _deploy(ConfigReader.Config memory config) public virtual override broadcast returns (address) {
         // Require config Values
         require(config.boringVault.code.length != 0, "boringVault must have code");
-        require(config.manager.code.length != 0, "manager must have code");
+        // require(config.manager.code.length != 0, "manager must have code");
         require(config.teller.code.length != 0, "teller must have code");
         require(config.accountant.code.length != 0, "accountant must have code");
         require(config.boringVault != address(0), "boringVault");
-        require(config.manager != address(0), "manager");
+        // require(config.manager != address(0), "manager");
         require(config.teller != address(0), "teller");
         require(config.accountant != address(0), "accountant");
-        require(config.strategist != address(0), "strategist");
+        // require(config.strategist != address(0), "strategist");
 
         bytes32 rolesAuthoritySalt =
             makeSalt(broadcaster, false, string(abi.encodePacked(config.nameEntropy, ":RolesAuthority")));
@@ -91,53 +91,62 @@ contract DeployRolesAuthority is BaseScript {
         );
 
         // --- Set Role Capabilities ---
-        rolesAuthority.setRoleCapability(
-            STRATEGIST_ROLE,
-            config.manager,
-            ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
-            true
-        );
 
-        rolesAuthority.setRoleCapability(
-            MANAGER_ROLE, config.boringVault, bytes4(keccak256(abi.encodePacked("manage(address,bytes,uint256)"))), true
-        );
+        // NOTE NO STRATEGIST_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     STRATEGIST_ROLE,
+        //     config.manager,
+        //     ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
+        //     true
+        // );
 
-        rolesAuthority.setRoleCapability(
-            MANAGER_ROLE,
-            config.boringVault,
-            bytes4(keccak256(abi.encodePacked("manage(address[],bytes[],uint256[])"))),
-            true
-        );
+        // NOTE NO MANAGER_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     MANAGER_ROLE, config.boringVault, bytes4(keccak256(abi.encodePacked("manage(address,bytes,uint256)"))),
+        // true );
+
+        // NOTE NO MANAGER_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     MANAGER_ROLE,
+        //     config.boringVault,
+        //     bytes4(keccak256(abi.encodePacked("manage(address[],bytes[],uint256[])"))),
+        //     true
+        // );
 
         rolesAuthority.setRoleCapability(TELLER_ROLE, config.boringVault, BoringVault.enter.selector, true);
 
         rolesAuthority.setRoleCapability(TELLER_ROLE, config.boringVault, BoringVault.exit.selector, true);
 
-        rolesAuthority.setRoleCapability(
-            UPDATE_EXCHANGE_RATE_ROLE, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector, true
-        );
+        // NOTE NO UPDATE_EXCHANGE_RATE_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     UPDATE_EXCHANGE_RATE_ROLE, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector,
+        // true );
 
-        rolesAuthority.setRoleCapability(
-            SOLVER_ROLE, config.teller, TellerWithMultiAssetSupport.bulkWithdraw.selector, true
-        );
+        // NOTE NO SOLVER_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     SOLVER_ROLE, config.teller, TellerWithMultiAssetSupport.bulkWithdraw.selector, true
+        // );
 
-        rolesAuthority.setRoleCapability(PAUSER_ROLE, config.teller, TellerWithMultiAssetSupport.pause.selector, true);
-        rolesAuthority.setRoleCapability(
-            PAUSER_ROLE, config.accountant, AccountantWithRateProviders.pause.selector, true
-        );
-        rolesAuthority.setRoleCapability(
-            PAUSER_ROLE, config.manager, ManagerWithMerkleVerification.pause.selector, true
-        );
+        // NOTE NO PAUSER_ROLE
+        // rolesAuthority.setRoleCapability(PAUSER_ROLE, config.teller, TellerWithMultiAssetSupport.pause.selector,
+        // true); rolesAuthority.setRoleCapability(
+        //     PAUSER_ROLE, config.accountant, AccountantWithRateProviders.pause.selector, true
+        // );
+        // rolesAuthority.setRoleCapability(
+        //     PAUSER_ROLE, config.manager, ManagerWithMerkleVerification.pause.selector, true
+        // );
 
-        rolesAuthority.setRoleCapability(
-            FREEZE_MANAGER_ROLE,
-            config.freezeListBeforeTransferHook,
-            FreezeListBeforeTransferHook.setFreezeList.selector,
-            true
-        );
+        // NOTE NO FREEZE_MANAGER_ROLE
+        // rolesAuthority.setRoleCapability(
+        //     FREEZE_MANAGER_ROLE,
+        //     config.freezeListBeforeTransferHook,
+        //     FreezeListBeforeTransferHook.setFreezeList.selector,
+        //     true
+        // );
 
         // --- Set Public Capabilities ---
-        rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.bridge.selector, true);
+        // NOTE NO CROSSCHAIN TELLER
+        // rolesAuthority.setPublicCapability(config.teller, CrossChainTellerBase.bridge.selector, true);
 
         // With the DCD gating deposits, we do not make depositAndBridge public capability. This must be manually
         // configured If the DCD is deployed we set the role capability for the DEPOSITOR_ROLE and grant it to the DCD
@@ -155,72 +164,88 @@ contract DeployRolesAuthority is BaseScript {
 
         // --- Assign roles to users ---
 
-        rolesAuthority.setUserRole(config.strategist, STRATEGIST_ROLE, true);
+        // NOTE NO STRATEGIST_ROLE
+        // rolesAuthority.setUserRole(config.strategist, STRATEGIST_ROLE, true);
 
-        rolesAuthority.setUserRole(config.manager, MANAGER_ROLE, true);
+        // NOTE NO MANAGER_ROLE
+        // rolesAuthority.setUserRole(config.manager, MANAGER_ROLE, true);
 
         rolesAuthority.setUserRole(config.teller, TELLER_ROLE, true);
 
-        rolesAuthority.setUserRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE, true);
-        if (config.exchangeRateBot != address(0)) {
-            rolesAuthority.setUserRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE, true);
-        }
+        // NOTE NO UPDATE_EXCHANGE_RATE_ROLE
+        // rolesAuthority.setUserRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE, true);
+        // if (config.exchangeRateBot != address(0)) {
+        //     rolesAuthority.setUserRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE, true);
+        // }
 
-        rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);
-        rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
-        rolesAuthority.setUserRole(PAUSER_CONTRACT, PAUSER_ROLE, true);
+        // NOTE NO PAUSER_ROLE
+        // rolesAuthority.setUserRole(config.protocolAdmin, PAUSER_ROLE, true);
+        // rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
+        // rolesAuthority.setUserRole(PAUSER_CONTRACT, PAUSER_ROLE, true);
 
         // Post Deploy Checks
-        require(
-            rolesAuthority.doesUserHaveRole(config.strategist, STRATEGIST_ROLE),
-            "strategist should have STRATEGIST_ROLE"
-        );
+        // NOTE NO STRATEGIST_ROLE
+        // require(
+        //     rolesAuthority.doesUserHaveRole(config.strategist, STRATEGIST_ROLE),
+        //     "strategist should have STRATEGIST_ROLE"
+        // );
 
-        require(rolesAuthority.doesUserHaveRole(config.manager, MANAGER_ROLE), "manager should have MANAGER_ROLE");
+        // NOTE NO MANAGER_ROLE
+        // require(rolesAuthority.doesUserHaveRole(config.manager, MANAGER_ROLE), "manager should have MANAGER_ROLE");
 
         require(rolesAuthority.doesUserHaveRole(config.teller, TELLER_ROLE), "teller should have TELLER_ROLE");
 
-        require(
-            rolesAuthority.doesUserHaveRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE),
-            "protocolAdmin should have UPDATE_EXCHANGE_RATE_ROLE"
-        );
-        require(
-            rolesAuthority.doesUserHaveRole(config.protocolAdmin, PAUSER_ROLE), "protocolAdmin should have PAUSER_ROLE"
-        );
+        // NOTE NO UPDATE_EXCHANGE_RATE_ROLE
+        // require(
+        //     rolesAuthority.doesUserHaveRole(config.protocolAdmin, UPDATE_EXCHANGE_RATE_ROLE),
+        //     "protocolAdmin should have UPDATE_EXCHANGE_RATE_ROLE"
+        // );
 
-        if (config.exchangeRateBot != address(0)) {
-            require(
-                rolesAuthority.doesUserHaveRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE),
-                "exchangeRateBot should have UPDATE_EXCHANGE_RATE_ROLE"
-            );
-        }
+        // NOTE NO PAUSER_ROLE
+        // require(
+        //     rolesAuthority.doesUserHaveRole(config.protocolAdmin, PAUSER_ROLE), "protocolAdmin should have
+        // PAUSER_ROLE" );
 
-        require(rolesAuthority.doesUserHaveRole(PAUSER_CONTRACT, PAUSER_ROLE), "pauser should have PAUSER_ROLE");
-        require(rolesAuthority.doesUserHaveRole(PAUSER_EOA, PAUSER_ROLE), "pauser eoa should have PAUSER_ROLE");
+        // NOTE NO UPDATE_EXCHANGE_RATE_ROLE
+        // if (config.exchangeRateBot != address(0)) {
+        //     require(
+        //         rolesAuthority.doesUserHaveRole(config.exchangeRateBot, UPDATE_EXCHANGE_RATE_ROLE),
+        //         "exchangeRateBot should have UPDATE_EXCHANGE_RATE_ROLE"
+        //     );
+        // }
 
-        require(
-            rolesAuthority.canCall(
-                config.strategist,
-                config.manager,
-                ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector
-            ),
-            "strategist should be able to call manageVaultWithMerkleVerification"
-        );
+        // NOTE NO PAUSER_ROLE
+        // require(rolesAuthority.doesUserHaveRole(PAUSER_CONTRACT, PAUSER_ROLE), "pauser should have PAUSER_ROLE");
+        // require(rolesAuthority.doesUserHaveRole(PAUSER_EOA, PAUSER_ROLE), "pauser eoa should have PAUSER_ROLE");
 
-        require(
-            rolesAuthority.canCall(
-                config.manager, config.boringVault, bytes4(keccak256(abi.encodePacked("manage(address,bytes,uint256)")))
-            ),
-            "manager should be able to call boringVault.manage"
-        );
-        require(
-            rolesAuthority.canCall(
-                config.manager,
-                config.boringVault,
-                bytes4(keccak256(abi.encodePacked("manage(address[],bytes[],uint256[])")))
-            ),
-            "manager should be able to call boringVault.manage"
-        );
+        // NOTE NO MANAGER
+        // require(
+        //     rolesAuthority.canCall(
+        //         config.strategist,
+        //         config.manager,
+        //         ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector
+        //     ),
+        //     "strategist should be able to call manageVaultWithMerkleVerification"
+        // );
+
+        // NOTE NO MANAGER
+        // require(
+        //     rolesAuthority.canCall(
+        //         config.manager, config.boringVault,
+        // bytes4(keccak256(abi.encodePacked("manage(address,bytes,uint256)"))) ),
+        //     "manager should be able to call boringVault.manage"
+        // );
+
+        // NOTE NO MANAGER
+        // require(
+        //     rolesAuthority.canCall(
+        //         config.manager,
+        //         config.boringVault,
+        //         bytes4(keccak256(abi.encodePacked("manage(address[],bytes[],uint256[])")))
+        //     ),
+        //     "manager should be able to call boringVault.manage"
+        // );
+
         require(
             rolesAuthority.canCall(config.teller, config.boringVault, BoringVault.enter.selector),
             "teller should be able to call boringVault.enter"
@@ -229,18 +254,20 @@ contract DeployRolesAuthority is BaseScript {
             rolesAuthority.canCall(config.teller, config.boringVault, BoringVault.exit.selector),
             "teller should be able to call boringVault.exit"
         );
-        require(
-            rolesAuthority.canCall(
-                config.exchangeRateBot, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector
-            ),
-            "exchangeRateBot should be able to call accountant.updateExchangeRate"
-        );
-        require(
-            rolesAuthority.canCall(
-                config.protocolAdmin, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector
-            ),
-            "protocolAdmin should be able to call accountant.updateExchangeRate"
-        );
+
+        // NO UPDATE_EXCHANGE_RATE ROLE
+        // require(
+        //     rolesAuthority.canCall(
+        //         config.exchangeRateBot, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector
+        //     ),
+        //     "exchangeRateBot should be able to call accountant.updateExchangeRate"
+        // );
+        // require(
+        //     rolesAuthority.canCall(
+        //         config.protocolAdmin, config.accountant, AccountantWithRateProviders.updateExchangeRate.selector
+        //     ),
+        //     "protocolAdmin should be able to call accountant.updateExchangeRate"
+        // );
         require(
             config.distributorCodeDepositorDeploy
                 || rolesAuthority.canCall(address(1), config.teller, TellerWithMultiAssetSupport.deposit.selector),
@@ -248,9 +275,10 @@ contract DeployRolesAuthority is BaseScript {
         );
 
         // Pauser Roles
-        _validatePauserRole(config, rolesAuthority, config.protocolAdmin);
-        _validatePauserRole(config, rolesAuthority, PAUSER_EOA);
-        _validatePauserRole(config, rolesAuthority, PAUSER_CONTRACT);
+        // NOTE NO PAUSER ROLE
+        // _validatePauserRole(config, rolesAuthority, config.protocolAdmin);
+        // _validatePauserRole(config, rolesAuthority, PAUSER_EOA);
+        // _validatePauserRole(config, rolesAuthority, PAUSER_CONTRACT);
 
         return address(rolesAuthority);
     }
