@@ -129,9 +129,10 @@ contract EquivalentExchangeUManager is UManager {
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
-            if (shortfall > maxSubsidy) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
-
             subsidyNormalized = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
+            // Enforce the caller's hard ceiling against the amount actually pulled, which can exceed
+            // `shortfall` when _denormalize rounds up for sub-18-decimal tokens.
+            if (subsidyNormalized > maxSubsidy) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
             totalAfter += subsidyNormalized;
         }
 

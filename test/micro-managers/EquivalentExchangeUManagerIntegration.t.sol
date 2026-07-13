@@ -168,6 +168,26 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         assertEq(dai.balanceOf(payer), 999e18, "payer covered exactly the 1 DAI shortfall");
     }
 
+    function test_Execute_RevertWhen_ActualSubsidyExceedsMaxSubsidy() external {
+        // Subsidize with a 6-decimal token so _denormalize's round-up is observable.
+        usdc.mint(payer, 1000e6);
+        vm.prank(payer);
+        usdc.approve(address(uManager), type(uint256).max);
+
+        // Engineer a shortfall of exactly 1e12 + 1 normalized units. It is NOT a multiple of the USDC
+        // 1e12 scale, so _denormalize rounds it up from ~1 native unit to 2 (= 2e12 normalized), meaning
+        // the subsidy actually pulled (2e12) exceeds the caller's ceiling.
+        uint256 shortfall = 1e12 + 1;
+        uint256 amountOut = 1000e18 - shortfall; // vault ends 1e12+1 short of value-neutral
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, amountOut);
+
+        // Ceiling set exactly at the shortfall. maxSubsidy is a hard ceiling, so pulling 2e12 must revert.
+        uint256 maxSubsidy = shortfall;
+
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__MaxSubsidyExceeded.selector);
+        uManager.execute(calls, payer, usdc, maxSubsidy);
+    }
+
     // ============================== subsidy cap / guards ==============================
 
     function test_Execute_RevertWhen_ShortfallExceedsMaxSubsidy() external {
