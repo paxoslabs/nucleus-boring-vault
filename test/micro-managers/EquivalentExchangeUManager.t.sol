@@ -172,6 +172,38 @@ contract EquivalentExchangeUManagerTest is Test {
         uManager.setBasketTokens(_arr(tokenA));
     }
 
+    // ============================== execute: guard reverts ==============================
+    // These paths revert before execute reaches the manager/vault, so they need no integration
+    // stack: the basket tokens are never called and _manageVaultWithMerkleVerification is unreachable.
+
+    function _noCalls() internal pure returns (EquivalentExchangeUManager.ManageCall[] memory) {
+        return new EquivalentExchangeUManager.ManageCall[](0);
+    }
+
+    function test_Execute_RevertWhen_BasketEmpty() external {
+        // No basket configured, so execute reverts at the first guard before any token is touched.
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__EmptyBasket.selector);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, 0);
+    }
+
+    function test_Execute_RevertWhen_SubsidyTokenNotInBasket() external {
+        uManager.setBasketTokens(_arr(tokenA));
+
+        // tokenB is not part of the basket; the guard fires before _totalBasketValue, so the codeless
+        // dummy basket token is never called.
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenNotInBasket.selector);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenB, 0);
+    }
+
+    function test_Execute_RevertWhen_CallerNotAuthorized() external {
+        uManager.setBasketTokens(_arr(tokenA));
+
+        address stranger = makeAddr("stranger");
+        vm.prank(stranger);
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, 0);
+    }
+
     // ============================== isBasketToken ==============================
 
     function test_IsBasketToken_TrueForMember() external {
