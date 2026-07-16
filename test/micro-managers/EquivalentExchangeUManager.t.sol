@@ -189,8 +189,14 @@ contract EquivalentExchangeUManagerTest is Test {
     // These paths revert before execute reaches the manager/vault, so they need no integration
     // stack: the basket tokens are never called and _manageVaultWithMerkleVerification is unreachable.
 
-    function _noCalls() internal pure returns (EquivalentExchangeUManager.ManageCall[] memory) {
-        return new EquivalentExchangeUManager.ManageCall[](0);
+    function _noCalls() internal pure returns (EquivalentExchangeUManager.ManageCalls memory) {
+        return EquivalentExchangeUManager.ManageCalls({
+            manageProofs: new bytes32[][](0),
+            decodersAndSanitizers: new address[](0),
+            targets: new address[](0),
+            targetData: new bytes[](0),
+            values: new uint256[](0)
+        });
     }
 
     /// @notice `length` bounds, each pinned to {0, 0}. Only the length matters to the guards below.

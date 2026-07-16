@@ -150,7 +150,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_ValueNeutralSwap_NoSubsidy() external {
         // Approve exactly what the swap consumes, and receive an equal-normalized amount of DAI back.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         vm.expectEmit(true, true, true, true, address(uManager));
         emit Executed(address(this), dai, 1000e18, 1000e18, 0);
@@ -165,7 +165,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_SlippageCoveredBySubsidy() external {
         // Swap returns 1 DAI less than value-neutral -> 1e18 normalized shortfall, covered by the payer.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectEmit(true, true, true, true, address(uManager));
         emit Executed(address(this), dai, 1000e18, 1000e18, 1e18);
@@ -187,7 +187,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // 1e12 scale, so _denormalize rounds it up from ~1 native unit to 2 (= 2e12 normalized).
         uint256 shortfall = 1e12 + 1;
         uint256 amountOut = 1000e18 - shortfall; // vault ends 1e12+1 short of value-neutral
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, amountOut);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, amountOut);
 
         // The batch spends all 1000e6 USDC (a 1000e6 decrease) and receives DAI; the subsidy is pulled in
         // USDC AFTER the snapshot, so it is not counted against USDC's batch bound.
@@ -207,7 +207,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         vm.prank(payer);
         dai.approve(address(uManager), 0);
 
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
@@ -220,7 +220,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         vm.prank(payer);
         dai.transfer(address(0xdead), payerBalance);
 
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
@@ -231,7 +231,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
     function test_Execute_TightDeltaBounds_Passes() external {
         // Value-neutral swap: USDC falls by exactly 1000e6, DAI rises by exactly 1000e18. Bounds set to
         // the exact inclusive edges must still pass.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, 1000e18);
 
@@ -248,7 +248,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // Swap consumes the USDC but returns no DAI, so one basket token moves and the other does not.
         // DAI is pinned at {0, 0}: an unmoved token must pass even when both its bounds are zero, and
         // must not inherit the moving token's delta.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 0);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 0);
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, 0);
 
@@ -266,7 +266,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_RevertWhen_DecreaseExceedsNegativeDelta() external {
         // USDC drops by 1000e6, but the caller only tolerates a 999e6 decrease.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(999e6, 0, 0, type(uint256).max);
 
@@ -280,7 +280,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_RevertWhen_IncreaseExceedsPositiveDelta() external {
         // DAI rises by 1000e18, but the caller only tolerates a 999e18 increase.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(type(uint256).max, 0, 0, 999e18);
 
@@ -295,7 +295,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
     function test_Execute_RevertWhen_ZeroDeltaForbidsMovement() external {
         // Both directions zeroed for USDC: the token is pinned, so any movement at all is rejected. This
         // is the band that a signed [min, max] pair could only express as [0, 0].
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(0, 0, 0, type(uint256).max);
 
@@ -311,7 +311,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_RevertWhen_DanglingApprovalLeft() external {
         // Approve more USDC than the swap consumes, leaving a non-zero allowance to the swap route.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(2000e6, 1000e6, 1000e18);
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(2000e6, 1000e6, 1000e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
@@ -321,11 +321,16 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // Approve the swap, then explicitly reset the same allowance to zero in the same batch.
         (bytes32[] memory approveProof, bytes32[] memory increaseProof) = _setApprovalTestRoot();
 
-        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](2);
-        calls[0] =
-            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 500e6));
-        calls[1] =
-            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0));
+        EquivalentExchangeUManager.ManageCalls memory calls = _batch(
+            _actions(
+                _mc(
+                    approveProof,
+                    address(usdc),
+                    abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 500e6)
+                ),
+                _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0))
+            )
+        );
         increaseProof; // unused in this case
 
         // No tokens move, so the value invariant holds and the reset clears the allowance: no revert.
@@ -337,11 +342,14 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // A non-zero increaseAllowance that is never reset must be caught as a dangling approval.
         (, bytes32[] memory increaseProof) = _setApprovalTestRoot();
 
-        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](1);
-        calls[0] = _mc(
-            increaseProof,
-            address(usdc),
-            abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+        EquivalentExchangeUManager.ManageCalls memory calls = _batch(
+            _actions(
+                _mc(
+                    increaseProof,
+                    address(usdc),
+                    abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+                )
+            )
         );
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
@@ -352,14 +360,16 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // increaseAllowance then reset to zero via approve(spender, 0) in the same batch.
         (bytes32[] memory approveProof, bytes32[] memory increaseProof) = _setApprovalTestRoot();
 
-        EquivalentExchangeUManager.ManageCall[] memory calls = new EquivalentExchangeUManager.ManageCall[](2);
-        calls[0] = _mc(
-            increaseProof,
-            address(usdc),
-            abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+        EquivalentExchangeUManager.ManageCalls memory calls = _batch(
+            _actions(
+                _mc(
+                    increaseProof,
+                    address(usdc),
+                    abi.encodeWithSignature("increaseAllowance(address,uint256)", address(mockSwap), 500e6)
+                ),
+                _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0))
+            )
         );
-        calls[1] =
-            _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0));
 
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
         assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
@@ -369,15 +379,15 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
     function test_Execute_RevertWhen_ProofInvalid() external {
         // Build a legitimate route, then tamper with the swap target so its proof no longer verifies.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
-        calls[1].target = address(dai); // not the gated swap target
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+        calls.targets[1] = address(dai); // not the gated swap target
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 ManagerWithMerkleVerification.ManagerWithMerkleVerification__FailedToVerifyManageProof.selector,
-                calls[1].target,
-                calls[1].targetData,
-                calls[1].value
+                calls.targets[1],
+                calls.targetData[1],
+                calls.values[1]
             )
         );
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
@@ -409,23 +419,54 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         return _maxDeltas(type(uint256).max, type(uint256).max, type(uint256).max, type(uint256).max);
     }
 
-    /// @notice Wraps calldata into a merkle-verified ManageCall against the shared decoder.
-    function _mc(
-        bytes32[] memory proof,
-        address target,
-        bytes memory data
-    )
-        internal
-        view
-        returns (EquivalentExchangeUManager.ManageCall memory)
-    {
-        return EquivalentExchangeUManager.ManageCall({
-            manageProofs: proof,
-            decodersAndSanitizers: rawDataDecoderAndSanitizer,
-            target: target,
-            targetData: data,
-            value: 0
+    /// @notice One action, in the readable per-action shape. `_batch` pivots a list of these into the
+    ///         column-oriented layout `execute` takes, so tests can still author calls one at a time.
+    struct Action {
+        bytes32[] proof;
+        address target;
+        bytes data;
+    }
+
+    /// @notice Wraps calldata into a single merkle-verified action against the shared decoder.
+    function _mc(bytes32[] memory proof, address target, bytes memory data) internal pure returns (Action memory) {
+        return Action({ proof: proof, target: target, data: data });
+    }
+
+    /// @notice Pivots per-action authoring into the parallel arrays `execute` takes. Every action uses the
+    ///         shared decoder and sends no ETH.
+    function _batch(Action[] memory actions) internal view returns (EquivalentExchangeUManager.ManageCalls memory) {
+        uint256 length = actions.length;
+
+        bytes32[][] memory manageProofs = new bytes32[][](length);
+        address[] memory decodersAndSanitizers = new address[](length);
+        address[] memory targets = new address[](length);
+        bytes[] memory targetData = new bytes[](length);
+
+        for (uint256 i; i < length; ++i) {
+            manageProofs[i] = actions[i].proof;
+            decodersAndSanitizers[i] = rawDataDecoderAndSanitizer;
+            targets[i] = actions[i].target;
+            targetData[i] = actions[i].data;
+        }
+
+        return EquivalentExchangeUManager.ManageCalls({
+            manageProofs: manageProofs,
+            decodersAndSanitizers: decodersAndSanitizers,
+            targets: targets,
+            targetData: targetData,
+            values: new uint256[](length)
         });
+    }
+
+    function _actions(Action memory a0) internal pure returns (Action[] memory a) {
+        a = new Action[](1);
+        a[0] = a0;
+    }
+
+    function _actions(Action memory a0, Action memory a1) internal pure returns (Action[] memory a) {
+        a = new Action[](2);
+        a[0] = a0;
+        a[1] = a1;
     }
 
     /// @notice Gates approve(USDC -> swap) and increaseAllowance(USDC -> swap) under one root, returning
@@ -448,14 +489,14 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
     }
 
     /// @notice Builds the two-call route (approve USDC -> swap, then swap USDC->DAI to the vault),
-    ///         sets the corresponding merkle root on the manager, and returns the ManageCall batch.
+    ///         sets the corresponding merkle root on the manager, and returns the batch.
     function _approveAndSwapCalls(
         uint256 approveAmount,
         uint256 amountIn,
         uint256 amountOut
     )
         internal
-        returns (EquivalentExchangeUManager.ManageCall[] memory calls)
+        returns (EquivalentExchangeUManager.ManageCalls memory)
     {
         ManageLeaf[] memory leafs = new ManageLeaf[](2);
 
@@ -472,23 +513,22 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         manager.setManageRoot(address(uManager), tree[tree.length - 1][0]);
         bytes32[][] memory proofs = _getProofsUsingTree(leafs, tree);
 
-        calls = new EquivalentExchangeUManager.ManageCall[](2);
-        calls[0] = EquivalentExchangeUManager.ManageCall({
-            manageProofs: proofs[0],
-            decodersAndSanitizers: rawDataDecoderAndSanitizer,
-            target: address(usdc),
-            targetData: abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), approveAmount),
-            value: 0
-        });
-        calls[1] = EquivalentExchangeUManager.ManageCall({
-            manageProofs: proofs[1],
-            decodersAndSanitizers: rawDataDecoderAndSanitizer,
-            target: address(mockSwap),
-            targetData: abi.encodeWithSelector(
-                MockSwap.swap.selector, address(usdc), address(dai), amountIn, amountOut, address(boringVault)
-            ),
-            value: 0
-        });
+        return _batch(
+            _actions(
+                _mc(
+                    proofs[0],
+                    address(usdc),
+                    abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), approveAmount)
+                ),
+                _mc(
+                    proofs[1],
+                    address(mockSwap),
+                    abi.encodeWithSelector(
+                        MockSwap.swap.selector, address(usdc), address(dai), amountIn, amountOut, address(boringVault)
+                    )
+                )
+            )
+        );
     }
 
     // ---- merkle tree helpers (same construction as the other UManager integration tests) ----

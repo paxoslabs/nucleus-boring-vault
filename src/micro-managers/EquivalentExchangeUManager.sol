@@ -45,14 +45,28 @@ contract EquivalentExchangeUManager is UManager {
     );
 
     /**
-     * @notice A single merkle-verified BoringVault action.
+     * @notice A batch of merkle-verified BoringVault actions.
+     * @dev Held as parallel arrays -- action `i` is (manageProofs[i], decodersAndSanitizers[i], targets[i],
+     *      targetData[i], values[i]) -- rather than as an array of per-action structs. This is the layout
+     *      ManagerWithMerkleVerification already accepts, so the batch forwards straight through instead of
+     *      being transposed into memory first.
+     *
+     *      The manager validates that all five arrays are the same length, reverting per-field otherwise, so
+     *      nothing here re-checks it. Note the ordering dependency that creates: `_enforceNoDanglingApprovals`
+     *      walks `targets` and `targetData` in parallel and is only safe because it runs after the manager
+     *      call has already rejected any ragged batch.
+     * @param manageProofs Merkle proof for each action.
+     * @param decodersAndSanitizers Decoder/sanitizer to extract each action's gated addresses.
+     * @param targets Contract each action calls.
+     * @param targetData Calldata for each action.
+     * @param values ETH value for each action.
      */
-    struct ManageCall {
-        bytes32[] manageProofs;
-        address decodersAndSanitizers;
-        address target;
-        bytes targetData;
-        uint256 value;
+    struct ManageCalls {
+        bytes32[][] manageProofs;
+        address[] decodersAndSanitizers;
+        address[] targets;
+        bytes[] targetData;
+        uint256[] values;
     }
 
     /**
@@ -143,7 +157,7 @@ contract EquivalentExchangeUManager is UManager {
      * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
      */
     function execute(
-        ManageCall[] calldata calls,
+        ManageCalls calldata calls,
         address subsidyPayer,
         ERC20 subsidyToken,
         TokenDelta[] calldata maxDeltas
@@ -265,64 +279,58 @@ contract EquivalentExchangeUManager is UManager {
      * @notice Ensures that any ERC20#approve or ERC20#increaseAllowance calls made
      *         by the vault to basket tokens during the batch have been fully reset
      *         to zero by the end of execution.
-     * @param calls Array of merkle-verified BoringVault actions.
+     * @dev Indexes `targets` and `targetData` in parallel. Safe only because the manager has already
+     *      verified the two arrays are the same length; do not call this before the manager call.
+     * @param calls Batch of merkle-verified BoringVault actions.
      */
-    function _enforceNoDanglingApprovals(ManageCall[] calldata calls) internal view {
-        for (uint256 i; i < calls.length; ++i) {
-            ManageCall calldata call = calls[i];
-            if (!basketTokens.contains(call.target)) continue;
+    function _enforceNoDanglingApprovals(ManageCalls calldata calls) internal view {
+        uint256 callsLength = calls.targets.length;
+
+        for (uint256 i; i < callsLength; ++i) {
+            address target = calls.targets[i];
+            if (!basketTokens.contains(target)) continue;
+
+            bytes calldata targetData = calls.targetData[i];
 
             // Length check is >= 68 because some token contracts (e.g., compiled
             // with older Solidity versions) may tolerate trailing calldata on
             // low-level calls rather than reverting. approve(address,uint256) and
             // increaseAllowance(address,uint256) both require 4 + 32 + 32 = 68
             // bytes at minimum.
-            if (call.targetData.length < 68) continue;
+            if (targetData.length < 68) continue;
 
-            bytes4 selector = bytes4(call.targetData[0:4]);
+            bytes4 selector = bytes4(targetData[0:4]);
             if (selector != ERC20.approve.selector && selector != INCREASE_ALLOWANCE_SELECTOR) continue;
 
             // Spender is the first argument, located at byte offset 4 (selector)
             // + 32 (zero-padded address) = 36. Amount is the second argument,
             // spanning the next 32 bytes. This layout is identical for approve
             // and increaseAllowance.
-            (address spender, uint256 amount) = abi.decode(call.targetData[4:68], (address, uint256));
+            (address spender, uint256 amount) = abi.decode(targetData[4:68], (address, uint256));
             // A zero-amount approval cannot create a dangling allowance, so it
             // does not need to be checked. Note: this only skips the current call;
             // any preceding or subsequent non-zero approval to the same token and
             // spender will still be checked normally.
             if (amount == 0) continue;
 
-            if (ERC20(call.target).allowance(boringVault, spender) != 0) {
+            if (ERC20(target).allowance(boringVault, spender) != 0) {
                 revert EquivalentExchangeUManager__DanglingApproval();
             }
         }
     }
 
     /**
-     * @notice Unpacks an array of ManageCall structs and forwards the batch to
-     *         ManagerWithMerkleVerification.
-     * @param calls Array of merkle-verified BoringVault actions.
+     * @notice Forwards a batch to ManagerWithMerkleVerification.
+     * @dev The batch is already stored in the manager's column-oriented layout, so this only unpacks the
+     *      struct's fields -- no transposing. It stays a separate function purely to keep `execute` under
+     *      the stack limit: the five calldata array references do not fit alongside `execute`'s locals, and
+     *      inlining this reverts the build to "stack too deep".
+     * @param calls Batch of merkle-verified BoringVault actions.
      */
-    function _manageVaultWithMerkleVerification(ManageCall[] calldata calls) internal {
-        uint256 callsLength = calls.length;
-
-        bytes32[][] memory manageProofs = new bytes32[][](callsLength);
-        address[] memory decodersAndSanitizers = new address[](callsLength);
-        address[] memory targets = new address[](callsLength);
-        bytes[] memory targetData = new bytes[](callsLength);
-        uint256[] memory values = new uint256[](callsLength);
-
-        for (uint256 i; i < callsLength; ++i) {
-            ManageCall calldata call = calls[i];
-            manageProofs[i] = call.manageProofs;
-            decodersAndSanitizers[i] = call.decodersAndSanitizers;
-            targets[i] = call.target;
-            targetData[i] = call.targetData;
-            values[i] = call.value;
-        }
-
-        manager.manageVaultWithMerkleVerification(manageProofs, decodersAndSanitizers, targets, targetData, values);
+    function _manageVaultWithMerkleVerification(ManageCalls calldata calls) internal {
+        manager.manageVaultWithMerkleVerification(
+            calls.manageProofs, calls.decodersAndSanitizers, calls.targets, calls.targetData, calls.values
+        );
     }
 
     /**
