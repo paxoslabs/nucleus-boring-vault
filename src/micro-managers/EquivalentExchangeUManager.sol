@@ -31,8 +31,9 @@ contract EquivalentExchangeUManager is UManager {
     error EquivalentExchangeUManager__EmptyBasket();
     error EquivalentExchangeUManager__TokenNotInBasket();
     error EquivalentExchangeUManager__InsufficientSubsidy();
-    error EquivalentExchangeUManager__MaxSubsidyExceeded();
     error EquivalentExchangeUManager__DanglingApproval();
+    error EquivalentExchangeUManager__TokenDeltaLengthMismatch();
+    error EquivalentExchangeUManager__TokenDeltaOutOfBounds(address token);
 
     event BasketTokensUpdated(address[] tokens);
     event Executed(
@@ -52,6 +53,34 @@ contract EquivalentExchangeUManager is UManager {
         address target;
         bytes targetData;
         uint256 value;
+    }
+
+    /**
+     * @notice Bound on how far the vault's balance of a basket token may move in each direction across a
+     *         rebalance.
+     * @dev Both fields are unsigned magnitudes in the token's native units, each describing one direction
+     *      of movement, so the tolerated band is [-negativeDelta, +positiveDelta] around the pre-batch
+     *      balance. Encoding the directions as magnitudes rather than a signed [min, max] pair makes every
+     *      representable value a well-formed band: there is no inverted range to validate or reject. Use
+     *      zero to forbid movement in that direction entirely.
+     *
+     *      The token this applies to is implied by position: entry `i` of a `TokenDelta[]` bounds basket
+     *      token `i`, in the storage order returned by `getBasketTokens()`. The array must therefore be
+     *      exactly as long as the basket, which makes coverage of every basket token structural.
+     *
+     *      Because the binding is positional, `setBasketTokens` invalidates any `TokenDelta[]` built
+     *      against the previous basket: it can both reorder the set (removal is swap-and-pop) and change
+     *      its membership, so bounds authored for the old order would silently attach to different tokens.
+     *      Callers must rebuild `maxDeltas` from a fresh `getBasketTokens()` read after any basket change.
+     *
+     *      The change is measured against the merkle-verified batch ONLY. The subsidy top-up is pulled
+     *      afterwards and is not counted against any token's bound.
+     * @param negativeDelta Largest tolerated decrease, inclusive. Reverts if the balance falls by more.
+     * @param positiveDelta Largest tolerated increase, inclusive. Reverts if the balance rises by more.
+     */
+    struct TokenDelta {
+        uint256 negativeDelta;
+        uint256 positiveDelta;
     }
 
     constructor(address _owner, address _manager, address _boringVault) UManager(_owner, _manager, _boringVault) { }
@@ -94,47 +123,91 @@ contract EquivalentExchangeUManager is UManager {
     }
 
     /**
-     * @notice Executes a merkle-verified batch of BoringVault actions and
-     *         enforces that the vault's aggregate basket value does not decrease
-     *         beyond the caller-specified maximum subsidy.
-     * @dev Subsidy, if needed, is pulled from the indicated subsidy payer using
-     *      ERC20 transferFrom. The payer must have approved the UManager.
+     * @notice Executes a batch of merkle-verified BoringVault actions, enforces a per-token bound on
+     *         each basket token's balance change over the batch, and enforces that the vault's aggregate
+     *         basket value does not decrease (topping up any shortfall from the subsidy payer).
+     * @dev The `maxDeltas` array is positionally bound to the basket: `maxDeltas[i]` applies to basket
+     *      token `i` as returned by `getBasketTokens()`, and its length must equal the basket's, so every
+     *      basket token is bounded. Callers must read `getBasketTokens()` to build it, and must rebuild it
+     *      after any `setBasketTokens` call, which may reorder the basket (see TokenDelta).
+     *
+     *      Each token's movement is measured over the batch ONLY, in the token's native units; the subsidy
+     *      pulled afterwards is not counted against any token's bound.
+     *
+     *      Subsidy, if needed, is pulled from the indicated subsidy payer using ERC20 transferFrom; the
+     *      payer must have approved the UManager. The amount pulled is the aggregate shortfall, converted
+     *      to the subsidy token and rounded up to a whole native unit.
      * @param calls Array of merkle-verified BoringVault actions to execute.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
-     * @param maxSubsidyNormalized Maximum normalized (18-decimal) subsidy the caller is willing to
-     *        provide for this transaction. Reverts if the subsidy pulled exceeds this.
+     * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
      */
     function execute(
         ManageCall[] calldata calls,
         address subsidyPayer,
         ERC20 subsidyToken,
-        uint256 maxSubsidyNormalized
+        TokenDelta[] calldata maxDeltas
     )
         external
         requiresAuth
     {
-        uint256 basketLength = basketTokens.length();
+        // Read the basket once into memory. Every loop below indexes this snapshot, so a basket change
+        // mid-batch cannot leave `maxDeltas[i]` and `tokens[i]` pointing at different tokens.
+        address[] memory tokens = basketTokens.values();
+        uint256 basketLength = tokens.length;
+
         if (basketLength == 0) revert EquivalentExchangeUManager__EmptyBasket();
         if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
+        if (maxDeltas.length != basketLength) revert EquivalentExchangeUManager__TokenDeltaLengthMismatch();
 
-        // Snapshot vault's basket value before the rebalance.
-        uint256 totalBefore = _totalBasketValue(boringVault);
+        // Snapshot the pre-batch balances the delta bounds are measured against. Normalizing them is
+        // deferred to the post-batch loop, which reads each token's decimals anyway.
+        uint256[] memory beforeBalances = new uint256[](basketLength);
+
+        for (uint256 i; i < basketLength; ++i) {
+            beforeBalances[i] = ERC20(tokens[i]).balanceOf(boringVault);
+        }
 
         // Execute the merkle-verified action batch directly from BoringVault.
         _manageVaultWithMerkleVerification(calls);
 
-        // Snapshot vault's basket value after the rebalance.
-        uint256 totalAfter = _totalBasketValue(boringVault);
+        // Bounds constrain what the batch did, so they are checked before any subsidy is pulled.
+        uint256 totalBefore;
+        uint256 totalAfter;
 
-        // Cover any shortfall using the indicated subsidy token, capped by maxSubsidyNormalized.
+        for (uint256 i; i < basketLength; ++i) {
+            ERC20 token = ERC20(tokens[i]);
+            uint256 balanceBefore = beforeBalances[i];
+            uint256 balanceAfter = token.balanceOf(boringVault);
+
+            uint256 delta;
+            uint256 maxDelta;
+
+            // Select the magnitude for whichever direction the balance moved, so both subtractions stay
+            // unsigned and no signed cast is needed. An unchanged balance matches neither branch and
+            // leaves both at zero, which the check below admits.
+            if (balanceAfter < balanceBefore) {
+                delta = balanceBefore - balanceAfter;
+                maxDelta = maxDeltas[i].negativeDelta;
+            } else if (balanceAfter > balanceBefore) {
+                delta = balanceAfter - balanceBefore;
+                maxDelta = maxDeltas[i].positiveDelta;
+            }
+
+            if (delta > maxDelta) revert EquivalentExchangeUManager__TokenDeltaOutOfBounds(address(token));
+
+            // A single decimals() read scales both totals, so they cannot disagree on scale.
+            uint8 decimals = token.decimals();
+            totalBefore += _normalize(balanceBefore, decimals);
+            totalAfter += _normalize(balanceAfter, decimals);
+        }
+
+        // Cover any aggregate shortfall using the indicated subsidy token. The subsidy inflow is
+        // intentionally not counted against subsidyToken's delta bound.
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
             subsidyNormalized = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
-            // Enforce the caller's hard ceiling against the amount actually pulled, which can exceed
-            // `shortfall` when _denormalize rounds up for sub-18-decimal tokens.
-            if (subsidyNormalized > maxSubsidyNormalized) revert EquivalentExchangeUManager__MaxSubsidyExceeded();
             totalAfter += subsidyNormalized;
         }
 
@@ -147,17 +220,6 @@ contract EquivalentExchangeUManager is UManager {
         _enforceNoDanglingApprovals(calls);
 
         emit Executed(msg.sender, subsidyToken, totalBefore, totalAfter, subsidyNormalized);
-    }
-
-    /**
-     * @notice Returns the total normalized value of the basket held by `account`.
-     */
-    function _totalBasketValue(address account) internal view returns (uint256 total) {
-        uint256 length = basketTokens.length();
-        for (uint256 i; i < length; ++i) {
-            ERC20 token = ERC20(basketTokens.at(i));
-            total += _normalize(token.balanceOf(account), token.decimals());
-        }
     }
 
     /**

@@ -193,19 +193,28 @@ contract EquivalentExchangeUManagerTest is Test {
         return new EquivalentExchangeUManager.ManageCall[](0);
     }
 
+    /// @notice `length` bounds, each pinned to {0, 0}. Only the length matters to the guards below.
+    function _zeroDeltas(uint256 length) internal pure returns (EquivalentExchangeUManager.TokenDelta[] memory d) {
+        d = new EquivalentExchangeUManager.TokenDelta[](length);
+    }
+
+    function _noDeltas() internal pure returns (EquivalentExchangeUManager.TokenDelta[] memory) {
+        return _zeroDeltas(0);
+    }
+
     function test_Execute_RevertWhen_BasketEmpty() external {
         // No basket configured, so execute reverts at the first guard before any token is touched.
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__EmptyBasket.selector);
-        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, 0);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _noDeltas());
     }
 
     function test_Execute_RevertWhen_SubsidyTokenNotInBasket() external {
         uManager.setBasketTokens(_arr(tokenA));
 
-        // tokenB is not part of the basket; the guard fires before _totalBasketValue, so the codeless
+        // tokenB is not part of the basket; the guard fires before any balance is read, so the codeless
         // dummy basket token is never called.
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenNotInBasket.selector);
-        uManager.execute(_noCalls(), makeAddr("payer"), tokenB, 0);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenB, _noDeltas());
     }
 
     function test_Execute_RevertWhen_CallerNotAuthorized() external {
@@ -214,7 +223,20 @@ contract EquivalentExchangeUManagerTest is Test {
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vm.expectRevert(bytes("UNAUTHORIZED"));
-        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, 0);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _noDeltas());
+    }
+
+    function test_Execute_RevertWhen_DeltaLengthDoesNotMatchBasket() external {
+        // Bounds bind to basket tokens by position, so only an exactly basket-length array is accepted.
+        // Too few leaves a token unbounded; too many carries a bound with no token to bind to. The
+        // one-token basket puts both cases one step either side of the sole valid length.
+        uManager.setBasketTokens(_arr(tokenA));
+
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaLengthMismatch.selector);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _zeroDeltas(0));
+
+        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaLengthMismatch.selector);
+        uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _zeroDeltas(2));
     }
 
     // ============================== isBasketToken ==============================

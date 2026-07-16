@@ -128,6 +128,14 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         basket[1] = dai;
         uManager.setBasketTokens(basket);
 
+        // Deltas bind to basket tokens by position, so every test's bounds are written against this exact
+        // order. Pin it here: if the basket ever changes, these assertions fail loudly rather than letting
+        // the suite silently apply USDC bounds to DAI and vice versa.
+        address[] memory storedBasket = uManager.getBasketTokens();
+        assertEq(storedBasket.length, 2, "basket size");
+        assertEq(storedBasket[0], address(usdc), "basket[0] is USDC");
+        assertEq(storedBasket[1], address(dai), "basket[1] is DAI");
+
         // Seed the vault with USDC to spend, and the swap route with DAI liquidity to hand back.
         usdc.mint(address(boringVault), 1000e6);
         dai.mint(address(mockSwap), 1_000_000e18);
@@ -147,7 +155,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         vm.expectEmit(true, true, true, true, address(uManager));
         emit Executed(address(this), dai, 1000e18, 1000e18, 0);
 
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
 
         assertEq(usdc.balanceOf(address(boringVault)), 0, "vault USDC spent");
         assertEq(dai.balanceOf(address(boringVault)), 1000e18, "vault received DAI");
@@ -162,41 +170,37 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         vm.expectEmit(true, true, true, true, address(uManager));
         emit Executed(address(this), dai, 1000e18, 1000e18, 1e18);
 
-        uManager.execute(calls, payer, dai, 1e18);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
 
         assertEq(dai.balanceOf(address(boringVault)), 1000e18, "vault made whole (999 swap + 1 subsidy)");
         assertEq(dai.balanceOf(payer), 999e18, "payer covered exactly the 1 DAI shortfall");
     }
 
-    function test_Execute_RevertWhen_ActualSubsidyExceedsMaxSubsidy() external {
-        // Subsidize with a 6-decimal token so _denormalize's round-up is observable.
+    function test_Execute_SubsidyRoundsUpAndIsUncapped() external {
+        // Subsidize with a 6-decimal token so _denormalize's round-up is observable. Nothing caps the
+        // subsidy beyond the shortfall it covers, so the rounded-up over-pull is accepted, not rejected.
         usdc.mint(payer, 1000e6);
         vm.prank(payer);
         usdc.approve(address(uManager), type(uint256).max);
 
         // Engineer a shortfall of exactly 1e12 + 1 normalized units. It is NOT a multiple of the USDC
-        // 1e12 scale, so _denormalize rounds it up from ~1 native unit to 2 (= 2e12 normalized), meaning
-        // the subsidy actually pulled (2e12) exceeds the caller's ceiling.
+        // 1e12 scale, so _denormalize rounds it up from ~1 native unit to 2 (= 2e12 normalized).
         uint256 shortfall = 1e12 + 1;
         uint256 amountOut = 1000e18 - shortfall; // vault ends 1e12+1 short of value-neutral
         EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, amountOut);
 
-        // Ceiling set exactly at the shortfall. maxSubsidy is a hard ceiling, so pulling 2e12 must revert.
-        uint256 maxSubsidy = shortfall;
+        // The batch spends all 1000e6 USDC (a 1000e6 decrease) and receives DAI; the subsidy is pulled in
+        // USDC AFTER the snapshot, so it is not counted against USDC's batch bound.
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, type(uint256).max);
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__MaxSubsidyExceeded.selector);
-        uManager.execute(calls, payer, usdc, maxSubsidy);
+        uManager.execute(calls, payer, usdc, maxDeltas);
+
+        // 2 native USDC units (2e12 normalized) were pulled to cover a 1e12+1 shortfall: rounding up.
+        assertEq(usdc.balanceOf(address(boringVault)), 2, "vault received 2 native USDC subsidy units");
+        assertEq(usdc.balanceOf(payer), 1000e6 - 2, "payer over-pulled by rounding, uncapped");
     }
 
-    // ============================== subsidy cap / guards ==============================
-
-    function test_Execute_RevertWhen_ShortfallExceedsMaxSubsidy() external {
-        // 1e18 shortfall but caller only tolerates 0.5e18.
-        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
-
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__MaxSubsidyExceeded.selector);
-        uManager.execute(calls, payer, dai, 0.5e18);
-    }
+    // ============================== subsidy guards ==============================
 
     function test_Execute_RevertWhen_SubsidyAllowanceInsufficient() external {
         // Payer revokes approval, so the shortfall cannot be covered.
@@ -206,7 +210,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
-        uManager.execute(calls, payer, dai, 1e18);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
     function test_Execute_RevertWhen_SubsidyBalanceInsufficient() external {
@@ -219,7 +223,88 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
-        uManager.execute(calls, payer, dai, 1e18);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
+    }
+
+    // ============================== per-token delta bounds ==============================
+
+    function test_Execute_TightDeltaBounds_Passes() external {
+        // Value-neutral swap: USDC falls by exactly 1000e6, DAI rises by exactly 1000e18. Bounds set to
+        // the exact inclusive edges must still pass.
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, 1000e18);
+
+        vm.expectEmit(true, true, true, true, address(uManager));
+        emit Executed(address(this), dai, 1000e18, 1000e18, 0);
+
+        uManager.execute(calls, payer, dai, maxDeltas);
+
+        assertEq(usdc.balanceOf(address(boringVault)), 0, "vault USDC spent");
+        assertEq(dai.balanceOf(address(boringVault)), 1000e18, "vault received DAI");
+    }
+
+    function test_Execute_UnmovedTokenPassesZeroBounds() external {
+        // Swap consumes the USDC but returns no DAI, so one basket token moves and the other does not.
+        // DAI is pinned at {0, 0}: an unmoved token must pass even when both its bounds are zero, and
+        // must not inherit the moving token's delta.
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 0);
+
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, 0);
+
+        // The whole 1000e18 of value is recovered from the payer. The subsidy lands in DAI after the
+        // bounds are checked, so it does not violate DAI's zero positiveDelta.
+        vm.expectEmit(true, true, true, true, address(uManager));
+        emit Executed(address(this), dai, 1000e18, 1000e18, 1000e18);
+
+        uManager.execute(calls, payer, dai, maxDeltas);
+
+        assertEq(usdc.balanceOf(address(boringVault)), 0, "vault USDC spent");
+        assertEq(dai.balanceOf(address(boringVault)), 1000e18, "vault made whole entirely by subsidy");
+        assertEq(dai.balanceOf(payer), 0, "payer covered the full shortfall");
+    }
+
+    function test_Execute_RevertWhen_DecreaseExceedsNegativeDelta() external {
+        // USDC drops by 1000e6, but the caller only tolerates a 999e6 decrease.
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(999e6, 0, 0, type(uint256).max);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(usdc)
+            )
+        );
+        uManager.execute(calls, payer, dai, maxDeltas);
+    }
+
+    function test_Execute_RevertWhen_IncreaseExceedsPositiveDelta() external {
+        // DAI rises by 1000e18, but the caller only tolerates a 999e18 increase.
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(type(uint256).max, 0, 0, 999e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(dai)
+            )
+        );
+        uManager.execute(calls, payer, dai, maxDeltas);
+    }
+
+    function test_Execute_RevertWhen_ZeroDeltaForbidsMovement() external {
+        // Both directions zeroed for USDC: the token is pinned, so any movement at all is rejected. This
+        // is the band that a signed [min, max] pair could only express as [0, 0].
+        EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(0, 0, 0, type(uint256).max);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(usdc)
+            )
+        );
+        uManager.execute(calls, payer, dai, maxDeltas);
     }
 
     // ============================== dangling approval ==============================
@@ -229,7 +314,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.ManageCall[] memory calls = _approveAndSwapCalls(2000e6, 1000e6, 1000e18);
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
     function test_Execute_ApprovalResetToZero_Passes() external {
@@ -244,7 +329,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         increaseProof; // unused in this case
 
         // No tokens move, so the value invariant holds and the reset clears the allowance: no revert.
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
         assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
     }
 
@@ -260,7 +345,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         );
 
         vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
     function test_Execute_IncreaseAllowanceResetToZero_Passes() external {
@@ -276,7 +361,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         calls[1] =
             _mc(approveProof, address(usdc), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0));
 
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
         assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
     }
 
@@ -295,10 +380,34 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
                 calls[1].value
             )
         );
-        uManager.execute(calls, payer, dai, 0);
+        uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
     // ============================== helpers ==============================
+
+    /// @notice Builds a bound set for the { USDC, DAI } basket from per-direction native-unit magnitudes.
+    /// @dev Bounds attach to basket tokens by position, so the USDC pair lands at index 0 and the DAI pair
+    ///      at index 1. setUp asserts the live basket matches that layout. Every argument is an unsigned
+    ///      magnitude: `usdcNeg` is how far USDC may fall, `usdcPos` how far it may rise.
+    function _maxDeltas(
+        uint256 usdcNeg,
+        uint256 usdcPos,
+        uint256 daiNeg,
+        uint256 daiPos
+    )
+        internal
+        pure
+        returns (EquivalentExchangeUManager.TokenDelta[] memory maxDeltas)
+    {
+        maxDeltas = new EquivalentExchangeUManager.TokenDelta[](2);
+        maxDeltas[0] = EquivalentExchangeUManager.TokenDelta({ negativeDelta: usdcNeg, positiveDelta: usdcPos });
+        maxDeltas[1] = EquivalentExchangeUManager.TokenDelta({ negativeDelta: daiNeg, positiveDelta: daiPos });
+    }
+
+    /// @notice Bounds that cannot bind, so tests can isolate other behavior.
+    function _wideMaxDeltas() internal pure returns (EquivalentExchangeUManager.TokenDelta[] memory) {
+        return _maxDeltas(type(uint256).max, type(uint256).max, type(uint256).max, type(uint256).max);
+    }
 
     /// @notice Wraps calldata into a merkle-verified ManageCall against the shared decoder.
     function _mc(
