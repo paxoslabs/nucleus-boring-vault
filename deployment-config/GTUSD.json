@@ -74,7 +74,7 @@
     "name": "Debyt Guardian Token Withdraw Queue",
     "symbol": "GTUSDQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "minimumOrderSize": "5000000",
+    "minimumOrderSize": "10000",
     "processorAddress": "0x0c90881489158eF3FB2591dDd72045E4529e3720"
   }
 }
