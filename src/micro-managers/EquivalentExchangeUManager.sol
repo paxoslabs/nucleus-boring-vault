@@ -79,7 +79,8 @@ contract EquivalentExchangeUManager is UManager {
 
     /**
      * @notice Sets the basket of value-equivalent tokens used for accounting.
-     * @dev Callable by OWNER_ROLE / MULTISIG_ROLE.
+     * @custom:access OWNER_ROLE / MULTISIG_ROLE should be granted authority - redefines which tokens the value
+     * invariant covers and the order `maxDeltas` binds to, so a wrong basket silently leaves tokens unbounded.
      */
     function setBasketTokens(ERC20[] calldata tokens) external requiresAuth {
         // Remove all existing tokens by popping from the end. Length shrinks on
@@ -128,6 +129,9 @@ contract EquivalentExchangeUManager is UManager {
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
      * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
+     * @custom:access STRATEGIST_ROLE should be granted authority - confined to calls the merkle root already
+     * allows, and cannot lower the basket's total value. Note `maxDeltas` is supplied by the caller, so it
+     * guards against a bad route, not against a bad strategist.
      */
     function execute(
         ManageCalls calldata calls,
