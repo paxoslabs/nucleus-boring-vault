@@ -37,7 +37,7 @@
       0
     ],
     "withdrawAssetPercentFees": [
-      5
+      0
     ],
     "depositAssets": [
       "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -46,7 +46,7 @@
       0
     ],
     "depositAssetPercentFees": [
-      5
+      0
     ],
     "dvnIfNoDefault": {
       "required": [
