@@ -45,16 +45,9 @@ contract EquivalentExchangeUManager is UManager {
     );
 
     /**
-     * @notice A batch of merkle-verified BoringVault actions.
-     * @dev Held as parallel arrays -- action `i` is (manageProofs[i], decodersAndSanitizers[i], targets[i],
-     *      targetData[i], values[i]) -- rather than as an array of per-action structs. This is the layout
-     *      ManagerWithMerkleVerification already accepts, so the batch forwards straight through instead of
-     *      being transposed into memory first.
-     *
-     *      The manager validates that all five arrays are the same length, reverting per-field otherwise, so
-     *      nothing here re-checks it. Note the ordering dependency that creates: `_enforceNoDanglingApprovals`
-     *      walks `targets` and `targetData` in parallel and is only safe because it runs after the manager
-     *      call has already rejected any ragged batch.
+     * @notice A batch of merkle-verified BoringVault actions, as parallel arrays.
+     * @dev The downstream manager enforces that all five arrays are the same length, so this contract skips those
+     * checks.
      * @param manageProofs Merkle proof for each action.
      * @param decodersAndSanitizers Decoder/sanitizer to extract each action's gated addresses.
      * @param targets Contract each action calls.
@@ -70,25 +63,10 @@ contract EquivalentExchangeUManager is UManager {
     }
 
     /**
-     * @notice Bound on how far the vault's balance of a basket token may move in each direction across a
-     *         rebalance.
-     * @dev Both fields are unsigned magnitudes in the token's native units, each describing one direction
-     *      of movement, so the tolerated band is [-negativeDelta, +positiveDelta] around the pre-batch
-     *      balance. Encoding the directions as magnitudes rather than a signed [min, max] pair makes every
-     *      representable value a well-formed band: there is no inverted range to validate or reject. Use
-     *      zero to forbid movement in that direction entirely.
-     *
-     *      The token this applies to is implied by position: entry `i` of a `TokenDelta[]` bounds basket
-     *      token `i`, in the storage order returned by `getBasketTokens()`. The array must therefore be
-     *      exactly as long as the basket, which makes coverage of every basket token structural.
-     *
-     *      Because the binding is positional, `setBasketTokens` invalidates any `TokenDelta[]` built
-     *      against the previous basket: it can both reorder the set (removal is swap-and-pop) and change
-     *      its membership, so bounds authored for the old order would silently attach to different tokens.
-     *      Callers must rebuild `maxDeltas` from a fresh `getBasketTokens()` read after any basket change.
-     *
-     *      The change is measured against the merkle-verified batch ONLY. The subsidy top-up is pulled
-     *      afterwards and is not counted against any token's bound.
+     * @notice Bound on how far the vault's balance of a basket token may move in each direction.
+     * @dev Unsigned magnitudes in the token's native units, so the tolerated band is
+     *      [-negativeDelta, +positiveDelta]. Entry `i` bounds basket token `i` in `getBasketTokens()`
+     *      order; rebuild after any `setBasketTokens`, which can reorder the basket.
      * @param negativeDelta Largest tolerated decrease, inclusive. Reverts if the balance falls by more.
      * @param positiveDelta Largest tolerated increase, inclusive. Reverts if the balance rises by more.
      */
@@ -140,18 +118,13 @@ contract EquivalentExchangeUManager is UManager {
      * @notice Executes a batch of merkle-verified BoringVault actions, enforces a per-token bound on
      *         each basket token's balance change over the batch, and enforces that the vault's aggregate
      *         basket value does not decrease (topping up any shortfall from the subsidy payer).
-     * @dev The `maxDeltas` array is positionally bound to the basket: `maxDeltas[i]` applies to basket
-     *      token `i` as returned by `getBasketTokens()`, and its length must equal the basket's, so every
-     *      basket token is bounded. Callers must read `getBasketTokens()` to build it, and must rebuild it
-     *      after any `setBasketTokens` call, which may reorder the basket (see TokenDelta).
-     *
-     *      Each token's movement is measured over the batch ONLY, in the token's native units; the subsidy
-     *      pulled afterwards is not counted against any token's bound.
+     * @dev `maxDeltas` must be exactly as long as the basket, so every basket token is bounded. Movement is
+     *      measured over the batch ONLY; the subsidy pulled afterwards is not counted against any bound.
      *
      *      Subsidy, if needed, is pulled from the indicated subsidy payer using ERC20 transferFrom; the
      *      payer must have approved the UManager. The amount pulled is the aggregate shortfall, converted
      *      to the subsidy token and rounded up to a whole native unit.
-     * @param calls Array of merkle-verified BoringVault actions to execute.
+     * @param calls Batch of merkle-verified BoringVault actions to execute.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
      * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
@@ -279,8 +252,6 @@ contract EquivalentExchangeUManager is UManager {
      * @notice Ensures that any ERC20#approve or ERC20#increaseAllowance calls made
      *         by the vault to basket tokens during the batch have been fully reset
      *         to zero by the end of execution.
-     * @dev Indexes `targets` and `targetData` in parallel. Safe only because the manager has already
-     *      verified the two arrays are the same length; do not call this before the manager call.
      * @param calls Batch of merkle-verified BoringVault actions.
      */
     function _enforceNoDanglingApprovals(ManageCalls calldata calls) internal view {
@@ -321,10 +292,7 @@ contract EquivalentExchangeUManager is UManager {
 
     /**
      * @notice Forwards a batch to ManagerWithMerkleVerification.
-     * @dev The batch is already stored in the manager's column-oriented layout, so this only unpacks the
-     *      struct's fields -- no transposing. It stays a separate function purely to keep `execute` under
-     *      the stack limit: the five calldata array references do not fit alongside `execute`'s locals, and
-     *      inlining this reverts the build to "stack too deep".
+     * @dev Kept separate only to keep `execute` under the stack limit; inlining it is "stack too deep".
      * @param calls Batch of merkle-verified BoringVault actions.
      */
     function _manageVaultWithMerkleVerification(ManageCalls calldata calls) internal {
