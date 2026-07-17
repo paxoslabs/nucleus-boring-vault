@@ -20,7 +20,7 @@
     "allowedExchangeRateChangeUpper": "10000",
     "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
-    "managementFee": "95",
+    "managementFee": "0",
     "performanceFee": "0",
     "address": "0x0000000000000000000000000000000000000000"
   },
