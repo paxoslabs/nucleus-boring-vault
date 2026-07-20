@@ -41,7 +41,8 @@ contract EquivalentExchangeUManager is UManager {
         ERC20 indexed subsidyToken,
         uint256 totalBeforeNormalized,
         uint256 totalAfterNormalized,
-        uint256 subsidyNormalized
+        uint256 subsidyAmount,
+        uint256 subsidyAmountNormalized
     );
 
     /**
@@ -198,11 +199,11 @@ contract EquivalentExchangeUManager is UManager {
 
         // Cover any aggregate shortfall using the indicated subsidy token. The subsidy inflow is
         // intentionally not counted against subsidyToken's delta bound.
-        uint256 subsidyNormalized;
+        uint256 subsidyAmountNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
-            (subsidyAmount, subsidyNormalized) = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
-            totalAfter += subsidyNormalized;
+            (subsidyAmount, subsidyAmountNormalized) = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
+            totalAfter += subsidyAmountNormalized;
         }
 
         // Final invariant check. _coverShortfall either covers the shortfall or
@@ -213,7 +214,7 @@ contract EquivalentExchangeUManager is UManager {
         // Ensure no approvals to basket tokens remain outstanding.
         _enforceNoDanglingApprovals(calls);
 
-        emit Executed(msg.sender, subsidyToken, totalBefore, totalAfter, subsidyNormalized);
+        emit Executed(msg.sender, subsidyToken, totalBefore, totalAfter, subsidyAmount, subsidyAmountNormalized);
     }
 
     /**

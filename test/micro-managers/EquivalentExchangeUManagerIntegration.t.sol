@@ -74,7 +74,8 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         ERC20 indexed subsidyToken,
         uint256 totalBeforeNormalized,
         uint256 totalAfterNormalized,
-        uint256 subsidyNormalized
+        uint256 subsidyAmount,
+        uint256 subsidyAmountNormalized
     );
 
     uint8 internal constant MANAGER_ROLE = 1;
@@ -153,7 +154,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
 
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit Executed(address(this), dai, 1000e18, 1000e18, 0);
+        emit Executed(address(this), dai, 1000e18, 1000e18, 0, 0);
 
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
 
@@ -168,7 +169,8 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit Executed(address(this), dai, 1000e18, 1000e18, 1e18);
+        // DAI is 18-decimal, so the native and normalized subsidy fields coincide here.
+        emit Executed(address(this), dai, 1000e18, 1000e18, 1e18, 1e18);
 
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
 
@@ -192,6 +194,13 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // The batch spends all 1000e6 USDC (a 1000e6 decrease) and receives DAI; the subsidy is pulled in
         // USDC AFTER the snapshot, so it is not counted against USDC's batch bound.
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, type(uint256).max);
+
+        // The only case where the event's two subsidy fields diverge: 2 native USDC units against 2e12
+        // normalized. Every other emit assertion subsidizes in 18-decimal DAI, where the two coincide and
+        // a mix-up would go unnoticed. The rounded-up over-pull lands in totalAfterNormalized, which ends
+        // 1e12 - 1 above totalBeforeNormalized rather than exactly equal to it.
+        vm.expectEmit(true, true, true, true, address(uManager));
+        emit Executed(address(this), usdc, 1000e18, 1000e18 + 1e12 - 1, 2, 2e12);
 
         uManager.execute(calls, payer, usdc, maxDeltas);
 
@@ -282,7 +291,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, 1000e18);
 
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit Executed(address(this), dai, 1000e18, 1000e18, 0);
+        emit Executed(address(this), dai, 1000e18, 1000e18, 0, 0);
 
         uManager.execute(calls, payer, dai, maxDeltas);
 
@@ -301,7 +310,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // The whole 1000e18 of value is recovered from the payer. The subsidy lands in DAI after the
         // bounds are checked, so it does not violate DAI's zero positiveDelta.
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit Executed(address(this), dai, 1000e18, 1000e18, 1000e18);
+        emit Executed(address(this), dai, 1000e18, 1000e18, 1000e18, 1000e18);
 
         uManager.execute(calls, payer, dai, maxDeltas);
 
