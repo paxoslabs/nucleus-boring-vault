@@ -129,6 +129,8 @@ contract EquivalentExchangeUManager is UManager {
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
      * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
+     * @return subsidyAmount Subsidy pulled from `subsidyPayer`, in `subsidyToken`'s native units. This is the
+     * amount actually transferred, inclusive of `_denormalize`'s round-up.
      * @custom:access STRATEGIST_ROLE should be granted authority - confined to calls the merkle root already
      * allows, and cannot lower the basket's total value. Note `maxDeltas` is supplied by the caller, so it
      * guards against a bad route, not against a bad strategist.
@@ -141,6 +143,7 @@ contract EquivalentExchangeUManager is UManager {
     )
         external
         requiresAuth
+        returns (uint256 subsidyAmount)
     {
         // Read the basket once into memory. Every loop below indexes this snapshot, so a basket change
         // mid-batch cannot leave `maxDeltas[i]` and `tokens[i]` pointing at different tokens.
@@ -198,7 +201,7 @@ contract EquivalentExchangeUManager is UManager {
         uint256 subsidyNormalized;
         if (totalAfter < totalBefore) {
             uint256 shortfall = totalBefore - totalAfter;
-            subsidyNormalized = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
+            (subsidyAmount, subsidyNormalized) = _coverShortfall(shortfall, subsidyPayer, subsidyToken);
             totalAfter += subsidyNormalized;
         }
 
@@ -221,6 +224,7 @@ contract EquivalentExchangeUManager is UManager {
      * @param shortfall Shortfall in 18-decimal normalized units.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy.
+     * @return subsidyAmount Amount of subsidy transferred, in the subsidy token's native units.
      * @return subsidyAmountNormalized Total normalized value of subsidy transferred.
      */
     function _coverShortfall(
@@ -229,7 +233,7 @@ contract EquivalentExchangeUManager is UManager {
         ERC20 subsidyToken
     )
         internal
-        returns (uint256 subsidyAmountNormalized)
+        returns (uint256 subsidyAmount, uint256 subsidyAmountNormalized)
     {
         uint8 decimals = subsidyToken.decimals();
         uint256 balance = subsidyToken.balanceOf(subsidyPayer);
@@ -239,7 +243,7 @@ contract EquivalentExchangeUManager is UManager {
 
         if (normalizedAvailable < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
 
-        uint256 subsidyAmount = _denormalize(shortfall, decimals);
+        subsidyAmount = _denormalize(shortfall, decimals);
 
         // Defensive: never transfer more than the available amount we observed.
         if (subsidyAmount > available) subsidyAmount = available;

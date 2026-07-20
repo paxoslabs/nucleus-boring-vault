@@ -200,6 +200,52 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         assertEq(usdc.balanceOf(payer), 1000e6 - 2, "payer over-pulled by rounding, uncapped");
     }
 
+    // ============================== execute return value ==============================
+    // The return reports the subsidy in the subsidy token's NATIVE units, which is what actually left the
+    // payer's wallet. The event's subsidyNormalized field reports the same transfer in 18-decimal units;
+    // the two agree only for 18-decimal subsidy tokens, so the 6-decimal case below pins them apart.
+
+    function test_Execute_ReturnsZeroWhenNoSubsidyNeeded() external {
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18);
+
+        uint256 subsidyAmount = uManager.execute(calls, payer, dai, _wideMaxDeltas());
+
+        assertEq(subsidyAmount, 0, "value-neutral swap pulls no subsidy");
+        assertEq(dai.balanceOf(payer), 1000e18, "payer untouched, matching the zero return");
+    }
+
+    function test_Execute_ReturnsSubsidyPulledFromPayer() external {
+        // Swap returns 1 DAI less than value-neutral; the payer covers exactly that.
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
+
+        uint256 payerBefore = dai.balanceOf(payer);
+        uint256 subsidyAmount = uManager.execute(calls, payer, dai, _wideMaxDeltas());
+
+        assertEq(subsidyAmount, 1e18, "return reports the 1 DAI subsidy");
+        // The return must equal the payer's realized spend, not merely the shortfall it was derived from.
+        assertEq(payerBefore - dai.balanceOf(payer), subsidyAmount, "return matches payer's actual spend");
+    }
+
+    function test_Execute_ReturnsNativeUnitsInclusiveOfRoundUp() external {
+        // Mirrors test_Execute_SubsidyRoundsUpAndIsUncapped, asserting on the return instead of balances.
+        // This is the case that distinguishes the return from the event: 2 native USDC units are pulled to
+        // cover a 1e12+1 normalized shortfall, so the return is 2 while subsidyNormalized would be 2e12.
+        usdc.mint(payer, 1000e6);
+        vm.prank(payer);
+        usdc.approve(address(uManager), type(uint256).max);
+
+        uint256 shortfall = 1e12 + 1;
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 1000e18 - shortfall);
+        EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(1000e6, 0, 0, type(uint256).max);
+
+        uint256 payerBefore = usdc.balanceOf(payer);
+        uint256 subsidyAmount = uManager.execute(calls, payer, usdc, maxDeltas);
+
+        // Native units, rounded up from ~1 unit to 2 -- NOT the 2e12 normalized figure.
+        assertEq(subsidyAmount, 2, "return is native USDC units, inclusive of the round-up");
+        assertEq(payerBefore - usdc.balanceOf(payer), subsidyAmount, "return matches payer's actual spend");
+    }
+
     // ============================== subsidy guards ==============================
 
     function test_Execute_RevertWhen_SubsidyAllowanceInsufficient() external {
