@@ -7,9 +7,9 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 
 /**
  * @title EquivalentExchangeUManager
- * @notice UManager that executes a merkle-verified batch of BoringVault actions
- *         and enforces an EquivalentExchange-style value invariant across a
- *         stored basket of value-equivalent tokens.
+ * @notice UManager that executes a batch of merkle-verified BoringVault actions
+ *         and enforces a value invariant across a stored basket of value-equivalent
+ *         tokens.
  * @dev Subsidy, if required, is pulled from an approval-based subsidy payer.
  *      The subsidy payer must pre-approve the UManager to spend the subsidy
  *      token; if the approved/available amount is insufficient, the call reverts.
