@@ -4,6 +4,7 @@ pragma solidity 0.8.21;
 import { UManager, ERC20 } from "src/micro-managers/UManager.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title EquivalentExchangeUManager
@@ -18,6 +19,7 @@ contract EquivalentExchangeUManager is UManager {
 
     using SafeTransferLib for ERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using SafeCast for uint256;
 
     /// @notice Decimal scale used for normalizing token amounts for 1:1 comparison.
     uint256 internal constant NORMALIZED_DECIMALS = 18;
@@ -64,25 +66,12 @@ contract EquivalentExchangeUManager is UManager {
         uint256[] values;
     }
 
-    /**
-     * @notice Bound on how far the vault's balance of a basket token may move in each direction.
-     * @dev Unsigned magnitudes in the token's native units, so the tolerated band is
-     *      [-negativeDelta, +positiveDelta]. Entry `i` bounds basket token `i` in `getBasketTokens()`
-     *      order; rebuild after any `setBasketTokens`, which can reorder the basket.
-     * @param negativeDelta Largest tolerated decrease, inclusive. Reverts if the balance falls by more.
-     * @param positiveDelta Largest tolerated increase, inclusive. Reverts if the balance rises by more.
-     */
-    struct TokenDelta {
-        uint256 negativeDelta;
-        uint256 positiveDelta;
-    }
-
     constructor(address _owner, address _manager, address _boringVault) UManager(_owner, _manager, _boringVault) { }
 
     /**
      * @notice Sets the basket of value-equivalent tokens used for accounting.
      * @dev The basket is exactly the set of tokens whose balance changes `execute` checks, and defines the
-     * order `maxDeltas` binds to.
+     * order `allowableTokenDelta` binds to.
      * @custom:access OWNER_ROLE / MULTISIG_ROLE should be granted authority.
      */
     function setBasketTokens(ERC20[] calldata tokens) external requiresAuth {
@@ -125,7 +114,7 @@ contract EquivalentExchangeUManager is UManager {
      * @notice Executes a batch of merkle-verified BoringVault actions, enforces a per-token bound on
      *         each basket token's balance change over the batch, and enforces that the vault's aggregate
      *         basket value does not decrease (topping up any shortfall from the subsidy payer).
-     * @dev `maxDeltas` must be exactly as long as the basket, so every basket token is bounded. Movement is
+     * @dev `allowableTokenDelta` must be exactly as long as the basket, so every basket token is bounded. Movement is
      *      measured over the batch ONLY; the subsidy pulled afterwards is not counted against any bound.
      *
      *      Subsidy, if needed, is pulled from the indicated subsidy payer using ERC20 transferFrom; the
@@ -134,32 +123,35 @@ contract EquivalentExchangeUManager is UManager {
      * @param calls Batch of merkle-verified BoringVault actions to execute.
      * @param subsidyPayer Address that provides the subsidy tokens via approval.
      * @param subsidyToken Token to use as subsidy. Must be a basket token.
-     * @param maxDeltas Per-direction balance-change bounds, parallel to `getBasketTokens()` (see TokenDelta).
+     * @param allowableTokenDelta Minimum signed balance change tolerated for each basket token, in native units,
+     * parallel to `getBasketTokens()`. `execute` reverts if a token's actual change (balanceAfter - balanceBefore)
+     * is less than its entry. For example, -100 lets the balance fall by up to 100, +100 requires it to rise by at
+     * least 100, and 0 requires it not to fall.
      * @return subsidyAmount Subsidy pulled from `subsidyPayer`, in `subsidyToken`'s native units. This is the
      * amount actually transferred, inclusive of `_denormalize`'s round-up.
      * @custom:access STRATEGIST_ROLE should be granted authority - confined to calls the merkle root already
-     * allows, and cannot lower the basket's total value. Note `maxDeltas` is supplied by the caller, so it
+     * allows, and cannot lower the basket's total value. Note `allowableTokenDelta` is supplied by the caller, so it
      * guards against a bad route, not against a bad strategist.
      */
     function execute(
         ManageCalls calldata calls,
         address subsidyPayer,
         ERC20 subsidyToken,
-        TokenDelta[] calldata maxDeltas
+        int256[] calldata allowableTokenDelta
     )
         external
         requiresAuth
         returns (uint256 subsidyAmount)
     {
         // Read the basket once into memory. The set should not change mid-execution, but snapshotting it
-        // guarantees every loop below indexes the same tokens, so `maxDeltas[i]` and `tokens[i]` can never
+        // guarantees every loop below indexes the same tokens, so `allowableTokenDelta[i]` and `tokens[i]` can never
         // drift out of alignment.
         address[] memory tokens = basketTokens.values();
         uint256 basketLength = tokens.length;
 
         if (basketLength == 0) revert EmptyBasket();
         if (!basketTokens.contains(address(subsidyToken))) revert TokenNotInBasket();
-        if (maxDeltas.length != basketLength) revert TokenDeltaLengthMismatch();
+        if (allowableTokenDelta.length != basketLength) revert TokenDeltaLengthMismatch();
 
         // Snapshot the pre-batch balances the delta bounds are measured against. Normalizing them is
         // deferred to the post-batch loop, which reads each token's decimals anyway.
@@ -181,21 +173,11 @@ contract EquivalentExchangeUManager is UManager {
             uint256 balanceBefore = beforeBalances[i];
             uint256 balanceAfter = token.balanceOf(boringVault);
 
-            uint256 delta;
-            uint256 maxDelta;
-
-            // Select the magnitude for whichever direction the balance moved, so both subtractions stay
-            // unsigned and no signed cast is needed. An unchanged balance matches neither branch and
-            // leaves both at zero, which the check below admits.
-            if (balanceAfter < balanceBefore) {
-                delta = balanceBefore - balanceAfter;
-                maxDelta = maxDeltas[i].negativeDelta;
-            } else if (balanceAfter > balanceBefore) {
-                delta = balanceAfter - balanceBefore;
-                maxDelta = maxDeltas[i].positiveDelta;
-            }
-
-            if (delta > maxDelta) revert TokenDeltaOutOfBounds(address(token));
+            // Compute the signed balance delta so it can be checked against the caller's minimum.
+            // toInt256() reverts rather than wrapping to a negative if a balance ever exceeds 2**255 - 1,
+            // e.g. a token that flash-mints an enormous supply into the vault mid-batch.
+            int256 delta = balanceAfter.toInt256() - balanceBefore.toInt256();
+            if (delta < allowableTokenDelta[i]) revert TokenDeltaOutOfBounds(address(token));
 
             // A token's decimals are unlikely to change mid-execution, but a single decimals() read
             // normalizes both the before and after balances, so the two totals cannot disagree on scale.

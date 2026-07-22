@@ -180,11 +180,11 @@ contract EquivalentExchangeUManagerTest is Test {
     }
 
     /// @notice `length` bounds, each pinned to {0, 0}. Only the length matters to the guards below.
-    function _zeroDeltas(uint256 length) internal pure returns (EquivalentExchangeUManager.TokenDelta[] memory d) {
-        d = new EquivalentExchangeUManager.TokenDelta[](length);
+    function _zeroDeltas(uint256 length) internal pure returns (int256[] memory d) {
+        d = new int256[](length);
     }
 
-    function _noDeltas() internal pure returns (EquivalentExchangeUManager.TokenDelta[] memory) {
+    function _noDeltas() internal pure returns (int256[] memory) {
         return _zeroDeltas(0);
     }
 
