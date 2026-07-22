@@ -36,7 +36,9 @@ contract EquivalentExchangeUManager is UManager {
     error InsufficientSubsidy();
     error DanglingApproval();
     error TokenDeltaLengthMismatch();
-    error TokenDeltaOutOfBounds(address token);
+    error TokenDeltaViolation(
+        address token, uint256 balanceBefore, uint256 balanceAfter, int256 balanceDelta, int256 allowedBalanceDelta
+    );
 
     event BasketTokensUpdated(ERC20[] tokens);
     event Executed(
@@ -173,11 +175,7 @@ contract EquivalentExchangeUManager is UManager {
             uint256 balanceBefore = beforeBalances[i];
             uint256 balanceAfter = token.balanceOf(boringVault);
 
-            // Compute the signed balance delta so it can be checked against the caller's minimum.
-            // toInt256() reverts rather than wrapping to a negative if a balance ever exceeds 2**255 - 1,
-            // e.g. a token that flash-mints an enormous supply into the vault mid-batch.
-            int256 delta = balanceAfter.toInt256() - balanceBefore.toInt256();
-            if (delta < allowableTokenDelta[i]) revert TokenDeltaOutOfBounds(address(token));
+            _checkTokenDelta(address(token), balanceBefore, balanceAfter, allowableTokenDelta[i]);
 
             // A token's decimals are unlikely to change mid-execution, but a single decimals() read
             // normalizes both the before and after balances, so the two totals cannot disagree on scale.
@@ -242,6 +240,30 @@ contract EquivalentExchangeUManager is UManager {
 
         // Re-normalize the actual amount transferred for accounting.
         subsidyAmountNormalized = _normalize(subsidyAmount, decimals);
+    }
+
+    /**
+     * @notice Reverts if a basket token's balance change over the batch is below the caller's minimum.
+     * @dev toInt256() reverts rather than wrapping to a negative if a balance ever exceeds 2**255 - 1, e.g. a
+     *      token that flash-mints an enormous supply into the vault mid-batch.
+     * @param token Basket token being checked.
+     * @param balanceBefore Vault balance before the batch.
+     * @param balanceAfter Vault balance after the batch.
+     * @param allowedBalanceDelta Minimum signed change the caller will accept for this token.
+     */
+    function _checkTokenDelta(
+        address token,
+        uint256 balanceBefore,
+        uint256 balanceAfter,
+        int256 allowedBalanceDelta
+    )
+        internal
+        pure
+    {
+        int256 delta = balanceAfter.toInt256() - balanceBefore.toInt256();
+        if (delta < allowedBalanceDelta) {
+            revert TokenDeltaViolation(token, balanceBefore, balanceAfter, delta, allowedBalanceDelta);
+        }
     }
 
     //============================== APPROVAL TRACKING ===============================

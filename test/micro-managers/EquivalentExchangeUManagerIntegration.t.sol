@@ -325,8 +325,16 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         int256[] memory allowableTokenDelta = _allowableTokenDeltas(-999e6, type(int256).min);
 
+        // USDC falls 1000e6 -> 0: balanceBefore 1000e6, balanceAfter 0, delta -1000e6, allowed -999e6.
         vm.expectRevert(
-            abi.encodeWithSelector(EquivalentExchangeUManager.TokenDeltaOutOfBounds.selector, address(usdc))
+            abi.encodeWithSelector(
+                EquivalentExchangeUManager.TokenDeltaViolation.selector,
+                address(usdc),
+                uint256(1000e6),
+                uint256(0),
+                int256(-1000e6),
+                int256(-999e6)
+            )
         );
         uManager.execute(calls, payer, dai, allowableTokenDelta);
     }
@@ -337,7 +345,17 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         int256[] memory allowableTokenDelta = _allowableTokenDeltas(type(int256).min, 1001e18);
 
-        vm.expectRevert(abi.encodeWithSelector(EquivalentExchangeUManager.TokenDeltaOutOfBounds.selector, address(dai)));
+        // DAI rises 0 -> 1000e18: balanceBefore 0, balanceAfter 1000e18, delta 1000e18, allowed 1001e18.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EquivalentExchangeUManager.TokenDeltaViolation.selector,
+                address(dai),
+                uint256(0),
+                uint256(1000e18),
+                int256(1000e18),
+                int256(1001e18)
+            )
+        );
         uManager.execute(calls, payer, dai, allowableTokenDelta);
     }
 
