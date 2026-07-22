@@ -210,7 +210,7 @@ contract EquivalentExchangeUManagerTest is Test {
 
     function test_Execute_RevertWhen_BasketEmpty() external {
         // No basket configured, so execute reverts at the first guard before any token is touched.
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__EmptyBasket.selector);
+        vm.expectRevert(EquivalentExchangeUManager.EmptyBasket.selector);
         uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _noDeltas());
     }
 
@@ -219,7 +219,7 @@ contract EquivalentExchangeUManagerTest is Test {
 
         // tokenB is not part of the basket; the guard fires before any balance is read, so the codeless
         // dummy basket token is never called.
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenNotInBasket.selector);
+        vm.expectRevert(EquivalentExchangeUManager.TokenNotInBasket.selector);
         uManager.execute(_noCalls(), makeAddr("payer"), tokenB, _noDeltas());
     }
 
@@ -238,10 +238,10 @@ contract EquivalentExchangeUManagerTest is Test {
         // one-token basket puts both cases one step either side of the sole valid length.
         uManager.setBasketTokens(_arr(tokenA));
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaLengthMismatch.selector);
+        vm.expectRevert(EquivalentExchangeUManager.TokenDeltaLengthMismatch.selector);
         uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _zeroDeltas(0));
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaLengthMismatch.selector);
+        vm.expectRevert(EquivalentExchangeUManager.TokenDeltaLengthMismatch.selector);
         uManager.execute(_noCalls(), makeAddr("payer"), tokenA, _zeroDeltas(2));
     }
 

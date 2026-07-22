@@ -264,7 +264,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
+        vm.expectRevert(EquivalentExchangeUManager.InsufficientSubsidy.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
@@ -277,7 +277,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(1000e6, 1000e6, 999e18);
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__InsufficientSubsidy.selector);
+        vm.expectRevert(EquivalentExchangeUManager.InsufficientSubsidy.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
@@ -326,9 +326,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(999e6, 0, 0, type(uint256).max);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(usdc)
-            )
+            abi.encodeWithSelector(EquivalentExchangeUManager.TokenDeltaOutOfBounds.selector, address(usdc))
         );
         uManager.execute(calls, payer, dai, maxDeltas);
     }
@@ -339,11 +337,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(type(uint256).max, 0, 0, 999e18);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(dai)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(EquivalentExchangeUManager.TokenDeltaOutOfBounds.selector, address(dai)));
         uManager.execute(calls, payer, dai, maxDeltas);
     }
 
@@ -355,9 +349,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         EquivalentExchangeUManager.TokenDelta[] memory maxDeltas = _maxDeltas(0, 0, 0, type(uint256).max);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                EquivalentExchangeUManager.EquivalentExchangeUManager__TokenDeltaOutOfBounds.selector, address(usdc)
-            )
+            abi.encodeWithSelector(EquivalentExchangeUManager.TokenDeltaOutOfBounds.selector, address(usdc))
         );
         uManager.execute(calls, payer, dai, maxDeltas);
     }
@@ -368,7 +360,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         // Approve more USDC than the swap consumes, leaving a non-zero allowance to the swap route.
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapCalls(2000e6, 1000e6, 1000e18);
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
+        vm.expectRevert(EquivalentExchangeUManager.DanglingApproval.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 
@@ -407,7 +399,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
             )
         );
 
-        vm.expectRevert(EquivalentExchangeUManager.EquivalentExchangeUManager__DanglingApproval.selector);
+        vm.expectRevert(EquivalentExchangeUManager.DanglingApproval.selector);
         uManager.execute(calls, payer, dai, _wideMaxDeltas());
     }
 

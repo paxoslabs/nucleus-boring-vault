@@ -28,12 +28,12 @@ contract EquivalentExchangeUManager is UManager {
     /// @notice Tokens treated as a value-equivalent basket for the vault.
     EnumerableSet.AddressSet internal basketTokens;
 
-    error EquivalentExchangeUManager__EmptyBasket();
-    error EquivalentExchangeUManager__TokenNotInBasket();
-    error EquivalentExchangeUManager__InsufficientSubsidy();
-    error EquivalentExchangeUManager__DanglingApproval();
-    error EquivalentExchangeUManager__TokenDeltaLengthMismatch();
-    error EquivalentExchangeUManager__TokenDeltaOutOfBounds(address token);
+    error EmptyBasket();
+    error TokenNotInBasket();
+    error InsufficientSubsidy();
+    error DanglingApproval();
+    error TokenDeltaLengthMismatch();
+    error TokenDeltaOutOfBounds(address token);
 
     event BasketTokensUpdated(address[] tokens);
     event Executed(
@@ -151,9 +151,9 @@ contract EquivalentExchangeUManager is UManager {
         address[] memory tokens = basketTokens.values();
         uint256 basketLength = tokens.length;
 
-        if (basketLength == 0) revert EquivalentExchangeUManager__EmptyBasket();
-        if (!basketTokens.contains(address(subsidyToken))) revert EquivalentExchangeUManager__TokenNotInBasket();
-        if (maxDeltas.length != basketLength) revert EquivalentExchangeUManager__TokenDeltaLengthMismatch();
+        if (basketLength == 0) revert EmptyBasket();
+        if (!basketTokens.contains(address(subsidyToken))) revert TokenNotInBasket();
+        if (maxDeltas.length != basketLength) revert TokenDeltaLengthMismatch();
 
         // Snapshot the pre-batch balances the delta bounds are measured against. Normalizing them is
         // deferred to the post-batch loop, which reads each token's decimals anyway.
@@ -189,7 +189,7 @@ contract EquivalentExchangeUManager is UManager {
                 maxDelta = maxDeltas[i].positiveDelta;
             }
 
-            if (delta > maxDelta) revert EquivalentExchangeUManager__TokenDeltaOutOfBounds(address(token));
+            if (delta > maxDelta) revert TokenDeltaOutOfBounds(address(token));
 
             // A single decimals() read scales both totals, so they cannot disagree on scale.
             uint8 decimals = token.decimals();
@@ -242,7 +242,7 @@ contract EquivalentExchangeUManager is UManager {
         uint256 available = balance < allowance ? balance : allowance;
         uint256 normalizedAvailable = _normalize(available, decimals);
 
-        if (normalizedAvailable < shortfall) revert EquivalentExchangeUManager__InsufficientSubsidy();
+        if (normalizedAvailable < shortfall) revert InsufficientSubsidy();
 
         subsidyAmount = _denormalize(shortfall, decimals);
 
@@ -294,7 +294,7 @@ contract EquivalentExchangeUManager is UManager {
             if (amount == 0) continue;
 
             if (ERC20(target).allowance(boringVault, spender) != 0) {
-                revert EquivalentExchangeUManager__DanglingApproval();
+                revert DanglingApproval();
             }
         }
     }
