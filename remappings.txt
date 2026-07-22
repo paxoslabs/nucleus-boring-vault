@@ -3,6 +3,7 @@
 forge-std/=lib/forge-std/src/
 @ds-test/=lib/forge-std/lib/ds-test/src/
 ds-test/=lib/forge-std/lib/ds-test/src/
+@openzeppelin-v5.0.1/=lib/openzeppelin-contracts-v5.0.1/
 @openzeppelin/=lib/openzeppelin-contracts/
 @ion-protocol/=lib/ion-protocol/src/
 @aave/core-v3/=lib/aave-v3-core/
