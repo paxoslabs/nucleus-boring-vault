@@ -151,8 +151,9 @@ contract EquivalentExchangeUManager is UManager {
         requiresAuth
         returns (uint256 subsidyAmount)
     {
-        // Read the basket once into memory. Every loop below indexes this snapshot, so a basket change
-        // mid-batch cannot leave `maxDeltas[i]` and `tokens[i]` pointing at different tokens.
+        // Read the basket once into memory. The set should not change mid-execution, but snapshotting it
+        // guarantees every loop below indexes the same tokens, so `maxDeltas[i]` and `tokens[i]` can never
+        // drift out of alignment.
         address[] memory tokens = basketTokens.values();
         uint256 basketLength = tokens.length;
 
@@ -196,7 +197,8 @@ contract EquivalentExchangeUManager is UManager {
 
             if (delta > maxDelta) revert TokenDeltaOutOfBounds(address(token));
 
-            // A single decimals() read scales both totals, so they cannot disagree on scale.
+            // A token's decimals are unlikely to change mid-execution, but a single decimals() read
+            // normalizes both the before and after balances, so the two totals cannot disagree on scale.
             uint8 decimals = token.decimals();
             totalBefore += _normalize(balanceBefore, decimals);
             totalAfter += _normalize(balanceAfter, decimals);
