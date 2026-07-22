@@ -231,10 +231,9 @@ contract EquivalentExchangeUManager is UManager {
 
         if (normalizedAvailable < shortfall) revert InsufficientSubsidy();
 
+        // Round-up inverse of _normalize, so subsidyAmount <= available is guaranteed by the guard above:
+        // shortfall <= normalizedAvailable implies _denormalize(shortfall) <= available in both decimal cases.
         subsidyAmount = _denormalize(shortfall, decimals);
-
-        // Defensive: never transfer more than the available amount we observed.
-        if (subsidyAmount > available) subsidyAmount = available;
 
         subsidyToken.safeTransferFrom(subsidyPayer, boringVault, subsidyAmount);
 
