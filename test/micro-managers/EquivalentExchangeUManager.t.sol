@@ -9,7 +9,7 @@ import { EquivalentExchangeUManager } from "src/micro-managers/EquivalentExchang
 contract EquivalentExchangeUManagerTest is Test {
 
     // Re-declared so the test can build the expected event for vm.expectEmit.
-    event BasketTokensUpdated(address[] tokens);
+    event BasketTokensUpdated(ERC20[] tokens);
 
     EquivalentExchangeUManager internal uManager;
 
@@ -130,14 +130,10 @@ contract EquivalentExchangeUManagerTest is Test {
         assertFalse(uManager.isBasketToken(tokenC));
     }
 
-    function test_SetBasketTokens_DeduplicatesInput() external {
-        // The underlying EnumerableSet ignores repeated adds, so duplicates collapse to one entry.
+    function test_SetBasketTokens_RevertWhen_DuplicateToken() external {
+        // Duplicates in the input are rejected rather than silently collapsed.
+        vm.expectRevert(abi.encodeWithSelector(EquivalentExchangeUManager.DuplicateToken.selector, address(tokenA)));
         uManager.setBasketTokens(_arr(tokenA, tokenA, tokenB));
-
-        address[] memory stored = uManager.getBasketTokens();
-        assertEq(stored.length, 2);
-        assertEq(stored[0], address(tokenA));
-        assertEq(stored[1], address(tokenB));
     }
 
     function test_SetBasketTokens_IdempotentWhenReapplyingSameSet() external {
@@ -153,26 +149,10 @@ contract EquivalentExchangeUManagerTest is Test {
     // ============================== setBasketTokens: events ==============================
 
     function test_SetBasketTokens_EmitsResultingSet() external {
-        address[] memory expected = new address[](2);
-        expected[0] = address(tokenA);
-        expected[1] = address(tokenB);
-
         vm.expectEmit(true, true, true, true, address(uManager));
-        emit BasketTokensUpdated(expected);
+        emit BasketTokensUpdated(_arr(tokenA, tokenB));
 
         uManager.setBasketTokens(_arr(tokenA, tokenB));
-    }
-
-    function test_SetBasketTokens_EmitsDeduplicatedSet() external {
-        // The event reflects the stored set, so a duplicated input emits only the unique entries.
-        address[] memory expected = new address[](2);
-        expected[0] = address(tokenA);
-        expected[1] = address(tokenB);
-
-        vm.expectEmit(true, true, true, true, address(uManager));
-        emit BasketTokensUpdated(expected);
-
-        uManager.setBasketTokens(_arr(tokenA, tokenA, tokenB));
     }
 
     // ============================== setBasketTokens: access control ==============================

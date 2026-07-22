@@ -29,13 +29,14 @@ contract EquivalentExchangeUManager is UManager {
     EnumerableSet.AddressSet internal basketTokens;
 
     error EmptyBasket();
+    error DuplicateToken(address token);
     error TokenNotInBasket();
     error InsufficientSubsidy();
     error DanglingApproval();
     error TokenDeltaLengthMismatch();
     error TokenDeltaOutOfBounds(address token);
 
-    event BasketTokensUpdated(address[] tokens);
+    event BasketTokensUpdated(ERC20[] tokens);
     event Executed(
         address indexed caller,
         ERC20 indexed subsidyToken,
@@ -91,15 +92,18 @@ contract EquivalentExchangeUManager is UManager {
             basketTokens.remove(basketTokens.at(i - 1));
         }
 
-        // Add new tokens.
+        // Add new tokens, reverting on any duplicate so the stored basket is an exact,
+        // order-preserving image of the input.
         uint256 newLength = tokens.length;
         for (uint256 i; i < newLength; ++i) {
-            basketTokens.add(address(tokens[i]));
+            address token = address(tokens[i]);
+            // add() returns false when the token is already present in the set.
+            if (!basketTokens.add(token)) revert DuplicateToken(token);
         }
 
-        // Emit the resulting set (deduplicated, in stored order) rather than the raw input, so the
-        // event is an accurate record of the basket's actual contents.
-        emit BasketTokensUpdated(basketTokens.values());
+        // Duplicates revert above, so the stored set matches the input exactly. Emit the calldata
+        // directly rather than reading the set back out of storage.
+        emit BasketTokensUpdated(tokens);
     }
 
     /**
