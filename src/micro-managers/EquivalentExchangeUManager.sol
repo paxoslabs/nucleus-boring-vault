@@ -81,8 +81,9 @@ contract EquivalentExchangeUManager is UManager {
 
     /**
      * @notice Sets the basket of value-equivalent tokens used for accounting.
-     * @custom:access OWNER_ROLE / MULTISIG_ROLE should be granted authority - redefines which tokens the value
-     * invariant covers and the order `maxDeltas` binds to, so a wrong basket silently leaves tokens unbounded.
+     * @dev The basket is exactly the set of tokens whose balance changes `execute` checks, and defines the
+     * order `maxDeltas` binds to.
+     * @custom:access OWNER_ROLE / MULTISIG_ROLE should be granted authority.
      */
     function setBasketTokens(ERC20[] calldata tokens) external requiresAuth {
         // Remove all existing tokens by popping from the end. Length shrinks on
