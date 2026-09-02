@@ -1,11 +1,11 @@
 {
-  "nameEntropy": "exampleCCIP",
-  "base": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-  "boringVaultAndBaseDecimals": "6",
+  "nameEntropy": "PAXGy",
+  "base": "0x64dcee23BBc4C788e225867e74Ec132E647F3053",
+  "protocolAdmin": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
+  "boringVaultAndBaseDecimals": "18",
   "boringVault": {
-    "boringVaultName": "Example CCIP Vault",
-    "boringVaultSymbol": "XCCIP",
+    "boringVaultName": "PAXGy",
+    "boringVaultSymbol": "PAXGy",
     "beforeTransferHookAddress": "0x0000000000000000000000000000000000000000",
     "address": "0x0000000000000000000000000000000000000000"
   },
@@ -16,9 +16,9 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "accountant": {
-    "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "allowedExchangeRateChangeUpper": "10003",
-    "allowedExchangeRateChangeLower": "9998",
+    "payoutAddress": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
+    "allowedExchangeRateChangeUpper": "10004",
+    "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
     "performanceFee": "0",
@@ -29,49 +29,47 @@
     "maxGasForPeer": 200000,
     "minGasForPeer": 0,
     "setupCCIPConfigs": true,
-    "peerChainId": 8453,
-    "peerCcipChainSelector": "15971525489660198786",
+    "peerChainId": 1,
+    "peerCcipChainSelector": "5009297550715157269",
     "ccipOutboundFinality": 0,
     "ccipInboundFinality": 0,
     "ccipOutboundRateLimit": {
-      "isEnabled": false,
-      "capacity": "0",
-      "rate": "0"
+      "isEnabled": true,
+      "capacity": "230425365224203880000000000",
+      "rate": "11521268261210194000"
     },
     "ccipInboundRateLimit": {
-      "isEnabled": false,
-      "capacity": "0",
-      "rate": "0"
+      "isEnabled": true,
+      "capacity": "230425365224203880000000000",
+      "rate": "11521268261210194000"
     },
     "withdrawAssets": [
-      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
     ],
-    "withdrawAssetFlatFees": [0],
-    "withdrawAssetPercentFees": [0],
+    "withdrawAssetFlatFees": [],
+    "withdrawAssetPercentFees": [],
     "depositAssets": [
-      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
     ],
-    "depositAssetFlatFees": [0],
-    "depositAssetPercentFees": [0],
+    "depositAssetFlatFees": [],
+    "depositAssetPercentFees": [],
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
-    "strategist": "0x0000000000417626Ef34D62C4DC189b021603f2F",
+    "strategist": "0xa77423F8da11199b3b7fA0AD1DEaB701B81462b5",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "distributorCodeDepositor": {
-    "deploy": false,
-    "supplyCap": "1000000000000000",
+    "deploy": true,
+    "supplyCap": "230425365224203880000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "",
     "nativeSupported": false
   },
   "withdrawQueue": {
-    "name": "Example CCIP Withdraw Queue",
-    "symbol": "XCCIPWQ",
-    "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "minimumOrderSize": "1000000",
-    "processorAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F"
+    "name": "PAXGy Withdraw Queue",
+    "symbol": "PAXGyQ",
+    "feeRecipient": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
+    "minimumOrderSize": "230425365224203",
+    "processorAddress": "0x0a3e6fBE0435F105D20d9ed289cB65F651cEe6e8"
   }
 }
