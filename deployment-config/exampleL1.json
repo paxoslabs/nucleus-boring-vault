@@ -25,7 +25,7 @@
     "address": "0x00000000004F96C07B83e86600D86F9479bB43fa"
   },
   "teller": {
-    "maxGasForPeer": 100000,
+    "maxGasForPeer": 150000,
     "minGasForPeer": 0,
     "peerEid": 30280,
     "setupLZConfigs": false,

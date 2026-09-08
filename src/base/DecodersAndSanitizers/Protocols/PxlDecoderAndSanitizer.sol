@@ -9,11 +9,11 @@ import { IWithdrawQueue } from "src/interfaces/Roles/IWithdrawQueue.sol";
 
 import { TransitStation } from "src/transit/TransitStation.sol";
 
-abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
+abstract contract PxlDecoderAndSanitizer is BaseDecoderAndSanitizer {
 
-    error NucleusDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
+    error PxlDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
 
-    // @desc deposit into nucleus via the teller
+    // @desc deposit into pxl via the teller
     // @tag depositAsset:address:ERC20 to deposit, must be supported and approved
     function deposit(
         ERC20 depositAsset,
@@ -27,7 +27,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         addressesFound = abi.encodePacked(depositAsset);
     }
 
-    // @desc deposit into nucleus via the predicate proxy
+    // @desc deposit into pxl via the predicate proxy
     // @tag depositAsset:address:ERC20 to deposit, must be supported and approved
     // @tag recipient:address:receiver of shares
     // @tag teller:address:teller contract to deposit with
@@ -110,7 +110,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         addressesFound = abi.encodePacked(offer, want, userRequest.recipient);
     }
 
-    // @desc claim fees from a nucleus vault, must be authorized to call
+    // @desc claim fees from a pxl vault, must be authorized to call
     // @tag token:address:ERC20 to claim fees with
     function claimFees(ERC20 token) external pure returns (bytes memory addressesFound) {
         addressesFound = abi.encodePacked(token);
@@ -129,7 +129,7 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         returns (bytes memory addressesFound)
     {
         if (to != address(0) || address(asset) != address(0) || assetAmount != 0 || from != boringVault) {
-            revert NucleusDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
+            revert PxlDecoderAndSanitizer__ExitFunctionForInternalBurnUseOnly();
         }
     }
 
@@ -243,6 +243,20 @@ abstract contract NucleusDecoderAndSanitizer is BaseDecoderAndSanitizer {
         }
 
         addressesFound = abi.encodePacked(addressesFound, subsidyPayer, subsidyToken);
+    }
+
+    function manageVaultWithMerkleVerification(
+        bytes32[][] calldata manageProofs,
+        address[] calldata decodersAndSanitizers,
+        address[] calldata targets,
+        bytes[] calldata targetData,
+        uint256[] calldata values
+    )
+        external
+        pure
+        returns (bytes memory addressesFound)
+    {
+        // Nothing to decode. The other vault will do it's own decoding
     }
 
 }

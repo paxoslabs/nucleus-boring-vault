@@ -17,7 +17,7 @@ import { ERC4626DecoderAndSanitizer } from "./Protocols/ERC4626DecoderAndSanitiz
 import { CurveDecoderAndSanitizer } from "./Protocols/CurveDecoderAndSanitizer.sol";
 import { BalancerV2DecoderAndSanitizer } from "./Protocols/BalancerV2DecoderAndSanitizer.sol";
 import { AeraVaultDecoderAndSanitizer } from "./Protocols/AeraVaultDecoderAndSanitizer.sol";
-import { NucleusDecoderAndSanitizer } from "./Protocols/NucleusDecoderAndSanitizer.sol";
+import { PxlDecoderAndSanitizer } from "./Protocols/PxlDecoderAndSanitizer.sol";
 import { MorphoPositionOracleDecoderAndSanitizer } from "./Protocols/MorphoPositionOracleDecoderAndSanitizer.sol";
 
 contract unifiETHDecoderAndSanitizer is
@@ -30,7 +30,7 @@ contract unifiETHDecoderAndSanitizer is
     CurveDecoderAndSanitizer,
     BalancerV2DecoderAndSanitizer,
     AeraVaultDecoderAndSanitizer,
-    NucleusDecoderAndSanitizer,
+    PxlDecoderAndSanitizer,
     MorphoPositionOracleDecoderAndSanitizer
 {
 

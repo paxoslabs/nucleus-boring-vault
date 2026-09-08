@@ -1,11 +1,11 @@
 {
-  "nameEntropy": "PAXGy",
-  "base": "0x130493BCD68Ca6aE7b15566A757Bd6699D73467D",
+  "nameEntropy": "fdfUSDGt1",
+  "base": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
   "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-  "boringVaultAndBaseDecimals": "18",
+  "boringVaultAndBaseDecimals": "6",
   "boringVault": {
-    "boringVaultName": "PAXGy",
-    "boringVaultSymbol": "PAXGy",
+    "boringVaultName": "USDG Treasury",
+    "boringVaultSymbol": "fdfUSDGt",
     "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000000000000000000000000000000000"
   },
@@ -17,7 +17,7 @@
   },
   "accountant": {
     "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "allowedExchangeRateChangeUpper": "10004",
+    "allowedExchangeRateChangeUpper": "10002",
     "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
@@ -29,25 +29,33 @@
     "minGasForPeer": 0,
     "peerEid": 0,
     "setupLZConfigs": false,
-    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
-      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+      "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
     ],
+    "withdrawAssetFlatFees":    [0, 800000, 800000],
+    "withdrawAssetPercentFees": [0, 5, 0],
     "depositAssets": [
-      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+      "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
     ],
+    "depositAssetFlatFees":    [0, 800000, 800000],
+    "depositAssetPercentFees": [0, 5, 0],
     "dvnIfNoDefault": {
       "required": [
       ],
       "optional": [
       ],
-      "blockConfirmationsRequiredIfNoDefault": 15,
+      "blockConfirmationsRequiredIfNoDefault": 0,
       "optionalThreshold": 0
     },
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
-    "strategist": "0x40617CF21a5d4ecae4f7a6656f85bcCaA760672a",
+    "strategist": "0xb667a00cd071Ae5Bf256B3566e33C71D457839fA",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "address": "0x0000000000000000000000000000000000000000"
   },
@@ -59,10 +67,10 @@
     "nativeSupported": false
   },
   "withdrawQueue": {
-    "name": "PAXGy Withdraw Queue",
-    "symbol": "PAXGyQ",
+    "name": "USDG Treasury Withdraw Queue",
+    "symbol": "fdfUSDGtQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "minimumOrderSize": "1000000000000000",
-    "processorAddress": "0xaA0e7f8b3bf12e48b0ff4AB7D30B5f8dDf263372"
+    "minimumOrderSize": "5000000",
+    "processorAddress": "0xCEEA4674CF5E2B6Ca548B006da5E00D9a9343176"
   }
 }

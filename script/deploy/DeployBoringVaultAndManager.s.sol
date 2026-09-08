@@ -11,18 +11,18 @@ import "src/helper/Constants.sol";
 
 contract DeployBoringVaultAndManager is BaseScript {
 
-    string constant NAME = "PaxosLabsRewardsV2Interceptor";
-    string constant SYMBOL = "pxlRv2I";
+    string constant NAME = "SubsidyVault";
+    string constant SYMBOL = "SV";
     address constant BALANCER_VAULT = 0x0000000000000000000000000000000000000000;
     uint8 constant DECIMALS = 6;
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: BoringVault");
-    bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
-        makeSalt(broadcaster, false, "PaxosLabsRewardsV2Interceptor: ManagerWithMerkleVerification");
-
     function run() public broadcast {
-        address STRATEGIST_ADDRESS = 0xb62C8d83A56626921709493F8f1381dE8339C504;
+        bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "SubsidyVault: RolesAuthority");
+        bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "SubsidyVault: BoringVault");
+        bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
+            makeSalt(broadcaster, false, "SubsidyVault: ManagerWithMerkleVerification");
+
+        address STRATEGIST_ADDRESS = 0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3;
         // deploy a roles authority
         RolesAuthority rolesAuthority = RolesAuthority(
             CREATEX.deployCreate3(

@@ -38,7 +38,7 @@ import { EtherFiDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Proto
 import {
     LayerZeroOFTDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/LayerZeroOFTDecoderAndSanitizer.sol";
-import { NucleusDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/NucleusDecoderAndSanitizer.sol";
+import { PxlDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/PxlDecoderAndSanitizer.sol";
 import {
     CoreWriterDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/CoreWriterDecoderAndSanitizer.sol";
@@ -46,6 +46,7 @@ import { KhalaniDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Proto
 import {
     CowSwapHelperDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/CowSwapHelperDecoderAndSanitizer.sol";
+import { SkyDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/SkyDecoderAndSanitizer.sol";
 
 contract GenericDecoderAndSanitizer is
     PendleRouterDecoderAndSanitizer,
@@ -65,10 +66,11 @@ contract GenericDecoderAndSanitizer is
     MorphoBlueDecoderAndSanitizer,
     EtherFiDecoderAndSanitizer,
     LayerZeroOFTDecoderAndSanitizer,
-    NucleusDecoderAndSanitizer,
+    PxlDecoderAndSanitizer,
     CoreWriterDecoderAndSanitizer,
     KhalaniDecoderAndSanitizer,
-    CowSwapHelperDecoderAndSanitizer
+    CowSwapHelperDecoderAndSanitizer,
+    SkyDecoderAndSanitizer
 {
 
     constructor(

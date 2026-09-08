@@ -270,7 +270,7 @@ contract DecoderCustomTypes {
         ETH_WETH
     }
 
-    // ========================================= NUCLEUS =========================================
+    // ========================================= PXL =========================================
 
     struct AtomicRequestUCP {
         uint64 deadline; // Timestamp when request expires
