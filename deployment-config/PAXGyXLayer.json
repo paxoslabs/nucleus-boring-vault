@@ -59,7 +59,7 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "distributorCodeDepositor": {
-    "deploy": true,
+    "deploy": false,
     "supplyCap": "230425365224203880000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "",
