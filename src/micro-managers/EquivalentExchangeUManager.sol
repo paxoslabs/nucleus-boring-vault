@@ -3,6 +3,7 @@ pragma solidity 0.8.21;
 
 import { UManager, ERC20 } from "src/micro-managers/UManager.sol";
 import { IRateProvider } from "src/interfaces/IRateProvider.sol";
+import { BalancerVault } from "src/interfaces/BalancerVault.sol";
 import { SafeTransferLib } from "@solmate/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -24,6 +25,17 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
  *      Which basket tokens are oracle-priced is recorded as a bitmap (`oracleFlags`): bit `i` is set iff
  *      the basket token at index `i` (in `basketTokens` order) is oracle-priced. A basket of only 1:1
  *      tokens (such as USD stablecoins) therefore requires no oracle lookups.
+ *
+ *      Scope: this manager only guarantees the aggregate reference-asset value of the BASKET tokens does not
+ *      decrease across a batch. Tokens the vault holds that are not in the basket are outside the value
+ *      invariant and the per-token delta bounds entirely -- their safety rests solely on the merkle root not
+ *      authorizing a call that moves or approves them. Every value-bearing token the vault may hold or route
+ *      through should therefore be a basket token. (The dangling-approval check is the one place non-basket
+ *      tokens are inspected, and only for leftover allowances.)
+ *
+ *      Fee-on-transfer basket tokens are unsupported: _coverShortfall credits the subsidy at the amount it
+ *      sends, not the smaller amount the vault actually receives, so a transfer fee on the subsidy token would
+ *      let the value invariant pass while leaving the vault short.
  *
  *      Subsidy, if required, is pulled from an approval-based subsidy payer. The subsidy payer must
  *      pre-approve the UManager to spend the subsidy token; if the approved/available amount is
@@ -68,6 +80,10 @@ contract EquivalentExchangeUManager is UManager {
     /// @notice Selector for increaseAllowance(address,uint256).
     bytes4 internal constant INCREASE_ALLOWANCE_SELECTOR = 0x39509351;
 
+    /// @notice Selector for increaseApproval(address,uint256), a non-standard allowance-raising variant some
+    /// older tokens expose instead of increaseAllowance. Same (spender, amount) layout.
+    bytes4 internal constant INCREASE_APPROVAL_SELECTOR = 0xd73dd623;
+
     /// @notice Basket tokens whose aggregate reference-asset value this UManager preserves across an
     /// `execute` batch.
     EnumerableSet.AddressSet internal basketTokens;
@@ -94,6 +110,7 @@ contract EquivalentExchangeUManager is UManager {
     error InsufficientSubsidy();
     error InvalidSubsidyPayer();
     error DanglingApproval();
+    error FlashLoanInBatch();
     error TokenDeltaLengthMismatch();
     error TokenDeltaViolation(
         address token, uint256 balanceBefore, uint256 balanceAfter, int256 balanceDelta, int256 allowedBalanceDelta
@@ -153,7 +170,7 @@ contract EquivalentExchangeUManager is UManager {
         uint256[] values;
     }
 
-    constructor(address _owner, address _manager, address _boringVault) UManager(_owner, _manager, _boringVault) { }
+    constructor(address _owner, address _manager) UManager(_owner, _manager) { }
 
     /**
      * @notice Sets the basket of tokens used for accounting, along with each token's reference-asset price source.
@@ -271,9 +288,9 @@ contract EquivalentExchangeUManager is UManager {
         requiresAuth
         returns (uint256 subsidyAmount)
     {
-        // Read the basket once into memory. The set should not change mid-execution, but snapshotting it
-        // guarantees every loop below indexes the same tokens, so `allowableTokenDelta[i]`, `tokens[i]` and
-        // the `oracleFlags` bit `i` can never drift out of alignment.
+        // Read the basket once into memory. The loops index tokens, allowableTokenDelta and oracleFlags by
+        // the same i, so any configuration that could update the basket or its oracles mid-execution would be
+        // invalid.
         address[] memory tokens = basketTokens.values();
         uint256 basketLength = tokens.length;
 
@@ -317,8 +334,8 @@ contract EquivalentExchangeUManager is UManager {
         // changes to subsidy behavior.
         assert(totalAfter >= totalBefore);
 
-        // Ensure no approvals to basket tokens remain outstanding.
-        _enforceNoDanglingApprovals(calls);
+        // Calldata checks over the executed batch: reject any flashLoan call and any leftover approval.
+        _enforceCalldataChecks(calls);
 
         emit Executed(msg.sender, subsidyToken, totalBefore, totalAfter, subsidyAmount, subsidyAmountNormalized);
     }
@@ -369,15 +386,17 @@ contract EquivalentExchangeUManager is UManager {
                 // A zero rate cannot value the token, so reject it rather than mispricing the basket.
                 if (baseRate == 0) revert InvalidRate(token);
             }
+            uint8 tokenDecimals = ERC20(token).decimals();
+            // Reject any config _unitRate can't rescale losslessly: when rateDecimals + tokenDecimals exceeds
+            // 2 * NORMALIZED_DECIMALS, its exponent would go negative (a lossy divide), which is not
+            // conservative across a mixed basket. Realistic configs (<= 18-dec oracle, <= 18-dec token) never
+            // hit this, and with baseRate > 0 the resulting rate is then always > 0.
+            if (uint256(rateDecimals) + tokenDecimals > 2 * NORMALIZED_DECIMALS) revert InvalidRate(token);
+
             // Fold the oracle's own precision and the token's decimals into one per-native-unit rate, so
             // nothing downstream needs either. Applying the one rate to both balances keeps the two totals
             // from disagreeing on price or scale.
-            uint256 rate = _unitRate(baseRate, rateDecimals, ERC20(token).decimals());
-            // Even a nonzero baseRate can produce a zero unit rate: when rateDecimals + tokenDecimals exceeds
-            // 2 * NORMALIZED_DECIMALS, _unitRate divides and can floor to zero for a small enough baseRate. A
-            // zero unit rate would value this token at zero in both totals, silently dropping it from the
-            // aggregate value invariant, so reject it here rather than misprice the basket.
-            if (rate == 0) revert InvalidRate(token);
+            uint256 rate = _unitRate(baseRate, rateDecimals, tokenDecimals);
 
             // Capture the subsidy token's per-unit rate as it is valued, so `_coverShortfall` can reuse it.
             if (token == subsidyToken) subsidyRate = rate;
@@ -451,42 +470,49 @@ contract EquivalentExchangeUManager is UManager {
         }
     }
 
-    //============================== APPROVAL TRACKING ===============================
-
     /**
-     * @notice Ensures that any ERC20#approve or ERC20#increaseAllowance calls made
-     *         by the vault to basket tokens during the batch have been fully reset
-     *         to zero by the end of execution.
+     * @notice Scans the batch's calldata and reverts in the following cases:
+     *
+     * - A flashLoan call. It would run a second, separately merkle-verified batch inside the callback
+     *   (manager.flashLoan -> Balancer -> manager.receiveFlashLoan), which this contract's value invariant,
+     *   delta bounds and approval check never see. Rejecting the selector keeps every batch to one inspected
+     *   layer.
+     * - A leftover allowance. Any approve whose allowance is still non-zero after the batch is a standing
+     *   drain vector, on basket and non-basket tokens alike.
+     *
      * @param calls Batch of merkle-verified BoringVault actions.
      */
-    function _enforceNoDanglingApprovals(ManageCalls calldata calls) internal view {
+    function _enforceCalldataChecks(ManageCalls calldata calls) internal view {
         uint256 callsLength = calls.targets.length;
 
         for (uint256 i; i < callsLength; ++i) {
             address target = calls.targets[i];
-            if (!basketTokens.contains(target)) continue;
-
             bytes calldata targetData = calls.targetData[i];
 
             // Length check is >= 68 because some token contracts (e.g., compiled
             // with older Solidity versions) may tolerate trailing calldata on
-            // low-level calls rather than reverting. approve(address,uint256) and
-            // increaseAllowance(address,uint256) both require 4 + 32 + 32 = 68
-            // bytes at minimum.
+            // low-level calls rather than reverting. approve, increaseAllowance
+            // and increaseApproval all take (address,uint256), so they require
+            // 4 + 32 + 32 = 68 bytes at minimum. Flash loan calls are also not
+            // affected by this check because they require 132+ bytes.
             if (targetData.length < 68) continue;
 
             bytes4 selector = bytes4(targetData[0:4]);
-            if (selector != ERC20.approve.selector && selector != INCREASE_ALLOWANCE_SELECTOR) continue;
 
-            // Spender is the first argument, located at byte offset 4 (selector)
-            // + 32 (zero-padded address) = 36. Amount is the second argument,
-            // spanning the next 32 bytes. This layout is identical for approve
-            // and increaseAllowance.
+            // Reject flashLoan calls: they open a nested, uninspected manage layer that may contain unchecked
+            // approvals.
+            if (selector == BalancerVault.flashLoan.selector) revert FlashLoanInBatch();
+
+            if (
+                selector != ERC20.approve.selector && selector != INCREASE_ALLOWANCE_SELECTOR
+                    && selector != INCREASE_APPROVAL_SELECTOR
+            ) continue;
+
+            // Spender is the first argument (offset 4, zero-padded address), amount the second; this layout
+            // is identical for approve, increaseAllowance and increaseApproval.
             (address spender, uint256 amount) = abi.decode(targetData[4:68], (address, uint256));
-            // A zero-amount approval cannot create a dangling allowance, so it
-            // does not need to be checked. Note: this only skips the current call;
-            // any preceding or subsequent non-zero approval to the same token and
-            // spender will still be checked normally.
+            // A zero-amount approval cannot create a dangling allowance. This only skips the current call;
+            // any other non-zero approval to the same token and spender is still checked.
             if (amount == 0) continue;
 
             if (ERC20(target).allowance(boringVault, spender) != 0) {
@@ -509,11 +535,13 @@ contract EquivalentExchangeUManager is UManager {
     /**
      * @notice Converts an oracle rate into a per-native-unit rate, accounting for both the oracle's output
      *         precision and the token's decimals in a single power-of-ten rescale.
-     * @dev The oracle reports a whole-token price scaled to `rateDecimals`; one whole token spans
-     * `10 ** tokenDecimals` native units. Restating that as the reference-asset value of one native unit at
-     * NORMALIZED_DECIMALS is a rescale by `2 * NORMALIZED_DECIMALS - rateDecimals - tokenDecimals`: a
-     * lossless multiply when that exponent is >= 0 (the common case, e.g. 8-dec rate + 6-to-18-dec token),
-     * else a divide that can floor -- which only understates value and over-pulls subsidy, both safe.
+     * @dev A whole token costs `rate` at `rateDecimals` and is `10 ** tokenDecimals` native units, so one
+     * native unit is worth `rate / 10 ** (rateDecimals + tokenDecimals)` reference units. That is scaled up
+     * by `10 ** (2 * NORMALIZED_DECIMALS)` -- once to reach NORMALIZED_DECIMALS, once more to pre-cancel the
+     * NORMALIZED_ONE that `_tokenAmountToReferenceValue` later divides by -- giving the net multiply below.
+     * `_checkAndValueBasket` keeps `rateDecimals + tokenDecimals <= 2 * NORMALIZED_DECIMALS`, so the exponent
+     * stays non-negative: the rescale is a multiply, not the flooring divide a negative exponent would force.
+     * A larger sum underflows that subtraction and reverts.
      * @param rate Whole-token price from the oracle, scaled to `rateDecimals` (NORMALIZED_ONE with
      * `rateDecimals == NORMALIZED_DECIMALS` for a 1:1 token).
      * @param rateDecimals Decimals of `rate`.
@@ -521,16 +549,7 @@ contract EquivalentExchangeUManager is UManager {
      * @return Reference-asset value of one native token unit, scaled to NORMALIZED_DECIMALS.
      */
     function _unitRate(uint256 rate, uint8 rateDecimals, uint8 tokenDecimals) internal pure returns (uint256) {
-        // The net power of ten is `grow - shrink`. `shrink` strips the two input scales: the oracle's own
-        // precision (`rateDecimals`) and the token's decimals (converting whole token -> native unit).
-        // `grow` adds back two factors of NORMALIZED_DECIMALS: one to express the result at 18 decimals,
-        // one to pre-cancel the NORMALIZED_ONE that `_tokenAmountToReferenceValue` divides by afterward.
-        uint256 shrink = uint256(rateDecimals) + tokenDecimals;
-        uint256 grow = 2 * NORMALIZED_DECIMALS;
-        if (shrink <= grow) {
-            return rate * (10 ** (grow - shrink));
-        }
-        return rate / (10 ** (shrink - grow));
+        return rate * (10 ** (2 * NORMALIZED_DECIMALS - uint256(rateDecimals) - tokenDecimals));
     }
 
     /**

@@ -50,8 +50,7 @@ contract EEUManagerDeployWiringTest is Test {
         rolesAuthority.setUserRole(strategistEOA, STRATEGIST_ROLE, true);
 
         // --- Exactly what DeployBoringVaultAndManager does for the UManager ---
-        EquivalentExchangeUManager uManager =
-            new EquivalentExchangeUManager(broadcaster, address(manager), address(boringVault));
+        EquivalentExchangeUManager uManager = new EquivalentExchangeUManager(broadcaster, address(manager));
         uManager.setAuthority(rolesAuthority);
         rolesAuthority.setRoleCapability(
             STRATEGIST_ROLE, address(uManager), EquivalentExchangeUManager.execute.selector, true
@@ -134,8 +133,7 @@ contract EEUManagerDeployWiringTest is Test {
         BoringVault boringVault = new BoringVault(broadcaster, "BV", "BV", 18);
         ManagerWithMerkleVerification manager =
             new ManagerWithMerkleVerification(broadcaster, address(boringVault), address(0));
-        EquivalentExchangeUManager uManager =
-            new EquivalentExchangeUManager(broadcaster, address(manager), address(boringVault));
+        EquivalentExchangeUManager uManager = new EquivalentExchangeUManager(broadcaster, address(manager));
 
         // Basket configured BEFORE the ownership transfer, exactly as step 13 does it. The broadcaster is
         // still the owner here, so the owner-gated setBasketTokens succeeds.

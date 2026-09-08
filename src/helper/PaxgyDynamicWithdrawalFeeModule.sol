@@ -12,14 +12,16 @@ import { FixedPointMathLib } from "solmate/utils/FixedPointMathLib.sol";
  * pricing error favors remaining shareholders rather than the withdrawer.
  * @dev The accountant quotes PAXG at its pegged price (1 PAXG = 1 XAU) in both directions. This module
  * charges a withdraw fee with two components:
- *   1. A dynamic depeg fee equal to the excess of PAXG's market value in gold over the peg, so the
+ *   1. A fixed fee of FIXED_FEE_BPS basis points, charged on every withdrawal regardless of price.
+ *   2. A dynamic depeg fee equal to the excess of PAXG's market value in gold over the peg, so the
  *      withdrawer is effectively paid out at max(1, marketPrice) XAU per PAXG, where marketPrice is the
  *      market PAXG:XAU rate. When PAXG trades at or below peg (marketPrice <= 1) this component is zero - the
  *      pegged valuation already
  *      favors the vault.
- *   2. A fixed fee of FIXED_FEE_BPS basis points, charged on every withdrawal regardless of price.
- * The two components are summed and the total is capped at the order amount so the fee can never exceed
- * the shares offered.
+ * The two fees are applied sequentially, not summed on the same base: the fixed fee is taken first and the
+ * dynamic depeg fee is levied only on the remainder (amount - fixedFee), so the overlap between them is not
+ * double-charged. Because each fee is bounded by the base it is levied on, the total can never exceed the
+ * shares offered.
  *
  * The fee is taken in shares (the offer asset). The consuming WithdrawQueue deducts it from the order's
  * offer amount before the withdraw and routes it to the fee recipient (the vault). NOTE: shares sent to
@@ -104,12 +106,15 @@ contract PaxgyDynamicWithdrawalFeeModule is IFeeModule {
 
     /**
      * @notice Calculate the share-denominated withdraw fee for an order.
-     * @dev feeAmount = min(amount, dynamicFee + fixedFee), where:
-     *   - dynamicFee = amount * (marketPrice - 1) / marketPrice when marketPrice > 1, else 0 (marketPrice is
-     *     the market PAXG:XAU rate, denominated against it so the fraction is always < 1); and
-     *   - fixedFee = amount * FIXED_FEE_BPS / BPS_DIVISOR, a flat fee charged on every withdrawal.
-     * The total is capped at the order amount. Reverts if the offer asset is not SHARES, the want asset is
-     * not PAXG, or the rate provider reports stale data.
+     * @dev feeAmount = fixedFee + dynamicFee, where:
+     *     fixedFee = amount * FIXED_FEE_BPS / BPS_DIVISOR, a flat fee charged on every withdrawal, taken
+     *     first; and
+     *     dynamicFee = remaining * (marketPrice - 1) / marketPrice when marketPrice > 1, else 0, levied on
+     *     remaining = amount - fixedFee (marketPrice is the market PAXG:XAU rate, denominated against it so
+     *     the fraction is always < 1).
+     * The two fees are applied sequentially (fixed first, dynamic on the remainder), so the total is
+     * inherently <= amount. Reverts if the offer asset is not SHARES, the want asset is not PAXG, or the rate
+     * provider reports stale data.
      * @param amount Share amount being offered by the order.
      * @param offerAsset Must equal SHARES.
      * @param wantAsset Must equal PAXG.
@@ -131,8 +136,7 @@ contract PaxgyDynamicWithdrawalFeeModule is IFeeModule {
 
         // Market PAXG:XAU rate (XAU per PAXG), 18-decimal fixed point.
         //
-        // RATE_PROVIDER (PaxgXauRateProvider) reverts on a stale feed. Because WithdrawQueue.processOrders
-        // calls this in a loop outside its try/catch, one stale read reverts the whole batch.
+        // RATE_PROVIDER (PaxgXauRateProvider) reverts on a stale feed, which reverts WithdrawQueue processing.
         // The backend must pause processing during stale/volatile windows.
         uint256 marketPrice = RATE_PROVIDER.getRate();
 
@@ -141,27 +145,30 @@ contract PaxgyDynamicWithdrawalFeeModule is IFeeModule {
         // dynamic fee is taken.
         uint256 effectivePrice = marketPrice > PEG_PRICE ? marketPrice : PEG_PRICE;
 
-        // Dynamic depeg fee: takes the fraction (marketPrice - 1) / marketPrice of the amount, evaluated against
-        // effectivePrice (not the peg), so nothing is taken at/below peg. mulDivUp rounds up, in the vault's favor
-        // (withdrawer receives slightly less).
+        // The fixed fee is taken first and the dynamic depeg fee is levied only on the remainder, not summed
+        // on the same base. Charging both on the full amount would double-charge their overlap (fixedFraction
+        // * dynamicFraction), overtaxing the withdrawer; taking them in sequence yields feeFraction = 1 - (1 -
+        // FIXED_FEE_BPS / BPS_DIVISOR) / marketPrice, exactly the fee that pays out peg value net of the fixed
+        // fee.
+
+        // Fixed fee: takes the fraction FIXED_FEE_BPS / BPS_DIVISOR of the amount, charged unconditionally
+        // (even at/below peg). mulDivUp rounds up, in the vault's favor. Bounded to amount because
+        // FIXED_FEE_BPS <= BPS_DIVISOR (enforced at construction).
+        uint256 fixedFee = amount.mulDivUp(FIXED_FEE_BPS, BPS_DIVISOR);
+
+        // Dynamic depeg fee: takes the fraction (marketPrice - 1) / marketPrice of the remaining amount,
+        // evaluated against effectivePrice (not the peg), so nothing is taken at/below peg. mulDivUp rounds up,
+        // in the vault's favor (withdrawer receives slightly less).
         //
         // There is no user-set max-fee or per-order slippage backstop on withdrawals: the fee scales directly
         // with the reported PAXG:XAU premium, so a genuine market depeg charges the withdrawer the full
-        // premium (bounded only by the order amount, above which WithdrawQueue refunds the order). The
-        // backend can mitigate this by processing only when market prices are reasonably close to peg.
-        uint256 dynamicFee = amount.mulDivUp(effectivePrice - PEG_PRICE, effectivePrice);
+        // premium. The backend can mitigate this by processing only when market prices are reasonably close
+        // to peg.
+        uint256 dynamicFee = (amount - fixedFee).mulDivUp(effectivePrice - PEG_PRICE, effectivePrice);
 
-        // Fixed fee: takes the fraction FIXED_FEE_BPS / BPS_DIVISOR of the amount, charged unconditionally
-        // (even at/below peg). mulDivUp rounds up, in the vault's favor, consistent with the dynamic fee.
-        uint256 fixedFee = amount.mulDivUp(FIXED_FEE_BPS, BPS_DIVISOR);
-
-        feeAmount = dynamicFee + fixedFee;
-
-        // Never withhold more shares than the order offers. For any realistic marketPrice (~ 1) the two
-        // components sum well below the amount; the cap only binds at an extreme premium (the dynamic
-        // fraction approaching 1) or on dust orders where round-up dominates. Capping preserves the
-        // fee <= amount invariant the WithdrawQueue relies on.
-        if (feeAmount > amount) feeAmount = amount;
+        // fixedFee <= amount and dynamicFee <= (amount - fixedFee), so this sum can never exceed amount; the fee <=
+        // amount invariant the WithdrawQueue relies on holds without an explicit cap.
+        feeAmount = fixedFee + dynamicFee;
     }
 
 }

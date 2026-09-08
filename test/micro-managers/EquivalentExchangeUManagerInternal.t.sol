@@ -3,13 +3,31 @@ pragma solidity 0.8.21;
 
 import { Test } from "@forge-std/Test.sol";
 import { EquivalentExchangeUManager } from "src/micro-managers/EquivalentExchangeUManager.sol";
+import { BalancerVault } from "src/interfaces/BalancerVault.sol";
+import { MockManagerWithVault } from "./mocks/MockManagerWithVault.sol";
+
+/// @notice ERC20 stub whose allowance() returns a fixed value, for exercising the dangling-approval check
+///         without a full token/merkle setup.
+contract MockFixedAllowanceToken {
+
+    uint256 internal immutable value;
+
+    constructor(uint256 _value) {
+        value = _value;
+    }
+
+    function allowance(address, address) external view returns (uint256) {
+        return value;
+    }
+
+}
 
 /// @notice Exposes EquivalentExchangeUManager's internal pure valuation helpers for direct testing.
 contract EquivalentExchangeUManagerExternal is EquivalentExchangeUManager {
 
-    // The UManager constructor only stores the manager/boringVault addresses and wires up Auth,
-    // none of which the pure valuation helpers depend on, so dummy addresses are sufficient.
-    constructor() EquivalentExchangeUManager(address(this), address(this), address(this)) { }
+    // The UManager constructor only wires up Auth and reads manager.vault(); the pure valuation helpers
+    // depend on neither, so a mock manager returning a dummy vault is sufficient.
+    constructor() EquivalentExchangeUManager(address(this), address(new MockManagerWithVault(address(0)))) { }
 
     // Compose _unitRate with the value helpers exactly as the contract does, so the (decimals, rate) inputs
     // stay intuitive in tests while exercising the real per-unit-rate helpers. `rate` is an 18-decimal
@@ -22,37 +40,15 @@ contract EquivalentExchangeUManagerExternal is EquivalentExchangeUManager {
         return _referenceValueToTokenAmount(value, _unitRate(rate, uint8(NORMALIZED_DECIMALS), decimals));
     }
 
-    // Same as the pair above, but with an explicit `rateDecimals` so tests can drive `_unitRate` into its
-    // divide branch (rateDecimals + tokenDecimals > 2 * NORMALIZED_DECIMALS), which the NORMALIZED_DECIMALS
-    // rateDecimals used above can never reach.
+    // Exposes `_unitRate` with an explicit `rateDecimals` so a test can drive it past its valid domain
+    // (rateDecimals + tokenDecimals > 2 * NORMALIZED_DECIMALS) and assert it reverts.
     function unitRate(uint256 rate, uint8 rateDecimals, uint8 tokenDecimals) external pure returns (uint256) {
         return _unitRate(rate, rateDecimals, tokenDecimals);
     }
 
-    function referenceValueWithRateDecimals(
-        uint256 balance,
-        uint8 tokenDecimals,
-        uint256 rate,
-        uint8 rateDecimals
-    )
-        external
-        pure
-        returns (uint256)
-    {
-        return _tokenAmountToReferenceValue(balance, _unitRate(rate, rateDecimals, tokenDecimals));
-    }
-
-    function referenceValueToTokenAmountWithRateDecimals(
-        uint256 value,
-        uint8 tokenDecimals,
-        uint256 rate,
-        uint8 rateDecimals
-    )
-        external
-        pure
-        returns (uint256)
-    {
-        return _referenceValueToTokenAmount(value, _unitRate(rate, rateDecimals, tokenDecimals));
+    /// @notice Exposes the internal batch calldata checks for direct testing.
+    function enforceCalldataChecks(ManageCalls calldata calls) external view {
+        _enforceCalldataChecks(calls);
     }
 
 }
@@ -79,9 +75,6 @@ contract EquivalentExchangeUManagerInternal is Test {
         assertEq(harness.referenceValue(1, 6, UNIT_RATE), 1e12);
         assertEq(harness.referenceValue(1e18, 18, UNIT_RATE), 1e18);
         assertEq(harness.referenceValue(1, 18, UNIT_RATE), 1);
-        assertEq(harness.referenceValue(1e24, 24, UNIT_RATE), 1e18);
-        // Balances not aligned to 10**(24-18) are truncated (floored) when rescaled down.
-        assertEq(harness.referenceValue(1_000_000_000_000_000_000_100_000, 24, UNIT_RATE), 1_000_000_000_000_000_000);
     }
 
     function test_ReferenceValue_ZeroBalanceIsZero() external view {
@@ -108,8 +101,6 @@ contract EquivalentExchangeUManagerInternal is Test {
     function test_ReferenceValueToTokenAmount_UnitRateRescales() external view {
         assertEq(harness.referenceValueToTokenAmount(1e18, 6, UNIT_RATE), 1_000_000);
         assertEq(harness.referenceValueToTokenAmount(1e18, 18, UNIT_RATE), 1e18);
-        assertEq(harness.referenceValueToTokenAmount(1e18, 24, UNIT_RATE), 1e24);
-        assertEq(harness.referenceValueToTokenAmount(1, 24, UNIT_RATE), 1e6);
     }
 
     // A non-zero value that does not divide evenly into whole native units must round up so the subsidy
@@ -166,44 +157,70 @@ contract EquivalentExchangeUManagerInternal is Test {
         assertGe(harness.referenceValue(tokenAmount, decimals, rate), value);
     }
 
-    // Same property, but forcing `_unitRate` into its divide branch. The fuzz above fixes rateDecimals at
-    // NORMALIZED_DECIMALS (18) and caps tokenDecimals at 18, so shrink = 18 + decimals <= 36 = grow always
-    // holds and only the lossless multiply branch runs. Here both decimals are >= 19, so
-    // shrink >= 38 > 36 and `_unitRate` divides (and floors). The divide is lossy, but as long as the unit
-    // rate stays nonzero the round-up in `_referenceValueToTokenAmount` still makes the round trip cover the
-    // input. A zero unit rate is the separate boundary asserted below.
-    function testFuzz_ReferenceValueToTokenAmount_NeverUnderCovers_DivideBranch(
-        uint256 value,
-        uint8 tokenDecimals,
-        uint8 rateDecimals,
-        uint256 rate
-    )
-        external
-        view
-    {
-        tokenDecimals = uint8(bound(tokenDecimals, 19, 30));
-        rateDecimals = uint8(bound(rateDecimals, 19, 30));
-        // Net right-shift `_unitRate` applies: unitRate = rate / 10**e. e >= 2 here (both decimals >= 19).
-        uint256 e = uint256(rateDecimals) + tokenDecimals - (2 * 18);
-        // Keep the unit rate nonzero (rate >= 10**e) so the conversion is defined and the property is
-        // meaningful; the zero-unit-rate case reverts and is covered by the dedicated test below.
-        rate = bound(rate, 10 ** e, (10 ** e) * 1e18);
-        value = bound(value, 0, 1e30);
-
-        uint256 tokenAmount =
-            harness.referenceValueToTokenAmountWithRateDecimals(value, tokenDecimals, rate, rateDecimals);
-        assertGe(harness.referenceValueWithRateDecimals(tokenAmount, tokenDecimals, rate, rateDecimals), value);
+    // _unitRate is only defined for rateDecimals + tokenDecimals <= 2 * NORMALIZED_DECIMALS (36), the range
+    // _checkAndValueBasket enforces. Past that the rescale exponent goes negative and the multiply underflows,
+    // so there is no lossy divide path: _unitRate reverts instead of flooring.
+    function test_UnitRate_RevertsAboveMaxDecimals() external {
+        vm.expectRevert();
+        harness.unitRate(1e18, 36, 36); // rateDecimals + tokenDecimals = 72 > 36
     }
 
-    // Boundary behind the `_unitRate` finding: an extreme (rateDecimals + tokenDecimals) shrinks a nonzero
-    // oracle rate all the way to a zero unit rate. Converting any nonzero value against a zero unit rate then
-    // reverts on division by zero rather than silently under-covering, so the subsidy path fails closed.
-    function test_UnitRate_FloorsToZero_ConversionReverts() external {
-        // shrink = 72, grow = 36, so unitRate = rate / 10**36. 1e18 / 1e36 floors to 0.
-        assertEq(harness.unitRate(1e18, 36, 36), 0);
+    // ============================== _enforceCalldataChecks: flashLoan ==============================
 
-        vm.expectRevert();
-        harness.referenceValueToTokenAmountWithRateDecimals(1e18, 36, 1e18, 36);
+    /// @dev Builds a single-call batch with the given target calldata; only targets/targetData are read by
+    /// the checks, so the other parallel arrays are left empty.
+    function _oneCall(bytes memory data) internal pure returns (EquivalentExchangeUManager.ManageCalls memory calls) {
+        return _oneCallTo(address(0xBEEF), data);
+    }
+
+    /// @dev As `_oneCall`, but with an explicit target so the allowance read hits a chosen token.
+    function _oneCallTo(
+        address target,
+        bytes memory data
+    )
+        internal
+        pure
+        returns (EquivalentExchangeUManager.ManageCalls memory calls)
+    {
+        calls.targets = new address[](1);
+        calls.targets[0] = target;
+        calls.targetData = new bytes[](1);
+        calls.targetData[0] = data;
+    }
+
+    /// @notice A batch containing a Balancer flashLoan call is rejected, regardless of target, because it
+    /// would open a nested manage layer the checks cannot see.
+    function test_EnforceCalldataChecks_RevertsOnFlashLoan() external {
+        bytes memory flashLoanData = abi.encodeWithSelector(
+            BalancerVault.flashLoan.selector, address(0), new address[](0), new uint256[](0), bytes("")
+        );
+
+        vm.expectRevert(EquivalentExchangeUManager.FlashLoanInBatch.selector);
+        harness.enforceCalldataChecks(_oneCall(flashLoanData));
+    }
+
+    /// @notice A benign call (neither flashLoan nor a nonzero approval) passes the checks.
+    function test_EnforceCalldataChecks_AllowsBenignCall() external view {
+        // transfer(address,uint256) — not flashLoan, not approve/increaseAllowance/increaseApproval.
+        bytes memory data = abi.encodeWithSelector(bytes4(0xa9059cbb), address(0xCAFE), uint256(1));
+        harness.enforceCalldataChecks(_oneCall(data));
+    }
+
+    /// @notice increaseApproval(address,uint256) shares approve's layout; a leftover allowance from it is
+    /// caught just like approve/increaseAllowance.
+    function test_EnforceCalldataChecks_RevertsOnDanglingIncreaseApproval() external {
+        address token = address(new MockFixedAllowanceToken(1)); // nonzero remaining allowance => dangling
+        bytes memory data = abi.encodeWithSelector(bytes4(0xd73dd623), address(0xBEEF), uint256(100));
+
+        vm.expectRevert(EquivalentExchangeUManager.DanglingApproval.selector);
+        harness.enforceCalldataChecks(_oneCallTo(token, data));
+    }
+
+    /// @notice An increaseApproval that ends at zero allowance passes.
+    function test_EnforceCalldataChecks_AllowsResetIncreaseApproval() external {
+        address token = address(new MockFixedAllowanceToken(0)); // allowance reset by end of batch
+        bytes memory data = abi.encodeWithSelector(bytes4(0xd73dd623), address(0xBEEF), uint256(100));
+        harness.enforceCalldataChecks(_oneCallTo(token, data));
     }
 
 }

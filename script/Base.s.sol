@@ -148,6 +148,11 @@ abstract contract BaseScript is Script {
         bytes1 crosschainProtectionFlag = isCrosschainProtected ? bytes1(0x01) : bytes1(0x00);
         bytes32 nameEntropyHash = keccak256(abi.encodePacked(nameEntropy));
         bytes11 nameEntropyHash11 = bytes11(nameEntropyHash);
+        // A zero deployer would make salt[0:20] == address(0), which CreateX treats as the permissionless,
+        // squattable salt form (anyone could front-run the deployment address) instead of the deployer-protected
+        // form. CreateX enforces the deployer == msg.sender match on-chain and reverts on any nonzero mismatch.
+        require(deployer != address(0), "makeSalt: salt not deployer-prefixed");
+
         return bytes32(abi.encodePacked(deployer, crosschainProtectionFlag, nameEntropyHash11));
     }
 

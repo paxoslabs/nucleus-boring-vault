@@ -21,15 +21,6 @@ contract DeployBoringVaultAndManager is BaseScript {
     address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     uint8 constant DECIMALS = 18;
 
-    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: RolesAuthority");
-    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: BoringVault");
-    bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
-        makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: ManagerWithMerkleVerification");
-    bytes32 SALT_EQUIVALENT_EXCHANGE_UMANAGER =
-        makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: EquivalentExchangeUManager");
-    bytes32 SALT_PAXG_USD_RATE_PROVIDER =
-        makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: PaxgUsdRateProvider");
-
     // ---- Basket tokens (Ethereum mainnet). USDC is inherited from Constants.sol. ----
     address constant USDG = 0xe343167631d89B6Ffc58B88d6b7fB0228795491D; // Global Dollar (USDG), 6 decimals
     address constant PAXG = 0x45804880De22913dAFE09f4980848ECE6EcbAf78; // Pax Gold (PAXG), 18 decimals
@@ -48,6 +39,17 @@ contract DeployBoringVaultAndManager is BaseScript {
         // unrelated token ("FLX") on Arbitrum, and PAXG/USDC/the feed all differ per chain. Fail loudly on
         // any other chain rather than deploying a basket around the wrong tokens.
         require(block.chainid == 1, "DeployBoringVaultAndManager: Ethereum mainnet only");
+
+        // Salts are computed here (not as state-variable initializers) so `broadcaster` is already set;
+        // otherwise they would encode address(0), CreateX's squattable permissionless form.
+        bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: RolesAuthority");
+        bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: BoringVault");
+        bytes32 SALT_MANAGER_WITH_MERKLE_VERIFICATION =
+            makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: ManagerWithMerkleVerification");
+        bytes32 SALT_EQUIVALENT_EXCHANGE_UMANAGER =
+            makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: EquivalentExchangeUManager");
+        bytes32 SALT_PAXG_USD_RATE_PROVIDER =
+            makeSalt(broadcaster, false, "PaxgyFundsAutomationVault: PaxgUsdRateProvider");
 
         // deploy a roles authority
         RolesAuthority rolesAuthority = RolesAuthority(
@@ -115,7 +117,7 @@ contract DeployBoringVaultAndManager is BaseScript {
                 SALT_EQUIVALENT_EXCHANGE_UMANAGER,
                 abi.encodePacked(
                     type(EquivalentExchangeUManager).creationCode,
-                    abi.encode(broadcaster, address(managerWithMerkleVerification), address(boringVault))
+                    abi.encode(broadcaster, address(managerWithMerkleVerification))
                 )
             )
         );

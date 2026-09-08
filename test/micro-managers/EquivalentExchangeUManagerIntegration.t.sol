@@ -114,7 +114,7 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
     function setUp() external {
         boringVault = new BoringVault(address(this), "Boring Vault", "BV", 18);
         manager = new ManagerWithMerkleVerification(address(this), address(boringVault), address(0));
-        uManager = new EquivalentExchangeUManager(address(this), address(manager), address(boringVault));
+        uManager = new EquivalentExchangeUManager(address(this), address(manager));
         rawDataDecoderAndSanitizer = address(new MockDecoderAndSanitizer(address(boringVault)));
         mockSwap = new MockSwap();
 
@@ -480,6 +480,51 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         assertEq(usdc.allowance(address(boringVault), address(mockSwap)), 0, "allowance fully reset");
     }
 
+    function test_Execute_RevertWhen_DanglingApprovalLeft_NonBasketToken() external {
+        // gold is held by the vault but is NOT in the basket {USDC, DAI}. A leftover approval on it is a
+        // standing drain vector, so the dangling-approval guard must catch it even though it is not a basket
+        // token. No basket balance moves, so the value invariant holds and this guard is the only thing that
+        // can revert.
+        gold.mint(address(boringVault), 1000e8);
+
+        bytes32[] memory approveProof = _setNonBasketApprovalRoot();
+
+        EquivalentExchangeUManager.ManageCalls memory calls = _batch(
+            _actions(
+                _mc(
+                    approveProof,
+                    address(gold),
+                    abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 1000e8)
+                )
+            )
+        );
+
+        vm.expectRevert(EquivalentExchangeUManager.DanglingApproval.selector);
+        uManager.execute(calls, payer, dai, _wideAllowableTokenDeltas());
+    }
+
+    function test_Execute_NonBasketApprovalResetToZero_Passes() external {
+        // The widened guard must not reject a legitimate non-basket approve+reset. The gold approve leaf gates
+        // only the spender, so one proof serves both the nonzero set and the reset-to-zero.
+        gold.mint(address(boringVault), 1000e8);
+
+        bytes32[] memory approveProof = _setNonBasketApprovalRoot();
+
+        EquivalentExchangeUManager.ManageCalls memory calls = _batch(
+            _actions(
+                _mc(
+                    approveProof,
+                    address(gold),
+                    abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 1000e8)
+                ),
+                _mc(approveProof, address(gold), abi.encodeWithSelector(ERC20.approve.selector, address(mockSwap), 0))
+            )
+        );
+
+        uManager.execute(calls, payer, dai, _wideAllowableTokenDeltas());
+        assertEq(gold.allowance(address(boringVault), address(mockSwap)), 0, "non-basket allowance fully reset");
+    }
+
     // ============================== merkle gating ==============================
 
     function test_Execute_RevertWhen_ProofInvalid() external {
@@ -692,12 +737,12 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         uManager.execute(calls, payer, usdc, _wideUsdcGoldDeltas());
     }
 
-    function test_Execute_RevertWhen_UnitRateFloorsToZero() external {
-        // Distinct from the baseRate == 0 case above: here the oracle reports a NONZERO rate, but folding it
-        // with the token/rate decimals floors the per-unit rate to zero. Gold is 8-decimal; configuring the
-        // basket with rateDecimals = 36 makes shrink = 36 + 8 = 44 > 36 = 2 * NORMALIZED_DECIMALS, so
-        // _unitRate divides by 10**8. A baseRate of 1 (nonzero, so the raw-rate guard passes) floors to 0.
-        MockRateProvider tinyUnitRateOracle = new MockRateProvider(1);
+    function test_Execute_RevertWhen_RateDecimalsExceedMax() external {
+        // rateDecimals + tokenDecimals > 2 * NORMALIZED_DECIMALS (36) is rejected up front, because _unitRate
+        // would otherwise divide and lose precision. Gold is 8-decimal; rateDecimals = 36 makes the sum
+        // 44 > 36. baseRate here (1) would floor all the way to zero, but the guard fires on the decimals
+        // alone, before the rate is even computed.
+        MockRateProvider oracle = new MockRateProvider(1);
         EquivalentExchangeUManager.BasketToken[] memory basket = new EquivalentExchangeUManager.BasketToken[](2);
         basket[0] = EquivalentExchangeUManager.BasketToken({
             token: usdc,
@@ -708,15 +753,40 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
         basket[1] = EquivalentExchangeUManager.BasketToken({
             token: gold,
             config: EquivalentExchangeUManager.RateProviderConfig({
-                isPeggedToken: false, rateProvider: tinyUnitRateOracle, rateDecimals: 36
+                isPeggedToken: false, rateProvider: oracle, rateDecimals: 36
             })
         });
         uManager.setBasketTokens(basket);
 
         EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapUsdcForGold(1000e6, 1000e6, 5e7);
 
-        // The raw rate (1) is nonzero, but the folded unit rate floors to 0, so the dedicated unit-rate guard
-        // rejects gold rather than silently valuing it at zero.
+        vm.expectRevert(abi.encodeWithSelector(EquivalentExchangeUManager.InvalidRate.selector, address(gold)));
+        uManager.execute(calls, payer, usdc, _wideUsdcGoldDeltas());
+    }
+
+    function test_Execute_RevertWhen_RateWouldFloorButNonZero() external {
+        // The case the old rate == 0 guard missed: a large baseRate whose folded unit rate floors to a
+        // NON-zero value (lossy, and not conservative across a mixed basket). Gold is 8-decimal; rateDecimals
+        // = 30 makes the sum 38 > 36, so _unitRate would divide by 10**2 -- baseRate 2000e30 would floor to
+        // 20e30, nonzero. The decimals guard rejects it regardless of the rate's magnitude.
+        MockRateProvider oracle = new MockRateProvider(2000e30);
+        EquivalentExchangeUManager.BasketToken[] memory basket = new EquivalentExchangeUManager.BasketToken[](2);
+        basket[0] = EquivalentExchangeUManager.BasketToken({
+            token: usdc,
+            config: EquivalentExchangeUManager.RateProviderConfig({
+                isPeggedToken: true, rateProvider: IRateProvider(address(0)), rateDecimals: 0
+            })
+        });
+        basket[1] = EquivalentExchangeUManager.BasketToken({
+            token: gold,
+            config: EquivalentExchangeUManager.RateProviderConfig({
+                isPeggedToken: false, rateProvider: oracle, rateDecimals: 30
+            })
+        });
+        uManager.setBasketTokens(basket);
+
+        EquivalentExchangeUManager.ManageCalls memory calls = _approveAndSwapUsdcForGold(1000e6, 1000e6, 5e7);
+
         vm.expectRevert(abi.encodeWithSelector(EquivalentExchangeUManager.InvalidRate.selector, address(gold)));
         uManager.execute(calls, payer, usdc, _wideUsdcGoldDeltas());
     }
@@ -1055,6 +1125,24 @@ contract EquivalentExchangeUManagerIntegrationTest is Test {
 
         approveProof = proofs[0];
         increaseProof = proofs[1];
+    }
+
+    /// @notice Gates approve(GLD -> swap) on the non-basket gold token, returning its proof. A second
+    ///         (unused) approve leaf keeps the tree even, as the builder requires.
+    function _setNonBasketApprovalRoot() internal returns (bytes32[] memory approveProof) {
+        ManageLeaf[] memory leafs = new ManageLeaf[](2);
+
+        leafs[0] = ManageLeaf(address(gold), false, "approve(address,uint256)", new address[](1));
+        leafs[0].argumentAddresses[0] = address(mockSwap);
+
+        leafs[1] = ManageLeaf(address(usdc), false, "approve(address,uint256)", new address[](1));
+        leafs[1].argumentAddresses[0] = address(mockSwap);
+
+        bytes32[][] memory tree = _generateMerkleTree(leafs);
+        manager.setManageRoot(address(uManager), tree[tree.length - 1][0]);
+        bytes32[][] memory proofs = _getProofsUsingTree(leafs, tree);
+
+        approveProof = proofs[0];
     }
 
     /// @notice Builds the two-call route (approve USDC -> swap, then swap USDC->DAI to the vault),

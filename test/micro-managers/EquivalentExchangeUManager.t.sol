@@ -5,6 +5,7 @@ import { Test } from "@forge-std/Test.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { IRateProvider } from "src/interfaces/IRateProvider.sol";
 import { EquivalentExchangeUManager } from "src/micro-managers/EquivalentExchangeUManager.sol";
+import { MockManagerWithVault } from "./mocks/MockManagerWithVault.sol";
 
 /// @notice Unit tests for EquivalentExchangeUManager's external/public surface.
 contract EquivalentExchangeUManagerTest is Test {
@@ -13,6 +14,7 @@ contract EquivalentExchangeUManagerTest is Test {
     event BasketTokensUpdated(EquivalentExchangeUManager.BasketToken[] tokens);
 
     EquivalentExchangeUManager internal uManager;
+    address internal boringVault;
 
     ERC20 internal tokenA;
     ERC20 internal tokenB;
@@ -23,9 +25,11 @@ contract EquivalentExchangeUManagerTest is Test {
     IRateProvider internal oracleB;
 
     function setUp() external {
-        // owner = this test contract; with no Authority set, only the owner passes requiresAuth.
-        // manager and boringVault addresses are irrelevant to basket bookkeeping.
-        uManager = new EquivalentExchangeUManager(address(this), address(this), address(this));
+        // owner = this test contract; with no Authority set, only the owner passes requiresAuth. The manager
+        // is a mock whose vault() the UManager reads to derive boringVault; neither is exercised by basket
+        // bookkeeping.
+        boringVault = makeAddr("boringVault");
+        uManager = new EquivalentExchangeUManager(address(this), address(new MockManagerWithVault(boringVault)));
 
         tokenA = ERC20(makeAddr("tokenA"));
         tokenB = ERC20(makeAddr("tokenB"));
@@ -449,11 +453,12 @@ contract EquivalentExchangeUManagerTest is Test {
     function test_Execute_RevertWhen_SubsidyPayerIsBoringVault() external {
         uManager.setBasketTokens(_arr(tokenA));
 
-        // boringVault was set to address(this) in setUp. Paying the subsidy from the vault itself would be a
-        // self-transfer that leaves the balance unchanged while inflating the accounting, so it must revert.
-        // The guard fires before any balance is read, so the codeless dummy basket token is never called.
+        // boringVault is the mock manager's vault(), captured in setUp. Paying the subsidy from the vault
+        // itself would be a self-transfer that leaves the balance unchanged while inflating the accounting, so
+        // it must revert. The guard fires before any balance is read, so the codeless dummy token is never
+        // called.
         vm.expectRevert(EquivalentExchangeUManager.InvalidSubsidyPayer.selector);
-        uManager.execute(_noCalls(), address(this), tokenA, _zeroDeltas(1));
+        uManager.execute(_noCalls(), boringVault, tokenA, _zeroDeltas(1));
     }
 
     // ============================== isBasketToken ==============================

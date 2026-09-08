@@ -19,9 +19,10 @@ abstract contract UManager is Auth {
      */
     address internal immutable boringVault;
 
-    constructor(address _owner, address _manager, address _boringVault) Auth(_owner, Authority(address(0))) {
+    constructor(address _owner, address _manager) Auth(_owner, Authority(address(0))) {
         manager = ManagerWithMerkleVerification(_manager);
-        boringVault = _boringVault;
+        // Derive the vault from the manager so the two can never be wired to mismatched contracts.
+        boringVault = address(ManagerWithMerkleVerification(_manager).vault());
     }
 
     // ========================================= ADMIN FUNCTIONS =========================================
