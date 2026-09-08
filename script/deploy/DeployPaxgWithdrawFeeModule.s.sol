@@ -16,8 +16,6 @@ import { console2 } from "forge-std/console2.sol";
  */
 contract DeployPaxgWithdrawFeeModule is BaseScript {
 
-    bytes32 SALT = makeSalt(broadcaster, false, "Paxgy: DynamicWithdrawalFeeModule");
-
     // The PaxgXauRateProvider deployed by DeployPaxgXauRateProvider.s.sol. Set before broadcasting.
     address constant RATE_PROVIDER = address(0);
 
@@ -39,10 +37,12 @@ contract DeployPaxgWithdrawFeeModule is BaseScript {
         require(SHARES != address(0), "Set SHARES to the PAXGy vault share token");
         require(SHARES.code.length != 0, "SHARES has no code on this chain");
 
+        bytes32 salt = makeSalt(broadcaster, false, "Paxgy: DynamicWithdrawalFeeModule");
+
         bytes memory creationCode = type(PaxgyDynamicWithdrawalFeeModule).creationCode;
 
         address feeModule = CREATEX.deployCreate3(
-            SALT,
+            salt,
             abi.encodePacked(
                 creationCode,
                 abi.encode(IRateProvider(RATE_PROVIDER), IERC20(PAXG_TOKEN), IERC20(SHARES), FIXED_FEE_BPS)
