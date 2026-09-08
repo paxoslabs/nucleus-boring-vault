@@ -248,7 +248,8 @@ contract BaseWithdrawQueueTest is Test {
             didOrderFailRefund: false
         });
         uint256 feeAmount = feeModule.calculateOfferFees(amountOffer, IERC20(address(boringVault)), wantAsset, receiver);
-        uint256 expectedAssetsOut = teller.accountant().getRateInQuoteSafe(ERC20(address(wantAsset)))
+        uint256 expectedAssetsOut = teller.accountant()
+            .getRateInQuoteSafe(ERC20(address(wantAsset)))
             .mulDivDown((amountOffer - feeAmount), 10 ** boringVault.decimals());
         vm.expectEmit(true, true, true, true);
         emit WithdrawQueue.OrderProcessed(orderIndex, order, receiver, isForceProcessed, feeAmount, expectedAssetsOut);
