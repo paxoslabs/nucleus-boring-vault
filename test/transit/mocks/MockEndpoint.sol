@@ -216,4 +216,4 @@ contract MockEndpoint is ILayerZeroEndpointV2 {
 
     receive() external payable { }
 
-    }
+}
