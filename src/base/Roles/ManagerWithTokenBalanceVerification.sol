@@ -12,7 +12,7 @@ import { ManagerSimulator } from "src/base/Roles/ManagerSimulator.sol";
 
 /**
  * @title ManagerWithTokenBalanceVerification
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract ManagerWithTokenBalanceVerification is ManagerSimulator, Auth {
 

@@ -43,7 +43,7 @@ contract MultiChainLayerZeroTellerWithMultiAssetSupportTest is MultiChainBaseTes
             chainSelector: DESTINATION_SELECTOR,
             destinationChainReceiver: to,
             bridgeFeeToken: ERC20(NATIVE),
-            messageGas: 80_000,
+            messageGas: CHAIN_MESSAGE_GAS_LIMIT,
             data: ""
         });
 
@@ -84,7 +84,7 @@ contract MultiChainLayerZeroTellerWithMultiAssetSupportTest is MultiChainBaseTes
             chainSelector: DESTINATION_SELECTOR,
             destinationChainReceiver: userChain2,
             bridgeFeeToken: ERC20(NATIVE),
-            messageGas: 80_000,
+            messageGas: CHAIN_MESSAGE_GAS_LIMIT,
             data: ""
         });
 
@@ -119,7 +119,11 @@ contract MultiChainLayerZeroTellerWithMultiAssetSupportTest is MultiChainBaseTes
         // if the token is not NATIVE, should revert
         address NOT_NATIVE = 0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3;
         BridgeData memory data = BridgeData(
-            DESTINATION_SELECTOR, address(this), ERC20(NOT_NATIVE), 80_000, abi.encode(DESTINATION_SELECTOR)
+            DESTINATION_SELECTOR,
+            address(this),
+            ERC20(NOT_NATIVE),
+            CHAIN_MESSAGE_GAS_LIMIT,
+            abi.encode(DESTINATION_SELECTOR)
         );
         sourceTeller.addChain(DESTINATION_SELECTOR, true, true, destinationTellerAddr, CHAIN_MESSAGE_GAS_LIMIT, 0);
 
@@ -132,7 +136,13 @@ contract MultiChainLayerZeroTellerWithMultiAssetSupportTest is MultiChainBaseTes
         sourceTeller.bridge(1e18, data);
 
         // Call now succeeds.
-        data = BridgeData(DESTINATION_SELECTOR, address(this), ERC20(NATIVE), 80_000, abi.encode(DESTINATION_SELECTOR));
+        data = BridgeData(
+            DESTINATION_SELECTOR,
+            address(this),
+            ERC20(NATIVE),
+            CHAIN_MESSAGE_GAS_LIMIT,
+            abi.encode(DESTINATION_SELECTOR)
+        );
         uint256 quote = sourceTeller.previewFee(1e18, data);
 
         sourceTeller.bridge{ value: quote }(1e18, data);

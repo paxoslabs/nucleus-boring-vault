@@ -21,7 +21,7 @@ import {
     BalancerV2DecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/BalancerV2DecoderAndSanitizer.sol";
 import { EigenpieDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/EigenpieDecoderAndSanitizer.sol";
-import { NucleusDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/NucleusDecoderAndSanitizer.sol";
+import { PxlDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/PxlDecoderAndSanitizer.sol";
 
 contract ssETHDecoderAndSanitizer is
     BaseDecoderAndSanitizer,
@@ -34,7 +34,7 @@ contract ssETHDecoderAndSanitizer is
     NativeWrapperDecoderAndSanitizer,
     BalancerV2DecoderAndSanitizer,
     EigenpieDecoderAndSanitizer,
-    NucleusDecoderAndSanitizer
+    PxlDecoderAndSanitizer
 {
 
     constructor(

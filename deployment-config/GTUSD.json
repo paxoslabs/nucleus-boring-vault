@@ -1,11 +1,11 @@
 {
-  "nameEntropy": "PAXGy",
-  "base": "0x130493BCD68Ca6aE7b15566A757Bd6699D73467D",
+  "nameEntropy": "GTUSD",
+  "base": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
   "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-  "boringVaultAndBaseDecimals": "18",
+  "boringVaultAndBaseDecimals": "6",
   "boringVault": {
-    "boringVaultName": "PAXGy",
-    "boringVaultSymbol": "PAXGy",
+    "boringVaultName": "Debyt Guardian Token",
+    "boringVaultSymbol": "GTUSD",
     "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000000000000000000000000000000000"
   },
@@ -17,7 +17,7 @@
   },
   "accountant": {
     "payoutAddress": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "allowedExchangeRateChangeUpper": "10004",
+    "allowedExchangeRateChangeUpper": "10000",
     "allowedExchangeRateChangeLower": "10000",
     "minimumUpdateDelayInSeconds": "3600",
     "managementFee": "0",
@@ -29,12 +29,24 @@
     "minGasForPeer": 0,
     "peerEid": 0,
     "setupLZConfigs": false,
-    "tellerContractName": "MultiChainLayerZeroTellerWithMultiAssetSupport",
+    "tellerContractName": "TellerWithMultiAssetSupport",
     "withdrawAssets": [
-      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    ],
+    "withdrawAssetFlatFees": [
+      0
+    ],
+    "withdrawAssetPercentFees": [
+      0
     ],
     "depositAssets": [
-      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    ],
+    "depositAssetFlatFees": [
+      0
+    ],
+    "depositAssetPercentFees": [
+      0
     ],
     "dvnIfNoDefault": {
       "required": [
@@ -42,12 +54,12 @@
       "optional": [
       ],
       "blockConfirmationsRequiredIfNoDefault": 15,
-      "optionalThreshold": 0
+      "optionalThreshold": 1
     },
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
-    "strategist": "0x40617CF21a5d4ecae4f7a6656f85bcCaA760672a",
+    "strategist": "0xe565025abc820a472A41b9A2d6FAdeCf25EE2e34",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "address": "0x0000000000000000000000000000000000000000"
   },
@@ -59,10 +71,10 @@
     "nativeSupported": false
   },
   "withdrawQueue": {
-    "name": "PAXGy Withdraw Queue",
-    "symbol": "PAXGyQ",
+    "name": "Debyt Guardian Token Withdraw Queue",
+    "symbol": "GTUSDQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "minimumOrderSize": "1000000000000000",
-    "processorAddress": "0xaA0e7f8b3bf12e48b0ff4AB7D30B5f8dDf263372"
+    "minimumOrderSize": "10000",
+    "processorAddress": "0x0c90881489158eF3FB2591dDd72045E4529e3720"
   }
 }

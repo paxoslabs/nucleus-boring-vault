@@ -5,7 +5,7 @@ import { BaseDecoderAndSanitizer } from "./BaseDecoderAndSanitizer.sol";
 
 /**
  * @title IonPoolDecoderAndSantitizer
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract IonPoolDecoderAndSanitizer is BaseDecoderAndSanitizer {
 

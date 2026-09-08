@@ -27,7 +27,7 @@ interface WarpRoute {
  * This contract can only be used with a defined DCD. If a new DCD is deployed,
  * a new Wrapper must be deployed.
  *
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract WarpRouteWrapper {
 

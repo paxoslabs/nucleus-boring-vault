@@ -21,7 +21,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
  *      - This rate provider will determine the rate of the USDT as QUOTE per USD / BASE per USD = QUOTE per BASE
  *      - Redstone will return the QUOTE per USD and BASE per USD. This contract
  *          will determine the QUOTE per BASE rate with appropriate decimal precision.
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract RedstoneStablecoinRateProvider is Auth, IRateProvider {
 

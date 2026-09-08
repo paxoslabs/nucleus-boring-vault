@@ -10,7 +10,7 @@ import { Auth, Authority } from "@solmate/auth/Auth.sol";
 
 /**
  * @title AccountantWithRateProviders
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract AccountantWithRateProviders is Auth, IRateProvider {
 

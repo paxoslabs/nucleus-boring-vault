@@ -1,11 +1,10 @@
 ```
- .-. .-..-. .-.  ,--,  ,-.    ,---.  .-. .-.   .---.
- |  \| || | | |.' .')  | |    | .-'  | | | |  ( .-._)
- |   | || | | ||  |(_) | |    | `-.  | | | | (_) \
- | |\  || | | |\  \    | |    | .-'  | | | | _  \ \
- | | |)|| `-')| \  `-. | `--. |  `--.| `-')|( `-'  )
- /(  (_)`---(_)  \____\|( __.'/( __.'`---(_) `----'
-(__)                   (_)   (__)
+    ____  ___   _  ______  _____    __    ___    ____ _____
+   / __ \/   | | |/ / __ \/ ___/   / /   /   |  / __ ) ___/
+  / /_/ / /| | |   / / / /\__ \   / /   / /| | / __  \__ \
+ / ____/ ___ |/   / /_/ /___/ /  / /___/ ___ |/ /_/ /__/ /
+/_/   /_/  |_/_/|_\____//____/  /_____/_/  |_/_____/____/
+
 ```
 
 > This repository began as a fork of [Se7enSeas](https://github.com/Se7en-Seas)' open source [boring-vault](https://github.com/Se7en-Seas/boring-vault) repo. We want to credit the Se7enSeas for creating the BoringVault architecture and allowing its free distribution.

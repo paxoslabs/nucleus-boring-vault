@@ -13,7 +13,7 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
 
 /**
  * @title TellerWithMultiAssetSupport
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract TellerWithMultiAssetSupport is Auth, ReentrancyGuard {
 

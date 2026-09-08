@@ -22,12 +22,13 @@ contract DeployTransitStation is BaseScript {
 
     // Backend quote signer
     address constant QUOTE_SIGNER = address(0xE4a40e9E04eb7F33368D998FD423073b778Ce420);
-    // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders).
-    // address constant EXECUTOR = EXISTING_BORING_VAULT; // this should be the vault
+    // Executor granted TRANSIT_EXECUTOR_ROLE (fulfills orders). Assigned in run(); when reusing an existing combo
+    // set it to EXISTING_BORING_VAULT instead.
+    address EXECUTOR;
 
     // Reuse an existing vault/manager combo by setting these and commenting out the deploy block in run().
-    address constant EXISTING_ROLES_AUTHORITY = address(0x3B4decc43d2173280198B46532Ef570062FCc8f5);
-    address constant EXISTING_BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
+    // address constant EXISTING_ROLES_AUTHORITY = address(0x3B4decc43d2173280198B46532Ef570062FCc8f5);
+    // address constant EXISTING_BORING_VAULT = address(0x91FE06C6E9F97E7DE4580A280E03046155f8e1e3);
     // address constant EXISTING_MANAGER = address(0x666156ab52bb9984F5c3985726f048Dd4A73887a);
 
     // BoringVault metadata (only used when deploying fresh).
@@ -36,7 +37,7 @@ contract DeployTransitStation is BaseScript {
     uint8 constant DECIMALS = 6;
 
     uint64 constant MESSAGE_GAS_LIMIT = 400_000;
-    // address constant BALANCER_VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address constant BALANCER_VAULT = 0x0000000000000000000000000000000000000000;
 
     // ---- Route assets (offerAsset/wantAsset for setRouteApprovals) ----
     address constant USDC_ETH = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -44,13 +45,14 @@ contract DeployTransitStation is BaseScript {
     address constant USDT_ETH = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address constant USDG_ETH = 0xe343167631d89B6Ffc58B88d6b7fB0228795491D;
     address constant USDG_RH = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
+    address constant USDC_ARB = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
+    address constant USDT_ARB = 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9;
+    address constant USDG_ARB = 0x004B506865409877C9fA29bfb1ebA929984B9bbC;
 
-    // ============================== SALTS ==============================
-
-    // bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
-    // bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
-    // bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
-    bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation");
+    // ---- LayerZero endpoint ids, one per chain in the mesh ----
+    uint32 constant EID_ETH = 30_101;
+    uint32 constant EID_RH = 30_416;
+    uint32 constant EID_ARB = 30_110;
 
     // LayerZero config type id for the ULN (DVNs + confirmations) config.
     uint32 constant CONFIG_TYPE_ULN = 2;
@@ -66,51 +68,60 @@ contract DeployTransitStation is BaseScript {
 
     RolesAuthority public rolesAuthority;
     BoringVault public boringVault;
-    // ManagerWithMerkleVerification public manager;
+    ManagerWithMerkleVerification public manager;
     TransitStation public transitStation;
 
+    // Intentionally moved outside of the `run` function in order to keep consistent with past Transit
+    bytes32 SALT_ROLES_AUTHORITY = makeSalt(broadcaster, false, "Transit: RolesAuthority");
+    bytes32 SALT_BORING_VAULT = makeSalt(broadcaster, false, "Transit: BoringVault");
+    bytes32 SALT_MANAGER = makeSalt(broadcaster, false, "Transit: ManagerWithMerkleVerification");
+    bytes32 SALT_STATION = makeSalt(broadcaster, false, "Transit: TransitStation");
+
     function run() public broadcast {
-        rolesAuthority = RolesAuthority(EXISTING_ROLES_AUTHORITY);
-        boringVault = BoringVault(payable(EXISTING_BORING_VAULT));
+        // ============================== SALTS ==============================
+        // rolesAuthority = RolesAuthority(EXISTING_ROLES_AUTHORITY);
+        // boringVault = BoringVault(payable(EXISTING_BORING_VAULT));
         // manager = ManagerWithMerkleVerification(EXISTING_MANAGER);
-        // Commented out because we are connecting to previously deployed vaults
+
         // ==================== DEPLOY VAULT / MANAGER COMBO ====================
-        // rolesAuthority = RolesAuthority(
-        //     CREATEX.deployCreate3(
-        //         SALT_ROLES_AUTHORITY,
-        //         abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(broadcaster, Authority(address(0))))
-        //     )
-        // );
-        // boringVault = BoringVault(
-        //     payable(CREATEX.deployCreate3(
-        //             SALT_BORING_VAULT,
-        //             abi.encodePacked(type(BoringVault).creationCode, abi.encode(broadcaster, NAME, SYMBOL, DECIMALS))
-        //         ))
-        // );
-        // manager = ManagerWithMerkleVerification(
-        //     CREATEX.deployCreate3(
-        //         SALT_MANAGER,
-        //         abi.encodePacked(
-        //             type(ManagerWithMerkleVerification).creationCode,
-        //             abi.encode(broadcaster, address(boringVault), BALANCER_VAULT)
-        //         )
-        //     )
-        // );
-        // boringVault.setAuthority(rolesAuthority);
-        // manager.setAuthority(rolesAuthority);
-        // rolesAuthority.setRoleCapability(
-        //     MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
-        // );
-        // rolesAuthority.setRoleCapability(
-        //     MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address[],bytes[],uint256[])")), true
-        // );
-        // rolesAuthority.setRoleCapability(
-        //     STRATEGIST_ROLE,
-        //     address(manager),
-        //     ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
-        //     true
-        // );
-        // rolesAuthority.setUserRole(address(manager), MANAGER_ROLE, true);
+        rolesAuthority = RolesAuthority(
+            CREATEX.deployCreate3(
+                SALT_ROLES_AUTHORITY,
+                abi.encodePacked(type(RolesAuthority).creationCode, abi.encode(broadcaster, Authority(address(0))))
+            )
+        );
+        boringVault = BoringVault(
+            payable(CREATEX.deployCreate3(
+                    SALT_BORING_VAULT,
+                    abi.encodePacked(type(BoringVault).creationCode, abi.encode(broadcaster, NAME, SYMBOL, DECIMALS))
+                ))
+        );
+        manager = ManagerWithMerkleVerification(
+            CREATEX.deployCreate3(
+                SALT_MANAGER,
+                abi.encodePacked(
+                    type(ManagerWithMerkleVerification).creationCode,
+                    abi.encode(broadcaster, address(boringVault), BALANCER_VAULT)
+                )
+            )
+        );
+        EXECUTOR = address(boringVault);
+
+        boringVault.setAuthority(rolesAuthority);
+        manager.setAuthority(rolesAuthority);
+        rolesAuthority.setRoleCapability(
+            MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address,bytes,uint256)")), true
+        );
+        rolesAuthority.setRoleCapability(
+            MANAGER_ROLE, address(boringVault), bytes4(keccak256("manage(address[],bytes[],uint256[])")), true
+        );
+        rolesAuthority.setRoleCapability(
+            STRATEGIST_ROLE,
+            address(manager),
+            ManagerWithMerkleVerification.manageVaultWithMerkleVerification.selector,
+            true
+        );
+        rolesAuthority.setUserRole(address(manager), MANAGER_ROLE, true);
 
         // ==================== DEPLOY STATION ====================
         transitStation = TransitStation(
@@ -132,26 +143,27 @@ contract DeployTransitStation is BaseScript {
         );
 
         // ==================== STATION ROLE WIRING ====================
-        // rolesAuthority.setRoleCapability(
-        //     TRANSIT_EXECUTOR_ROLE, address(transitStation), TransitStation.executePendingOrders.selector, true
-        // );
-        // rolesAuthority.setRoleCapability(PAUSER_ROLE, address(transitStation), TransitStation.pause.selector, true);
-        // rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
-        // rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
-        // rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
-        // rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector,
-        // true);
+        rolesAuthority.setRoleCapability(
+            TRANSIT_EXECUTOR_ROLE, address(transitStation), TransitStation.executePendingOrders.selector, true
+        );
+        rolesAuthority.setRoleCapability(PAUSER_ROLE, address(transitStation), TransitStation.pause.selector, true);
+        rolesAuthority.setUserRole(EXECUTOR, TRANSIT_EXECUTOR_ROLE, true);
+        rolesAuthority.setUserRole(PAUSER_EOA, PAUSER_ROLE, true);
+        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrder.selector, true);
+        rolesAuthority.setPublicCapability(address(transitStation), TransitStation.submitOrderWithPermit.selector, true);
 
         // ==================== CROSS-CHAIN (LayerZero) ====================
-        // CREATE3 gives the station the same address on every chain, so its peer is itself.
-        uint32 peerEid = _peerEid();
-        if (peerEid != 0) {
-            transitStation.setPeer(peerEid, bytes32(uint256(uint160(address(transitStation)))));
-            transitStation.setMessageGasLimit(peerEid, MESSAGE_GAS_LIMIT);
+        // CREATE3 gives the station the same address on every chain, so every peer is itself.
+        bytes32 peer = bytes32(uint256(uint160(address(transitStation))));
+        uint32[] memory peerEids = _peerEids();
+        if (peerEids.length == 0) {
+            console.log("WARNING: no peer EIDs set; configure the LZ peers + gas limits + DVNs post-deploy");
+        }
+        for (uint256 i; i < peerEids.length; ++i) {
+            transitStation.setPeer(peerEids[i], peer);
+            transitStation.setMessageGasLimit(peerEids[i], MESSAGE_GAS_LIMIT);
             // Set DVNs + confirmations while the broadcaster is still the LZ delegate (before the setDelegate below).
-            _configureLZ(peerEid);
-        } else {
-            console.log("WARNING: no peer EID set; configure the LZ peer + gas limit + DVNs post-deploy");
+            _configureLZ(peerEids[i]);
         }
         transitStation.setDelegate(getMultisig());
 
@@ -160,34 +172,46 @@ contract DeployTransitStation is BaseScript {
 
         // ==================== OWNERSHIP ====================
         // When reusing an existing combo, drop the vault/manager/authority transfers (already multisig-owned).
-        // rolesAuthority.transferOwnership(getMultisig());
-        // boringVault.transferOwnership(getMultisig());
-        // manager.transferOwnership(getMultisig());
+        rolesAuthority.transferOwnership(getMultisig());
+        boringVault.transferOwnership(getMultisig());
+        manager.transferOwnership(getMultisig());
         transitStation.transferOwnership(getMultisig());
 
         console.log("RolesAuthority:", address(rolesAuthority));
         console.log("BoringVault:", address(boringVault));
-        // console.log("Manager:", address(manager));
+        console.log("Manager:", address(manager));
         console.log("TransitStation:", address(transitStation));
     }
 
+    /// @dev Only the legs this broadcast owns. The ETH/RH blocks are the historical pairwise config; their new legs to
+    ///      Arbitrum are multisig transactions, not part of any script run.
     function _approveRoutes() internal {
-        uint32 peerEid = _peerEid();
         TransitStation.Route[] memory routes = new TransitStation.Route[](0);
 
         if (block.chainid == 1) {
             // Ethereum source: offer an ETH stablecoin, receive USDG on RH.
             routes = new TransitStation.Route[](4);
-            routes[0] = TransitStation.Route({ destEID: peerEid, offerAsset: USDC_ETH, wantAsset: USDG_RH });
-            routes[1] = TransitStation.Route({ destEID: peerEid, offerAsset: PYUSD_ETH, wantAsset: USDG_RH });
-            routes[2] = TransitStation.Route({ destEID: peerEid, offerAsset: USDT_ETH, wantAsset: USDG_RH });
-            routes[3] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_ETH, wantAsset: USDG_RH });
+            routes[0] = TransitStation.Route({ destEID: EID_RH, offerAsset: USDC_ETH, wantAsset: USDG_RH });
+            routes[1] = TransitStation.Route({ destEID: EID_RH, offerAsset: PYUSD_ETH, wantAsset: USDG_RH });
+            routes[2] = TransitStation.Route({ destEID: EID_RH, offerAsset: USDT_ETH, wantAsset: USDG_RH });
+            routes[3] = TransitStation.Route({ destEID: EID_RH, offerAsset: USDG_ETH, wantAsset: USDG_RH });
         } else if (block.chainid == 4663) {
             // Robinhood source: offer USDG on RH, receive an ETH stablecoin. No PYUSD return route.
             routes = new TransitStation.Route[](3);
-            routes[0] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDC_ETH });
-            routes[1] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDT_ETH });
-            routes[2] = TransitStation.Route({ destEID: peerEid, offerAsset: USDG_RH, wantAsset: USDG_ETH });
+            routes[0] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDG_RH, wantAsset: USDC_ETH });
+            routes[1] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDG_RH, wantAsset: USDT_ETH });
+            routes[2] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDG_RH, wantAsset: USDG_ETH });
+        } else if (block.chainid == 42_161) {
+            // Arbitrum source: USDG out to either peer, plus the local USDC<>USDG pair. A route whose destEID is this
+            // chain's own EID is a same-chain swap — the station queues it locally instead of bridging.
+            routes = new TransitStation.Route[](7);
+            routes[0] = TransitStation.Route({ destEID: EID_RH, offerAsset: USDC_ARB, wantAsset: USDG_RH });
+            routes[1] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDG_ARB, wantAsset: USDG_ETH });
+            routes[2] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDG_ARB, wantAsset: USDC_ETH });
+            routes[3] = TransitStation.Route({ destEID: EID_RH, offerAsset: USDG_ARB, wantAsset: USDG_RH });
+            routes[4] = TransitStation.Route({ destEID: EID_ETH, offerAsset: USDC_ARB, wantAsset: USDG_ETH });
+            routes[5] = TransitStation.Route({ destEID: EID_ARB, offerAsset: USDC_ARB, wantAsset: USDG_ARB });
+            routes[6] = TransitStation.Route({ destEID: EID_ARB, offerAsset: USDG_ARB, wantAsset: USDC_ARB });
         }
 
         if (routes.length == 0) {
@@ -202,15 +226,24 @@ contract DeployTransitStation is BaseScript {
         transitStation.setRouteApprovals(routes, approved);
     }
 
-    function _peerEid() internal view returns (uint32) {
-        if (block.chainid == 1) return 30_416; // Ethereum mainnet — peer is RH
-        if (block.chainid == 4663) return 30_101; // RH mainnet — peer is Ethereum
-        return 0;
+    function _peerEids() internal view returns (uint32[] memory peerEids) {
+        if (block.chainid == 1) {
+            peerEids = new uint32[](1);
+            peerEids[0] = EID_RH;
+        } else if (block.chainid == 4663) {
+            peerEids = new uint32[](1);
+            peerEids[0] = EID_ETH;
+        } else if (block.chainid == 42_161) {
+            peerEids = new uint32[](2);
+            peerEids[0] = EID_ETH;
+            peerEids[1] = EID_RH;
+        }
     }
 
     function _lzEndpoint() internal view returns (address) {
         if (block.chainid == 1) return 0x1a44076050125825900e736c501f859c50fE728c; // Ethereum mainnet (LZ V2)
         if (block.chainid == 4663) return 0x6F475642a6e85809B1c36Fa62763669b1b48DD5B; // RH mainnet
+        if (block.chainid == 42_161) return 0x1a44076050125825900e736c501f859c50fE728c; // Arbitrum mainnet
         revert("DeployTransitStation: no LZ endpoint for this chain");
     }
 
@@ -259,17 +292,21 @@ contract DeployTransitStation is BaseScript {
             dvns[0] = 0x589dEDbD617e0CBcB916A9223F4d1300c294236b; // LZ labs
             dvns[1] = 0xa59BA433ac34D2927232918Ef5B2eaAfcF130BA5; // Nethermind
             dvns[2] = 0x380275805876Ff19055EA900CDb2B46a94ecF20D; // Horizen
-        }
-        if (block.chainid == 4663) {
+        } else if (block.chainid == 4663) {
             dvns[0] = 0xd01ae6905d48315f7bE10C7330aeCF8360Ef5b12; // LZ labs
             dvns[1] = 0x0Ffe02DF012299A370D5dd69298A5826EAcaFdF8; // Nethermind
             dvns[2] = 0x1258A278519c7f4bd997a9c3BFd4Aa802a028D89; // Horizen
+        } else if (block.chainid == 42_161) {
+            dvns[0] = 0x2f55C492897526677C5B68fb199ea31E2c126416; // LZ labs
+            dvns[1] = 0xa7b5189bcA84Cd304D8553977c7C614329750d99; // Nethermind
+            dvns[2] = 0x19670Df5E16bEa2ba9b9e68b48C054C5bAEa06B8; // Horizen
         }
     }
 
     function _dvnConfirmations() internal view returns (uint64) {
         if (block.chainid == 1) return 15; // Ethereum mainnet
         if (block.chainid == 4663) return 20; // RH mainnet
+        if (block.chainid == 42_161) return 20; // Arbitrum mainnet
         return 0;
     }
 

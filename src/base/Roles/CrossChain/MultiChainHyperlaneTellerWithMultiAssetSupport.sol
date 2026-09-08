@@ -16,7 +16,7 @@ import { IPostDispatchHook } from "../../../interfaces/hyperlane/IPostDispatchHo
 /**
  * @title MultiChainHyperlaneTellerWithMultiAssetSupport
  * @notice Hyperlane implementation of MultiChainTeller
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract MultiChainHyperlaneTellerWithMultiAssetSupport is MultiChainTellerBase {
 

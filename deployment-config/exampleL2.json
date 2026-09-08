@@ -4,8 +4,8 @@
   "boringVaultAndBaseDecimals": "18",
   "boringVault": {
     "boringVaultSalt": "0x88ebd3298c1ad6afea488ed29af3b9cc4ed8b20e6b729e465705221d472587ca",
-    "boringVaultName": "Nucleus Vault",
-    "boringVaultSymbol": "NV",
+    "boringVaultName": "PXL Vault",
+    "boringVaultSymbol": "PXLV",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
   "freezeListBeforeTransferHook": {"address": "0x0000000000000000000000000000000000000000"},

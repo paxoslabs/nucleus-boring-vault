@@ -10,7 +10,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /**
  * @title VelodromeBuyback
  * @dev no permissioned functions, as token destinations will always be the vault or the sender of tokens
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract VelodromeBuyback is Ownable {
 

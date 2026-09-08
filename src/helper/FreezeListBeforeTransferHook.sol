@@ -10,7 +10,7 @@ import { Auth, Authority } from "solmate/auth/Auth.sol";
  * @notice A before transfer hook for the BoringVault that freezes token transfers
  * @dev Hooks are provided for beforeTransfer, beforeBridge and beforeReceiveBridge allowing developers to differentiate
  * between different types of transfers.
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract FreezeListBeforeTransferHook is BeforeTransferHook, Auth {
 

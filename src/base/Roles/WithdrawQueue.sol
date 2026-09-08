@@ -17,7 +17,7 @@ import { ReentrancyGuard } from "@solmate/utils/ReentrancyGuard.sol";
  * @title WithdrawQueue
  * @notice Handles user withdraws using the Teller in a FIFO order
  * @dev Implements ERC721Enumerable for tokenized order receipts
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract WithdrawQueue is ERC721Enumerable, Auth, ReentrancyGuard {
 

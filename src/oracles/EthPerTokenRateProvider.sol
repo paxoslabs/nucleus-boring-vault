@@ -10,7 +10,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
  * @notice Reports the price of a token in terms of ETH. The underlying price
  * feed must be compatible with the Chainlink interface.
  *
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract EthPerTokenRateProvider is IRateProvider {
 

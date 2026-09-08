@@ -7,7 +7,7 @@ import { Auth, Authority } from "@solmate/auth/Auth.sol";
 /**
  * @title AccountantChainlinkRedstoneAdapter
  * @dev Returns accountant price data in the interface of a Chainlink/Redstone oracle
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract AccountantChainlinkRedstoneAdapter is Auth {
 

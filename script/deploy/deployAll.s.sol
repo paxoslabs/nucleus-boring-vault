@@ -16,8 +16,8 @@ import {
     DeployMultiChainLayerZeroTellerWithMultiAssetSupport
 } from "./single/06b_DeployMultiChainLayerZeroTellerWithMultiAssetSupport.s.sol";
 import { DeployMultiChainHyperlaneTeller } from "./single/06c_DeployMultiChainHyperlaneTeller.s.sol";
-import { DeployRolesAuthority } from "./single/07_DeployRolesAuthority.s.sol";
-import { TellerSetup } from "./single/08_TellerSetup.s.sol";
+import { TellerSetup } from "./single/07_TellerSetup.s.sol";
+import { DeployRolesAuthority } from "./single/08_DeployRolesAuthority.s.sol";
 import { DeployDistributorCodeDepositor } from "./single/09_DeployDistributorCodeDepositor.s.sol";
 import { DeployWithdrawQueueAndFeeModule } from "./single/10_DeployWithdrawQueueAndFeeModule.s.sol";
 import { SetAuthorityAndTransferOwnerships } from "./single/11_SetAuthorityAndTransferOwnerships.s.sol";

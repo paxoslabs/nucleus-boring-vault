@@ -22,10 +22,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
+
+      # Bun is not preinstalled on GitHub-hosted runners. It is used only as the
+      # package manager here; tag_parse.js still runs under node.
+      - name: Setup Bun
+        # Pinned to a commit SHA (setup-bun v2.2.0) rather than a mutable tag.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.6
 
       - name: Install dependencies
-        run: npm install pocketbase keccak256
+        run: bun install --frozen-lockfile
+
+      # npm generates the Prisma client via @prisma/client's postinstall, but
+      # bun does not run postinstall for untrusted deps, so do it explicitly.
+      - name: Generate Prisma client
+        run: bun run db:generate
 
       - name: Setup Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -34,7 +47,9 @@ jobs:
 
       - name: Run tag parser for all files
         env:
-          POCKETBASE_URL: ${{ secrets.POCKETBASE_URL }}
+          # Consumed by prisma/schema.prisma's datasource block, which
+          # tag_parse.js resolves lazily on its first query.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           # Process all files
           echo "Processing all DecodersAndSanitizers files"

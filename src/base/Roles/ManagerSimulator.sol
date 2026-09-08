@@ -10,7 +10,7 @@ import { BalancerVault } from "src/interfaces/BalancerVault.sol";
 
 /**
  * @title ManagerWithTokenBalanceVerification
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract ManagerSimulator {
 

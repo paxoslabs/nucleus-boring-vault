@@ -55,7 +55,7 @@ enum CONTRACT {
  * - The new WithdrawQueue contract is deployed with a supporting Fee Module
  *
  * @dev This contract uses a "flash-upgrade" method to upgrade the vault with temporarily provided ownership.
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract RedEnvelopeUpgrade {
 

@@ -18,7 +18,7 @@ import { FixedPointMathLib } from "@solmate/utils/FixedPointMathLib.sol";
 import { AccountantWithRateProviders } from "src/base/Roles/AccountantWithRateProviders.sol";
 
 /**
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract DexAggregatorWrapper is ReentrancyGuard {
 

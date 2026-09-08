@@ -13,7 +13,7 @@ import { Auth, Authority } from "@solmate/auth/Auth.sol";
 
 /**
  * @title BoringVault
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract BoringVault is ERC20, Auth, ERC721Holder, ERC1155Holder {
 

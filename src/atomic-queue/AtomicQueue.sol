@@ -19,7 +19,7 @@ import { IAtomicSolver } from "./IAtomicSolver.sol";
  *         total amount of assets aggregated from all their requests, and to also have enough
  *         `offer` asset to cover the aggregate total request of `offerAmount`.
  * @author crispymangoes
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract AtomicQueue is ReentrancyGuard {
 

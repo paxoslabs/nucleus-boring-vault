@@ -8,6 +8,7 @@ optimizer_runs = 200
 fs_permissions = [{ access = "read-write", path = "./" }]
 cbor_metadata = true
 gas_limit = "18446744073709551615"        
+disable_block_gas_limit = true
 
 libs = [
     'lib',
@@ -59,3 +60,4 @@ docs_style = "preserve"
 ignore = []
 pow_no_space = false
 single_line_imports = false
+namespace_import_style = "prefer_plain"

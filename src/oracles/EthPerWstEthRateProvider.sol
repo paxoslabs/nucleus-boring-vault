@@ -10,7 +10,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 /**
  * @notice Reports the price of wstETH in terms of ETH.
  *
- * @custom:security-contact security@molecularlabs.io
+ * @custom:security-contact security@paxoslabs.com
  */
 contract EthPerWstEthRateProvider is IRateProvider {
 

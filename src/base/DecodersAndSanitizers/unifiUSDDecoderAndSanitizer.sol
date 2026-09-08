@@ -16,7 +16,7 @@ import { LevelDecoderAndSanitizer } from "./Protocols/LevelDecoderAndSanitizer.s
 import { ERC4626DecoderAndSanitizer } from "./Protocols/ERC4626DecoderAndSanitizer.sol";
 import { CurveDecoderAndSanitizer } from "./Protocols/CurveDecoderAndSanitizer.sol";
 import { BalancerV2DecoderAndSanitizer } from "./Protocols/BalancerV2DecoderAndSanitizer.sol";
-import { NucleusDecoderAndSanitizer } from "./Protocols/NucleusDecoderAndSanitizer.sol";
+import { PxlDecoderAndSanitizer } from "./Protocols/PxlDecoderAndSanitizer.sol";
 
 contract unifiUSDDecoderAndSanitizer is
     NativeWrapperDecoderAndSanitizer,
@@ -27,7 +27,7 @@ contract unifiUSDDecoderAndSanitizer is
     ERC4626DecoderAndSanitizer,
     CurveDecoderAndSanitizer,
     BalancerV2DecoderAndSanitizer,
-    NucleusDecoderAndSanitizer
+    PxlDecoderAndSanitizer
 {
 
     constructor(

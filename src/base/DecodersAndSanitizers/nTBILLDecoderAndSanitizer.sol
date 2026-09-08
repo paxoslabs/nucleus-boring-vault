@@ -26,7 +26,7 @@ import {
 import { AaveV3DecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/AaveV3DecoderAndSanitizer.sol";
 import { AnemoyDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/AnemoyDecoderAndSanitizer.sol";
 import { CircleDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/CircleDecoderAndSanitizer.sol";
-import { NucleusDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/NucleusDecoderAndSanitizer.sol";
+import { PxlDecoderAndSanitizer } from "src/base/DecodersAndSanitizers/Protocols/PxlDecoderAndSanitizer.sol";
 import {
     SuperstateDecoderAndSanitizer
 } from "src/base/DecodersAndSanitizers/Protocols/SuperstateDecoderAndSanitizer.sol";
@@ -43,7 +43,7 @@ contract nTBILLDecoderAndSanitizer is
     OneInchDecoderAndSanitizer,
     PendleRouterDecoderAndSanitizer,
     AaveV3DecoderAndSanitizer,
-    NucleusDecoderAndSanitizer,
+    PxlDecoderAndSanitizer,
     SuperstateDecoderAndSanitizer
 {
 

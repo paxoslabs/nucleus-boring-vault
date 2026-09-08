@@ -4,8 +4,8 @@
   "protocolAdmin": "0x0000000000417626Ef34D62C4DC189b021603f2F",
   "boringVaultAndBaseDecimals": "18",
   "boringVault": {
-    "boringVaultName": "Nucleus Vault",
-    "boringVaultSymbol": "NV",
+    "boringVaultName": "PXL Vault",
+    "boringVaultSymbol": "PXLV",
     "beforeTransferHookAddress": "0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee",
     "address": "0x0000000000E7Ab44153eEBEF2343ba5289F65dAC"
   },
@@ -25,7 +25,7 @@
     "address": "0x00000000004F96C07B83e86600D86F9479bB43fa"
   },
   "teller": {
-    "maxGasForPeer": 100000,
+    "maxGasForPeer": 150000,
     "minGasForPeer": 0,
     "peerEid": 30280,
     "setupLZConfigs": false,

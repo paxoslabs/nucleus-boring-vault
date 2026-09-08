@@ -29,7 +29,7 @@ abstract contract CrossChainBaseTest is Test, MainnetAddresses {
     uint8 public constant QUEUE_ROLE = 10;
     uint8 public constant CAN_SOLVE_ROLE = 11;
 
-    uint64 constant CHAIN_MESSAGE_GAS_LIMIT = 100_000;
+    uint64 constant CHAIN_MESSAGE_GAS_LIMIT = 150_000;
 
     AccountantWithRateProviders public accountant;
     address public payout_address = vm.addr(7_777_777);
