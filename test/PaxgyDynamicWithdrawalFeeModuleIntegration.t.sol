@@ -9,6 +9,7 @@ import { TellerWithMultiAssetSupport } from "src/base/Roles/TellerWithMultiAsset
 import { PaxgyDynamicWithdrawalFeeModule } from "src/helper/PaxgyDynamicWithdrawalFeeModule.sol";
 import { IFeeModule } from "src/interfaces/IFeeModule.sol";
 import { IRateProvider } from "src/interfaces/IRateProvider.sol";
+import { PaxgXauRateProvider } from "src/oracles/PaxgXauRateProvider.sol";
 
 import { PaxgyDynamicFeeModuleIntegrationBase } from "test/helper/PaxgyDynamicFeeModuleIntegrationBase.t.sol";
 
@@ -132,6 +133,56 @@ contract PaxgyDynamicWithdrawalFeeModuleIntegrationTest is PaxgyDynamicFeeModule
         assertEq(boringVault.balanceOf(feeRecipient), expectedFee, "fee withheld in shares to recipient");
         assertEq(paxg.balanceOf(address(boringVault)), expectedFee, "vault retains the fee's worth of PAXG");
         assertEq(withdrawQueue.totalSupply(), 0, "order NFT burned on process");
+        assertEq(boringVault.balanceOf(address(withdrawQueue)), 0, "queue holds no residual shares");
+    }
+
+    /// @notice A stale PAXG:XAU feed makes calculateOfferFees revert inside processOrders. That call sits
+    /// outside the loop's try/catch (only bulkWithdraw is wrapped), so the revert propagates and rolls back
+    /// the entire batch: no order advances, no NFT burns, and no fee shares are paid. The queue keeps
+    /// custody of every offered share, so once the feed recovers the orders can still be cancelled and
+    /// refunded to their owners.
+    function testStaleFeedRevertsWholeBatchAndSharesRemainRefundable() external {
+        _mintAndSubmit(OFFER);
+        _mintAndSubmit(OFFER);
+
+        assertEq(withdrawQueue.latestOrder(), 2, "two orders queued");
+        assertEq(withdrawQueue.totalSupply(), 2, "two order NFTs held");
+        assertEq(boringVault.balanceOf(address(withdrawQueue)), 2 * OFFER, "queue custodies both offers");
+
+        // Age the PAXG/USD feed past MAX_STALE so PaxgXauRateProvider.getRate reverts on the second leg.
+        uint256 staleTimestamp = NOW - MAX_STALE - 1;
+        paxgUsdFeed.setUpdatedAt(staleTimestamp);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PaxgXauRateProvider.MaxTimeFromLastUpdatePassed.selector, NOW, staleTimestamp)
+        );
+        withdrawQueue.processOrders(2);
+
+        // Batch fully rolled back: cursor unchanged, both NFTs retained, no fee shares paid, all shares held.
+        assertEq(withdrawQueue.lastProcessedOrder(), 0, "lastProcessedOrder unchanged");
+        assertEq(withdrawQueue.totalSupply(), 2, "both order NFTs retained");
+        assertEq(withdrawQueue.ownerOf(1), user, "order 1 NFT still owned by user");
+        assertEq(withdrawQueue.ownerOf(2), user, "order 2 NFT still owned by user");
+        assertEq(boringVault.balanceOf(feeRecipient), 0, "fee recipient received no shares");
+        assertEq(boringVault.balanceOf(address(withdrawQueue)), 2 * OFFER, "queue still holds all offered shares");
+
+        // Feed recovers; the retained orders are cancelled and processed as refunds, returning the shares.
+        paxgUsdFeed.setUpdatedAt(NOW);
+
+        vm.prank(owner);
+        rolesAuthority.setPublicCapability(address(withdrawQueue), WithdrawQueue.cancelOrder.selector, true);
+
+        vm.startPrank(user);
+        withdrawQueue.cancelOrder(1);
+        withdrawQueue.cancelOrder(2);
+        vm.stopPrank();
+
+        withdrawQueue.processOrders(2);
+
+        assertEq(withdrawQueue.lastProcessedOrder(), 2, "both refund orders processed");
+        assertEq(withdrawQueue.totalSupply(), 0, "both order NFTs burned on refund");
+        assertEq(boringVault.balanceOf(user), 2 * OFFER, "user refunded all offered shares");
+        assertEq(boringVault.balanceOf(feeRecipient), 0, "fee recipient still received no shares");
         assertEq(boringVault.balanceOf(address(withdrawQueue)), 0, "queue holds no residual shares");
     }
 
