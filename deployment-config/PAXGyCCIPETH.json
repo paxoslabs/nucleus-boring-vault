@@ -44,13 +44,15 @@
       "rate": "79205762631101380"
     },
     "withdrawAssets": [
+      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
     ],
-    "withdrawAssetFlatFees": [],
-    "withdrawAssetPercentFees": [],
+    "withdrawAssetFlatFees": ["0"],
+    "withdrawAssetPercentFees": ["0"],
     "depositAssets": [
+      "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
     ],
-    "depositAssetFlatFees": [],
-    "depositAssetPercentFees": [],
+    "depositAssetFlatFees": ["0"],
+    "depositAssetPercentFees": ["0"],
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
@@ -69,7 +71,7 @@
     "name": "PAXGy Withdraw Queue",
     "symbol": "PAXGyQ",
     "feeRecipient": "0x0000000000417626Ef34D62C4DC189b021603f2F",
-    "minimumOrderSize": "230425365224203",
+    "minimumOrderSize": "500000000000000000",
     "processorAddress": "0x0a3e6fBE0435F105D20d9ed289cB65F651cEe6e8"
   }
 }

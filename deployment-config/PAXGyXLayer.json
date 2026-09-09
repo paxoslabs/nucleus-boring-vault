@@ -69,7 +69,7 @@
     "name": "PAXGy Withdraw Queue",
     "symbol": "PAXGyQ",
     "feeRecipient": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
-    "minimumOrderSize": "230425365224203",
+    "minimumOrderSize": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
     "processorAddress": "0x0a3e6fBE0435F105D20d9ed289cB65F651cEe6e8"
   }
 }
