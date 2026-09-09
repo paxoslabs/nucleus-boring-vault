@@ -53,8 +53,8 @@ contract DeployMultiChainCCIPTeller is BaseScript {
             console2.log("setting up CCIP configs...");
 
             // assume the peer teller deploys to this same address
-            teller.addChain(config.peerChainId, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
             teller.setCcipChainSelector(config.peerChainId, config.peerCcipChainSelector);
+            teller.addChain(config.peerChainId, true, true, address(teller), config.maxGasForPeer, config.minGasForPeer);
 
             teller.setCcipOutboundFinalityConfig(config.peerChainId, bytes4(config.ccipOutboundFinality));
             teller.setCcipInboundFinalityConfig(config.peerChainId, bytes4(config.ccipInboundFinality));
