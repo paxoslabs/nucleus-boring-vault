@@ -35,13 +35,13 @@
     "ccipInboundFinality": 0,
     "ccipOutboundRateLimit": {
       "isEnabled": true,
-      "capacity": "230425365224203880000000000",
-      "rate": "11521268261210194000"
+      "capacity": "6843377891327159000000",
+      "rate": "79205762631101380"
     },
     "ccipInboundRateLimit": {
       "isEnabled": true,
-      "capacity": "230425365224203880000000000",
-      "rate": "11521268261210194000"
+      "capacity": "6843377891327159000000",
+      "rate": "79205762631101380"
     },
     "withdrawAssets": [
     ],
@@ -60,7 +60,7 @@
   },
   "distributorCodeDepositor": {
     "deploy": false,
-    "supplyCap": "230425365224203880000000",
+    "supplyCap": "6843377891327159000000",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "",
     "nativeSupported": false
