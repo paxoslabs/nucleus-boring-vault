@@ -19,8 +19,8 @@ import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
 
 /// @title MultiChainCCIPTellerWithMultiAssetSupport
-/// @notice Chainlink CCIP adapter for Paxos Nucleus/Boring Vault `MultiChainTellerBase` share bridging.
-/// @dev Native-fee, data-only CCIP v2 adapter. Nucleus `uint32` chain selectors are compatibility keys that map to
+/// @notice Chainlink CCIP adapter for Boring Vault `MultiChainTellerBase` share bridging.
+/// @dev Native-fee, data-only CCIP v2 adapter. Base Teller `uint32` chain selectors are compatibility keys that map to
 /// CCIP `uint64` selectors without unsafe truncation.
 contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny2EVMMessageReceiverV2, IERC165 {
 
@@ -32,28 +32,28 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
     /// @notice Chainlink CCIP router used for fee quoting, outbound sends, and inbound router authentication.
     IRouterClient public immutable router;
 
-    /// @notice Maps Nucleus `uint32` chain-selector keys to Chainlink CCIP `uint64` chain selectors.
-    mapping(uint32 nucleusChainSelector => uint64 ccipChainSelector) public chainSelectorToCcipSelector;
+    /// @notice Maps Base Teller `uint32` chain-selector keys to Chainlink CCIP `uint64` chain selectors.
+    mapping(uint32 baseTellerChainSelector => uint64 ccipChainSelector) public chainSelectorToCcipSelector;
 
-    /// @notice Maps Chainlink CCIP `uint64` chain selectors back to Nucleus `uint32` chain-selector keys.
-    mapping(uint64 ccipChainSelector => uint32 nucleusChainSelector) public ccipSelectorToChainSelector;
+    /// @notice Maps Chainlink CCIP `uint64` chain selectors back to Base Teller `uint32` chain-selector keys.
+    mapping(uint64 ccipChainSelector => uint32 baseTellerChainSelector) public ccipSelectorToChainSelector;
 
-    /// @notice Requested finality for outbound CCIP messages, keyed by destination Nucleus chain selector.
+    /// @notice Requested finality for outbound CCIP messages, keyed by destination Base Teller chain selector.
     mapping(uint32 destinationChainSelector => bytes4 requestedFinalityConfig) public ccipOutboundFinalityConfig;
 
-    /// @notice Allowed finality for inbound CCIP messages, keyed by source Nucleus chain selector.
+    /// @notice Allowed finality for inbound CCIP messages, keyed by source Base Teller chain selector.
     mapping(uint32 sourceChainSelector => bytes4 allowedFinalityConfig) public ccipInboundFinalityConfig;
 
-    /// @notice Outbound share bridge rate limiters, keyed by destination Nucleus chain selector.
+    /// @notice Outbound share bridge rate limiters, keyed by destination Base Teller chain selector.
     mapping(uint32 destinationChainSelector => RateLimiter.TokenBucket) internal ccipOutboundRateLimiters;
 
-    /// @notice Inbound share mint rate limiters, keyed by source Nucleus chain selector.
+    /// @notice Inbound share mint rate limiters, keyed by source Base Teller chain selector.
     mapping(uint32 sourceChainSelector => RateLimiter.TokenBucket) internal ccipInboundRateLimiters;
 
-    event CcipChainSelectorSet(uint32 indexed nucleusChainSelector, uint64 indexed ccipChainSelector);
+    event CcipChainSelectorSet(uint32 indexed baseTellerChainSelector, uint64 indexed ccipChainSelector);
     event CcipOutboundFinalityConfigSet(uint32 indexed destinationChainSelector, bytes4 requestedFinalityConfig);
     event CcipInboundFinalityConfigSet(uint32 indexed sourceChainSelector, bytes4 allowedFinalityConfig);
-    event CcipChainConfigReset(uint32 indexed nucleusChainSelector, uint64 indexed ccipChainSelector);
+    event CcipChainConfigReset(uint32 indexed baseTellerChainSelector, uint64 indexed ccipChainSelector);
     event CcipRateLimiterConfigSet(
         uint32 indexed chainSelector,
         RateLimiter.Config outboundRateLimiterConfig,
@@ -73,9 +73,9 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
     error NonZeroShareLockPeriod(uint64 shareLockPeriod);
     error InvalidExtraArgsTag();
 
-    /// @param _owner Paxos teller owner/auth root.
+    /// @param _owner Teller owner/auth root.
     /// @param _vault BoringVault share token.
-    /// @param _accountant Paxos accountant used by the teller base.
+    /// @param _accountant Accountant used by the teller base.
     /// @param _router Chainlink CCIP router.
     constructor(
         address _owner,
@@ -89,31 +89,44 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
         router = _router;
     }
 
-    /// @notice Sets the Nucleus selector-key to CCIP selector mapping used for sends and receives.
-    /// @dev Callable by Paxos auth. Reassigning either side clears stale reverse/forward mappings to keep the mapping
-    /// one-to-one.
-    /// @param nucleusChainSelector Nucleus `MultiChainTellerBase` chain-selector key.
+    /// @notice Sets the Base Teller selector-key to CCIP selector mapping used for sends and receives.
+    /// @dev Callable by Owner. Reassigning either side clears stale reverse/forward mappings to keep the mapping
+    /// one-to-one. Remapping is rejected while the lane has either message direction enabled so the selector mappings
+    /// and the inherited `Chain` row can never diverge on an active lane; stealing a CCIP selector still owned by
+    /// another active lane is rejected for the same reason.
+    /// @param baseTellerChainSelector Base Teller `MultiChainTellerBase` chain-selector key.
     /// @param ccipChainSelector Chainlink CCIP chain selector.
-    function setCcipChainSelector(uint32 nucleusChainSelector, uint64 ccipChainSelector) external requiresAuth {
-        if (nucleusChainSelector == 0 || ccipChainSelector == 0) {
+    function setCcipChainSelector(uint32 baseTellerChainSelector, uint64 ccipChainSelector) external requiresAuth {
+        if (baseTellerChainSelector == 0 || ccipChainSelector == 0) {
             revert InvalidChainSelector();
         }
 
-        uint64 oldCcipSelector = chainSelectorToCcipSelector[nucleusChainSelector];
+        Chain memory chain = selectorToChains[baseTellerChainSelector];
+        if (chain.allowMessagesFrom || chain.allowMessagesTo) {
+            revert CcipChainStillActive(baseTellerChainSelector);
+        }
+
+        uint64 oldCcipSelector = chainSelectorToCcipSelector[baseTellerChainSelector];
         if (oldCcipSelector != 0) delete ccipSelectorToChainSelector[oldCcipSelector];
 
-        uint32 oldNucleusSelector = ccipSelectorToChainSelector[ccipChainSelector];
-        if (oldNucleusSelector != 0) delete chainSelectorToCcipSelector[oldNucleusSelector];
+        uint32 oldBaseTellerSelector = ccipSelectorToChainSelector[ccipChainSelector];
+        if (oldBaseTellerSelector != 0) {
+            Chain memory oldChain = selectorToChains[oldBaseTellerSelector];
+            if (oldChain.allowMessagesFrom || oldChain.allowMessagesTo) {
+                revert CcipChainStillActive(oldBaseTellerSelector);
+            }
+            delete chainSelectorToCcipSelector[oldBaseTellerSelector];
+        }
 
-        chainSelectorToCcipSelector[nucleusChainSelector] = ccipChainSelector;
-        ccipSelectorToChainSelector[ccipChainSelector] = nucleusChainSelector;
+        chainSelectorToCcipSelector[baseTellerChainSelector] = ccipChainSelector;
+        ccipSelectorToChainSelector[ccipChainSelector] = baseTellerChainSelector;
 
-        emit CcipChainSelectorSet(nucleusChainSelector, ccipChainSelector);
+        emit CcipChainSelectorSet(baseTellerChainSelector, ccipChainSelector);
     }
 
     /// @notice Sets the finality requested by outbound messages to a configured destination chain.
     /// @dev Defaults to `WAIT_FOR_FINALITY_FLAG` when unset. Requested finality must select exactly one mode.
-    /// @param destinationChainSelector Nucleus `MultiChainTellerBase` destination chain-selector key.
+    /// @param destinationChainSelector Base Teller `MultiChainTellerBase` destination chain-selector key.
     /// @param requestedFinalityConfig Requested finality encoded with `FinalityCodec`.
     function setCcipOutboundFinalityConfig(
         uint32 destinationChainSelector,
@@ -131,7 +144,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
 
     /// @notice Sets the finality accepted for inbound messages from a configured source chain and trusted teller.
     /// @dev Defaults to `WAIT_FOR_FINALITY_FLAG` when unset.
-    /// @param sourceChainSelector Nucleus `MultiChainTellerBase` source chain-selector key.
+    /// @param sourceChainSelector Base Teller `MultiChainTellerBase` source chain-selector key.
     /// @param allowedFinalityConfig Allowed finality encoded with `FinalityCodec`.
     function setCcipInboundFinalityConfig(
         uint32 sourceChainSelector,
@@ -148,7 +161,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
 
     /// @notice Sets the inbound and outbound share-amount rate limiters for a configured chain.
     /// @dev Defaults to disabled. Capacity and rate use BoringVault share decimals.
-    /// @param chainSelector Nucleus `MultiChainTellerBase` chain-selector key.
+    /// @param chainSelector Base Teller `MultiChainTellerBase` chain-selector key.
     /// @param outboundRateLimiterConfig Outbound token-bucket configuration.
     /// @param inboundRateLimiterConfig Inbound token-bucket configuration.
     function setCcipRateLimiterConfig(
@@ -166,7 +179,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
         emit CcipRateLimiterConfigSet(chainSelector, outboundRateLimiterConfig, inboundRateLimiterConfig);
     }
 
-    /// @notice Clears all adapter-side configuration for a disabled Nucleus chain selector.
+    /// @notice Clears all adapter-side configuration for a disabled Base Teller chain selector.
     /// @dev Disable both message directions and reconcile in-flight messages before resetting a lane.
     function resetCcipChainConfig(uint32 chainSelector) external requiresAuth {
         if (chainSelector == 0) revert InvalidChainSelector();
@@ -218,11 +231,11 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
         )
     {
         allowedFinalityConfig = FinalityCodec.WAIT_FOR_FINALITY_FLAG;
-        uint32 nucleusSourceSelector = ccipSelectorToChainSelector[sourceChainSelector];
-        if (nucleusSourceSelector != 0 && sender.length == 32) {
-            Chain memory chain = selectorToChains[nucleusSourceSelector];
+        uint32 baseTellerSourceSelector = ccipSelectorToChainSelector[sourceChainSelector];
+        if (baseTellerSourceSelector != 0 && sender.length == 32) {
+            Chain memory chain = selectorToChains[baseTellerSourceSelector];
             if (chain.allowMessagesFrom && keccak256(sender) == keccak256(abi.encode(chain.targetTeller))) {
-                allowedFinalityConfig = ccipInboundFinalityConfig[nucleusSourceSelector];
+                allowedFinalityConfig = ccipInboundFinalityConfig[baseTellerSourceSelector];
             }
         }
 
@@ -230,24 +243,24 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
     }
 
     /// @notice Receives a CCIP message and mints BoringVault shares to the encoded destination receiver.
-    /// @dev Only the configured CCIP router may call this function. The CCIP source selector is mapped to the Nucleus
-    /// selector key before applying the existing Paxos chain allowlist and target teller checks.
+    /// @dev Only the configured CCIP router may call this function. The CCIP source selector is mapped to the Base
+    /// Teller selector key before applying the existing chain allowlist and target teller checks.
     /// @param message CCIP Any2EVM message containing `abi.encode(uint256 shareAmount, address receiver)`.
     function ccipReceive(Client.Any2EVMMessage calldata message) external override {
         if (msg.sender != address(router)) {
             revert CallerMustBeRouter(msg.sender);
         }
 
-        uint32 nucleusSourceSelector = ccipSelectorToChainSelector[message.sourceChainSelector];
-        if (nucleusSourceSelector == 0) revert InvalidChainSelector();
+        uint32 baseTellerSourceSelector = ccipSelectorToChainSelector[message.sourceChainSelector];
+        if (baseTellerSourceSelector == 0) revert InvalidChainSelector();
 
-        Chain memory chain = selectorToChains[nucleusSourceSelector];
-        if (!chain.allowMessagesFrom) revert MultiChainTellerBase_MessagesNotAllowedFrom(nucleusSourceSelector);
+        Chain memory chain = selectorToChains[baseTellerSourceSelector];
+        if (!chain.allowMessagesFrom) revert MultiChainTellerBase_MessagesNotAllowedFrom(baseTellerSourceSelector);
 
         if (message.sender.length != 32) revert InvalidSenderBytes(message.sender);
         address sender = abi.decode(message.sender, (address));
         if (sender != chain.targetTeller) {
-            revert MultiChainTellerBase_MessagesNotAllowedFromSender(uint256(nucleusSourceSelector), sender);
+            revert MultiChainTellerBase_MessagesNotAllowedFromSender(uint256(baseTellerSourceSelector), sender);
         }
         if (message.destTokenAmounts.length != 0) revert UnexpectedTokenAmounts();
 
@@ -256,7 +269,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
 
         if (receiver == address(0)) revert ZeroAddressDestinationReceiver();
 
-        ccipInboundRateLimiters[nucleusSourceSelector]._consume(shareAmount, address(vault));
+        ccipInboundRateLimiters[baseTellerSourceSelector]._consume(shareAmount, address(vault));
         vault.enter(address(0), ERC20(address(0)), 0, receiver, shareAmount);
         _afterReceive(shareAmount, receiver, message.messageId);
     }
@@ -379,8 +392,8 @@ contract MultiChainCCIPTellerWithMultiAssetSupport is MultiChainTellerBase, IAny
         return uint32(messageGas);
     }
 
-    function _ccipSelector(uint32 nucleusChainSelector) internal view returns (uint64 ccipSelector) {
-        ccipSelector = chainSelectorToCcipSelector[nucleusChainSelector];
+    function _ccipSelector(uint32 baseTellerChainSelector) internal view returns (uint64 ccipSelector) {
+        ccipSelector = chainSelectorToCcipSelector[baseTellerChainSelector];
         if (ccipSelector == 0) revert InvalidChainSelector();
     }
 

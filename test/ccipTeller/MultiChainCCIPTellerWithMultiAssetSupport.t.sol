@@ -29,8 +29,8 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     address internal constant NATIVE = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     uint8 internal constant MINTER_ROLE = 7;
     uint8 internal constant BURNER_ROLE = 8;
-    uint32 internal constant PAXOS_SOURCE = 1;
-    uint32 internal constant PAXOS_DESTINATION = 2;
+    uint32 internal constant SOURCE = 1;
+    uint32 internal constant DESTINATION = 2;
     uint64 internal constant CCIP_SOURCE = 14_767_482_510_784_806_043;
     uint64 internal constant CCIP_DESTINATION = 16_015_286_601_757_825_753;
 
@@ -60,10 +60,14 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         authority.setUserRole(address(adapter), MINTER_ROLE, true);
         authority.setUserRole(address(adapter), BURNER_ROLE, true);
 
-        adapter.addChain(PAXOS_SOURCE, true, true, remoteTeller, 100_000, 0);
-        adapter.addChain(PAXOS_DESTINATION, true, true, remoteTeller, 100_000, 0);
-        adapter.setCcipChainSelector(PAXOS_SOURCE, CCIP_SOURCE);
-        adapter.setCcipChainSelector(PAXOS_DESTINATION, CCIP_DESTINATION);
+        adapter.addChain(SOURCE, false, false, remoteTeller, 100_000, 0);
+        adapter.addChain(DESTINATION, false, false, remoteTeller, 100_000, 0);
+        adapter.setCcipChainSelector(SOURCE, CCIP_SOURCE);
+        adapter.setCcipChainSelector(DESTINATION, CCIP_DESTINATION);
+        adapter.allowMessagesFromChain(SOURCE, remoteTeller);
+        adapter.allowMessagesToChain(SOURCE, remoteTeller, 100_000);
+        adapter.allowMessagesFromChain(DESTINATION, remoteTeller);
+        adapter.allowMessagesToChain(DESTINATION, remoteTeller, 100_000);
 
         vault.enter(address(0), ERC20(address(0)), 0, address(this), 100 ether);
         vm.deal(address(this), 10 ether);
@@ -80,7 +84,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
 
         adapter.unpause();
-        adapter.stopMessagesToChain(PAXOS_DESTINATION);
+        adapter.stopMessagesToChain(DESTINATION);
         assertEq(adapter.previewFee(1 ether, _bridgeData(receiver, ERC20(NATIVE))), 0.01 ether);
         vm.expectRevert();
         adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
@@ -112,11 +116,11 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         bytes4 requestedFinalityConfig = FinalityCodec.WAIT_FOR_SAFE_FLAG;
         bytes4 allowedFinalityConfig = FinalityCodec._encodeBlockDepthAndSafeFlag(10);
 
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, requestedFinalityConfig);
-        adapter.setCcipInboundFinalityConfig(PAXOS_SOURCE, allowedFinalityConfig);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, requestedFinalityConfig);
+        adapter.setCcipInboundFinalityConfig(SOURCE, allowedFinalityConfig);
 
-        assertEq(adapter.ccipOutboundFinalityConfig(PAXOS_DESTINATION), requestedFinalityConfig);
-        assertEq(adapter.ccipInboundFinalityConfig(PAXOS_SOURCE), allowedFinalityConfig);
+        assertEq(adapter.ccipOutboundFinalityConfig(DESTINATION), requestedFinalityConfig);
+        assertEq(adapter.ccipInboundFinalityConfig(SOURCE), allowedFinalityConfig);
 
         (,,, bytes4 trustedFinalityConfig) = adapter.getCCVsAndFinalityConfig(CCIP_SOURCE, abi.encode(remoteTeller));
         assertEq(trustedFinalityConfig, allowedFinalityConfig);
@@ -143,11 +147,11 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
 
         vm.prank(address(0xBAD));
         vm.expectRevert("UNAUTHORIZED");
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
 
         vm.prank(address(0xBAD));
         vm.expectRevert("UNAUTHORIZED");
-        adapter.setCcipInboundFinalityConfig(PAXOS_SOURCE, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipInboundFinalityConfig(SOURCE, FinalityCodec.WAIT_FOR_SAFE_FLAG);
     }
 
     function test_setCcipOutboundFinalityConfig_reverts_for_multi_mode_request() public {
@@ -158,16 +162,16 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
                 FinalityCodec.RequestedFinalityCanOnlyHaveOneMode.selector, invalidRequestedFinalityConfig
             )
         );
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, invalidRequestedFinalityConfig);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, invalidRequestedFinalityConfig);
     }
 
     function test_setCcipRateLimiterConfig_updates_current_state() public {
         adapter.setCcipRateLimiterConfig(
-            PAXOS_DESTINATION, _rateLimit(true, 10 ether, 1 ether), _rateLimit(true, 5 ether, 0.5 ether)
+            DESTINATION, _rateLimit(true, 10 ether, 1 ether), _rateLimit(true, 5 ether, 0.5 ether)
         );
 
         (RateLimiter.TokenBucket memory outboundState, RateLimiter.TokenBucket memory inboundState) =
-            adapter.getCurrentCcipRateLimiterState(PAXOS_DESTINATION);
+            adapter.getCurrentCcipRateLimiterState(DESTINATION);
         assertTrue(outboundState.isEnabled);
         assertEq(outboundState.capacity, 10 ether);
         assertEq(outboundState.rate, 1 ether);
@@ -190,15 +194,15 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
 
         vm.prank(address(0xBAD));
         vm.expectRevert("UNAUTHORIZED");
-        adapter.setCcipRateLimiterConfig(PAXOS_DESTINATION, enabledConfig, disabledConfig);
+        adapter.setCcipRateLimiterConfig(DESTINATION, enabledConfig, disabledConfig);
 
         RateLimiter.Config memory invalidRateConfig = _rateLimit(true, 1 ether, 2 ether);
         vm.expectRevert(abi.encodeWithSelector(RateLimiter.InvalidRateLimitRate.selector, invalidRateConfig));
-        adapter.setCcipRateLimiterConfig(PAXOS_DESTINATION, invalidRateConfig, disabledConfig);
+        adapter.setCcipRateLimiterConfig(DESTINATION, invalidRateConfig, disabledConfig);
 
         RateLimiter.Config memory invalidDisabledConfig = _rateLimit(false, 1 ether, 0);
         vm.expectRevert(abi.encodeWithSelector(RateLimiter.DisabledNonZeroRateLimit.selector, invalidDisabledConfig));
-        adapter.setCcipRateLimiterConfig(PAXOS_SOURCE, disabledConfig, invalidDisabledConfig);
+        adapter.setCcipRateLimiterConfig(SOURCE, disabledConfig, invalidDisabledConfig);
     }
 
     function test_resetCcipChainConfig_requires_auth_and_disabled_lane() public {
@@ -206,36 +210,34 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         adapter.resetCcipChainConfig(0);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                MultiChainCCIPTellerWithMultiAssetSupport.CcipChainStillActive.selector, PAXOS_DESTINATION
-            )
+            abi.encodeWithSelector(MultiChainCCIPTellerWithMultiAssetSupport.CcipChainStillActive.selector, DESTINATION)
         );
-        adapter.resetCcipChainConfig(PAXOS_DESTINATION);
+        adapter.resetCcipChainConfig(DESTINATION);
 
-        adapter.stopMessagesFromChain(PAXOS_DESTINATION);
-        adapter.stopMessagesToChain(PAXOS_DESTINATION);
+        adapter.stopMessagesFromChain(DESTINATION);
+        adapter.stopMessagesToChain(DESTINATION);
         vm.prank(address(0xBAD));
         vm.expectRevert("UNAUTHORIZED");
-        adapter.resetCcipChainConfig(PAXOS_DESTINATION);
+        adapter.resetCcipChainConfig(DESTINATION);
     }
 
     function test_resetCcipChainConfig_clears_sidecars_without_affecting_other_lanes() public {
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
-        adapter.setCcipInboundFinalityConfig(PAXOS_DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipInboundFinalityConfig(DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
         adapter.setCcipRateLimiterConfig(
-            PAXOS_DESTINATION, _rateLimit(true, 10 ether, 1 ether), _rateLimit(true, 5 ether, 0.5 ether)
+            DESTINATION, _rateLimit(true, 10 ether, 1 ether), _rateLimit(true, 5 ether, 0.5 ether)
         );
-        adapter.stopMessagesFromChain(PAXOS_DESTINATION);
-        adapter.stopMessagesToChain(PAXOS_DESTINATION);
+        adapter.stopMessagesFromChain(DESTINATION);
+        adapter.stopMessagesToChain(DESTINATION);
 
-        adapter.resetCcipChainConfig(PAXOS_DESTINATION);
+        adapter.resetCcipChainConfig(DESTINATION);
 
-        assertEq(adapter.chainSelectorToCcipSelector(PAXOS_DESTINATION), 0);
+        assertEq(adapter.chainSelectorToCcipSelector(DESTINATION), 0);
         assertEq(adapter.ccipSelectorToChainSelector(CCIP_DESTINATION), 0);
-        assertEq(adapter.ccipOutboundFinalityConfig(PAXOS_DESTINATION), bytes4(0));
-        assertEq(adapter.ccipInboundFinalityConfig(PAXOS_DESTINATION), bytes4(0));
+        assertEq(adapter.ccipOutboundFinalityConfig(DESTINATION), bytes4(0));
+        assertEq(adapter.ccipInboundFinalityConfig(DESTINATION), bytes4(0));
         (RateLimiter.TokenBucket memory outboundState, RateLimiter.TokenBucket memory inboundState) =
-            adapter.getCurrentCcipRateLimiterState(PAXOS_DESTINATION);
+            adapter.getCurrentCcipRateLimiterState(DESTINATION);
         assertFalse(outboundState.isEnabled);
         assertEq(outboundState.tokens, 0);
         assertEq(outboundState.capacity, 0);
@@ -245,28 +247,66 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         assertEq(inboundState.capacity, 0);
         assertEq(inboundState.rate, 0);
 
-        assertEq(adapter.chainSelectorToCcipSelector(PAXOS_SOURCE), CCIP_SOURCE);
-        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), PAXOS_SOURCE);
+        assertEq(adapter.chainSelectorToCcipSelector(SOURCE), CCIP_SOURCE);
+        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), SOURCE);
 
-        adapter.resetCcipChainConfig(PAXOS_DESTINATION);
+        adapter.resetCcipChainConfig(DESTINATION);
     }
 
-    function test_setCcipChainSelector_reverts_for_zero_selector_and_clears_old_mappings() public {
-        assertTrue(router.isChainSupported(CCIP_DESTINATION));
+    function test_setCcipChainSelector_reverts_while_lane_is_active() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(MultiChainCCIPTellerWithMultiAssetSupport.CcipChainStillActive.selector, SOURCE)
+        );
+        adapter.setCcipChainSelector(SOURCE, CCIP_SOURCE + 1);
 
+        adapter.stopMessagesToChain(SOURCE);
+        vm.expectRevert(
+            abi.encodeWithSelector(MultiChainCCIPTellerWithMultiAssetSupport.CcipChainStillActive.selector, SOURCE)
+        );
+        adapter.setCcipChainSelector(SOURCE, CCIP_SOURCE + 1);
+        adapter.stopMessagesFromChain(SOURCE);
+        adapter.setCcipChainSelector(SOURCE, CCIP_SOURCE + 1);
+        assertEq(adapter.chainSelectorToCcipSelector(SOURCE), CCIP_SOURCE + 1);
+        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), 0);
+    }
+
+    function test_setCcipChainSelector_reprovisioning_after_disable_reenable_flow() public {
+        adapter.stopMessagesFromChain(DESTINATION);
+        adapter.stopMessagesToChain(DESTINATION);
+        adapter.setCcipChainSelector(DESTINATION, CCIP_DESTINATION + 1);
+
+        adapter.allowMessagesFromChain(DESTINATION, remoteTeller);
+        adapter.allowMessagesToChain(DESTINATION, remoteTeller, 100_000);
+        adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
+        assertEq(vault.balanceOf(address(this)), 99 ether);
+    }
+
+    function test_setCcipChainSelector_reverts_for_zero_selector() public {
         vm.expectRevert(MultiChainCCIPTellerWithMultiAssetSupport.InvalidChainSelector.selector);
         adapter.setCcipChainSelector(0, CCIP_DESTINATION);
 
-        uint64 replacementCcipSelector = CCIP_DESTINATION + 1;
-        uint32 replacementPaxosSelector = PAXOS_DESTINATION + 1;
+        vm.expectRevert(MultiChainCCIPTellerWithMultiAssetSupport.InvalidChainSelector.selector);
+        adapter.setCcipChainSelector(DESTINATION, 0);
+    }
 
-        adapter.setCcipChainSelector(PAXOS_SOURCE, replacementCcipSelector);
-        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), 0);
-        assertEq(adapter.chainSelectorToCcipSelector(PAXOS_SOURCE), replacementCcipSelector);
+    function test_setCcipChainSelector_rejects_stealing_selector_from_active_lane() public {
+        uint32 thiefKey = DESTINATION + 7;
+        adapter.addChain(thiefKey, false, false, remoteTeller, 100_000, 0);
 
-        adapter.setCcipChainSelector(replacementPaxosSelector, CCIP_DESTINATION);
-        assertEq(adapter.chainSelectorToCcipSelector(PAXOS_DESTINATION), 0);
-        assertEq(adapter.ccipSelectorToChainSelector(CCIP_DESTINATION), replacementPaxosSelector);
+        vm.expectRevert(
+            abi.encodeWithSelector(MultiChainCCIPTellerWithMultiAssetSupport.CcipChainStillActive.selector, SOURCE)
+        );
+        adapter.setCcipChainSelector(thiefKey, CCIP_SOURCE);
+
+        assertEq(adapter.chainSelectorToCcipSelector(SOURCE), CCIP_SOURCE);
+        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), SOURCE);
+        assertEq(adapter.chainSelectorToCcipSelector(thiefKey), 0);
+
+        adapter.stopMessagesFromChain(SOURCE);
+        adapter.stopMessagesToChain(SOURCE);
+        adapter.setCcipChainSelector(thiefKey, CCIP_SOURCE);
+        assertEq(adapter.chainSelectorToCcipSelector(SOURCE), 0);
+        assertEq(adapter.ccipSelectorToChainSelector(CCIP_SOURCE), thiefKey);
     }
 
     function test_previewFee_reverts_for_non_native_fee_token_and_unmapped_destination() public {
@@ -274,7 +314,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         adapter.previewFee(1 ether, _bridgeData(receiver, asset));
 
         vm.expectRevert(MultiChainCCIPTellerWithMultiAssetSupport.InvalidChainSelector.selector);
-        adapter.previewFee(1 ether, _bridgeData(PAXOS_DESTINATION + 1, receiver, ERC20(NATIVE)));
+        adapter.previewFee(1 ether, _bridgeData(DESTINATION + 1, receiver, ERC20(NATIVE)));
     }
 
     function test_previewFee_reverts_for_message_gas_above_ccip_v2_limit() public {
@@ -346,7 +386,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     }
 
     function test_bridge_sends_message_with_configured_requested_finality() public {
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
 
         adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
 
@@ -356,11 +396,11 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     }
 
     function test_bridge_consumes_outbound_rate_limit_and_reverts_when_exceeded() public {
-        adapter.setCcipRateLimiterConfig(PAXOS_DESTINATION, _rateLimit(true, 1 ether, 0), _rateLimit(false, 0, 0));
+        adapter.setCcipRateLimiterConfig(DESTINATION, _rateLimit(true, 1 ether, 0), _rateLimit(false, 0, 0));
 
         adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
 
-        (RateLimiter.TokenBucket memory outboundState,) = adapter.getCurrentCcipRateLimiterState(PAXOS_DESTINATION);
+        (RateLimiter.TokenBucket memory outboundState,) = adapter.getCurrentCcipRateLimiterState(DESTINATION);
         assertEq(outboundState.tokens, 0);
         assertEq(vault.balanceOf(address(this)), 99 ether);
 
@@ -375,16 +415,16 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     }
 
     function test_bridge_refills_outbound_rate_limit() public {
-        adapter.setCcipRateLimiterConfig(PAXOS_DESTINATION, _rateLimit(true, 2 ether, 1 ether), _rateLimit(false, 0, 0));
+        adapter.setCcipRateLimiterConfig(DESTINATION, _rateLimit(true, 2 ether, 1 ether), _rateLimit(false, 0, 0));
 
         adapter.bridge{ value: 0.01 ether }(2 ether, _bridgeData(receiver, ERC20(NATIVE)));
-        (RateLimiter.TokenBucket memory outboundState,) = adapter.getCurrentCcipRateLimiterState(PAXOS_DESTINATION);
+        (RateLimiter.TokenBucket memory outboundState,) = adapter.getCurrentCcipRateLimiterState(DESTINATION);
         assertEq(outboundState.tokens, 0);
 
         vm.warp(block.timestamp + 1);
         adapter.bridge{ value: 0.01 ether }(1 ether, _bridgeData(receiver, ERC20(NATIVE)));
 
-        (outboundState,) = adapter.getCurrentCcipRateLimiterState(PAXOS_DESTINATION);
+        (outboundState,) = adapter.getCurrentCcipRateLimiterState(DESTINATION);
         assertEq(outboundState.tokens, 0);
         assertEq(vault.balanceOf(address(this)), 97 ether);
     }
@@ -411,7 +451,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     }
 
     function test_previewFee_reverts_instead_of_dropping_configured_fast_finality_to_legacy_v1() public {
-        adapter.setCcipOutboundFinalityConfig(PAXOS_DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
+        adapter.setCcipOutboundFinalityConfig(DESTINATION, FinalityCodec.WAIT_FOR_SAFE_FLAG);
         router.setRejectedExtraArgsTag(ExtraArgsCodec.GENERIC_EXTRA_ARGS_V3_TAG);
 
         vm.expectRevert(MockRouterClient.InvalidExtraArgsTag.selector);
@@ -478,7 +518,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     function test_ccipReceive_reverts_for_wrong_sender() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                MultiChainTellerBase_MessagesNotAllowedFromSender.selector, uint256(PAXOS_SOURCE), address(0xBAD)
+                MultiChainTellerBase_MessagesNotAllowedFromSender.selector, uint256(SOURCE), address(0xBAD)
             )
         );
         router.routeMessage(address(adapter), _message(address(0xBAD), receiver, 1 ether));
@@ -490,11 +530,11 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         vm.expectRevert(MultiChainCCIPTellerWithMultiAssetSupport.InvalidChainSelector.selector);
         router.routeMessage(address(adapter), message);
 
-        adapter.stopMessagesFromChain(PAXOS_SOURCE);
-        vm.expectRevert(abi.encodeWithSelector(MultiChainTellerBase_MessagesNotAllowedFrom.selector, PAXOS_SOURCE));
+        adapter.stopMessagesFromChain(SOURCE);
+        vm.expectRevert(abi.encodeWithSelector(MultiChainTellerBase_MessagesNotAllowedFrom.selector, SOURCE));
         router.routeMessage(address(adapter), _message(remoteTeller, receiver, 1 ether));
 
-        adapter.allowMessagesFromChain(PAXOS_SOURCE, remoteTeller);
+        adapter.allowMessagesFromChain(SOURCE, remoteTeller);
         message = _message(remoteTeller, receiver, 1 ether);
         message.sender = abi.encodePacked(remoteTeller);
         vm.expectRevert(
@@ -525,14 +565,14 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         router.routeMessage(address(adapter), message);
         assertFalse(router.routedMessages(message.messageId));
 
-        adapter.allowMessagesFromChain(PAXOS_SOURCE, address(0xBAD));
+        adapter.allowMessagesFromChain(SOURCE, address(0xBAD));
         router.routeMessage(address(adapter), message);
         assertTrue(router.routedMessages(message.messageId));
         assertEq(vault.balanceOf(receiver), 1 ether);
     }
 
     function test_ccipReceive_reverts_for_token_amounts_without_consuming_rate_limit() public {
-        adapter.setCcipRateLimiterConfig(PAXOS_SOURCE, _rateLimit(false, 0, 0), _rateLimit(true, 1 ether, 0));
+        adapter.setCcipRateLimiterConfig(SOURCE, _rateLimit(false, 0, 0), _rateLimit(true, 1 ether, 0));
         Client.Any2EVMMessage memory message = _message(remoteTeller, receiver, 1 ether);
         message.destTokenAmounts = new Client.EVMTokenAmount[](1);
         message.destTokenAmounts[0] = Client.EVMTokenAmount({ token: address(asset), amount: 1 ether });
@@ -540,17 +580,17 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
         vm.expectRevert(MultiChainCCIPTellerWithMultiAssetSupport.UnexpectedTokenAmounts.selector);
         router.routeMessage(address(adapter), message);
 
-        (, RateLimiter.TokenBucket memory inboundState) = adapter.getCurrentCcipRateLimiterState(PAXOS_SOURCE);
+        (, RateLimiter.TokenBucket memory inboundState) = adapter.getCurrentCcipRateLimiterState(SOURCE);
         assertEq(inboundState.tokens, 1 ether);
         assertEq(vault.balanceOf(receiver), 0);
     }
 
     function test_ccipReceive_consumes_inbound_rate_limit_and_reverts_when_exceeded() public {
-        adapter.setCcipRateLimiterConfig(PAXOS_SOURCE, _rateLimit(false, 0, 0), _rateLimit(true, 1 ether, 0));
+        adapter.setCcipRateLimiterConfig(SOURCE, _rateLimit(false, 0, 0), _rateLimit(true, 1 ether, 0));
 
         router.routeMessage(address(adapter), _message(remoteTeller, receiver, 1 ether));
 
-        (, RateLimiter.TokenBucket memory inboundState) = adapter.getCurrentCcipRateLimiterState(PAXOS_SOURCE);
+        (, RateLimiter.TokenBucket memory inboundState) = adapter.getCurrentCcipRateLimiterState(SOURCE);
         assertEq(inboundState.tokens, 0);
         assertEq(vault.balanceOf(receiver), 1 ether);
 
@@ -567,7 +607,7 @@ contract MultiChainCCIPTellerWithMultiAssetSupportTest is Test {
     }
 
     function _bridgeData(address destinationReceiver, ERC20 feeToken) internal pure returns (BridgeData memory) {
-        return _bridgeData(PAXOS_DESTINATION, destinationReceiver, feeToken);
+        return _bridgeData(DESTINATION, destinationReceiver, feeToken);
     }
 
     function _bridgeData(
