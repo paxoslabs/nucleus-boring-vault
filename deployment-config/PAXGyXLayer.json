@@ -60,7 +60,7 @@
   },
   "distributorCodeDepositor": {
     "deploy": true,
-    "supplyCap": "230425365224203880000000",
+    "supplyCap": "0",
     "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
     "policyID": "",
     "nativeSupported": false
