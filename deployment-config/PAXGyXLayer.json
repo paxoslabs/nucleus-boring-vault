@@ -4,18 +4,22 @@
   "protocolAdmin": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
   "boringVaultAndBaseDecimals": "18",
   "boringVault": {
+    "moduleSpecificNameEntropy": "",
     "boringVaultName": "PAXGy",
     "boringVaultSymbol": "PAXGy",
     "beforeTransferHookAddress": "0x0000000000000000000000000000000000000000",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "freezeListBeforeTransferHook": {
+    "moduleSpecificNameEntropy": "",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "manager": {
+    "moduleSpecificNameEntropy": "",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "accountant": {
+    "moduleSpecificNameEntropy": "",
     "payoutAddress": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
     "allowedExchangeRateChangeUpper": "10004",
     "allowedExchangeRateChangeLower": "10000",
@@ -25,6 +29,7 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "teller": {
+    "moduleSpecificNameEntropy": "",
     "tellerContractName": "MultiChainCCIPTellerWithMultiAssetSupport",
     "maxGasForPeer": 200000,
     "minGasForPeer": 0,
@@ -54,18 +59,21 @@
     "address": "0x0000000000000000000000000000000000000000"
   },
   "rolesAuthority": {
+    "moduleSpecificNameEntropy": "",
     "strategist": "0xa77423F8da11199b3b7fA0AD1DEaB701B81462b5",
     "exchangeRateBot": "0x1755397BEc366a1e1160d8aE0106C60E7e344B56",
     "address": "0x0000000000000000000000000000000000000000"
   },
   "distributorCodeDepositor": {
+    "moduleSpecificNameEntropy": "CCIPUpgrade",
     "deploy": true,
     "supplyCap": "0",
-    "registry": "0xe15a8Ca5BD8464283818088c1760d8f23B6a216E",
+    "registry": "0x0000000000000000000000000000000000000000",
     "policyID": "",
     "nativeSupported": false
   },
   "withdrawQueue": {
+    "moduleSpecificNameEntropy": "",
     "name": "PAXGy Withdraw Queue",
     "symbol": "PAXGyQ",
     "feeRecipient": "0xd4cbD7a1B1cc869Ea34068DFeC2A15a1fD65EEC5",
