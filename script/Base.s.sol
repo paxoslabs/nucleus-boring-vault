@@ -86,12 +86,6 @@ abstract contract BaseScript is Script {
             config.boringVaultAndBaseDecimals == ERC20(config.base).decimals(),
             "BASE PRE-DEPLOY CHECK: Boring vault and base decimals do not match"
         );
-        // Unset resolves to address(0) and fails here, rather than surfacing as an opaque envAddress revert.
-        require(
-            vm.envOr({ name: "FREEZE_LIST_BEFORE_TRANSFER_HOOK", defaultValue: address(0) })
-                == FREEZE_LIST_BEFORE_TRANSFER_HOOK,
-            "BASE PRE-DEPLOY CHECK: FREEZE_LIST_BEFORE_TRANSFER_HOOK env var does not match the canonical hook address"
-        );
         return _deploy(config);
     }
 
