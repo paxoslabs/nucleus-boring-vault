@@ -19,6 +19,12 @@ abstract contract BaseScript is Script {
     string constant CONFIG_PATH_ROOT = "./deployment-config/";
     string constant CONFIG_CHAIN_ROOT = "./deployment-config/chains/";
 
+    /// @dev One hook instance per chain, at the same address on every chain. Reproduced by
+    /// `script/deploy/DeployBeforeTransferHook.s.sol`, which pins the CREATE3 salt this address derives from.
+    /// @custom:security Vaults share this instance, so a freeze applies chain-wide. Changing this constant orphans
+    /// every already-deployed vault pointing at the old address.
+    address internal constant FREEZE_LIST_BEFORE_TRANSFER_HOOK = 0x91248711709bC6a09078Baf79Eb9f9bE5035870a;
+
     /// Custom base params
     ICreateX immutable CREATEX;
 
