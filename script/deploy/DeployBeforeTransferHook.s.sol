@@ -19,7 +19,7 @@ import "src/helper/Constants.sol";
  * the match on-chain; the check here just fails earlier and more legibly.
  */
 contract DeployBeforeTransferHook is BaseScript {
-    
+
     /// @dev First 20 bytes of `SALT`.
     address constant REQUIRED_DEPLOYER = 0xDdDdF452dEc1F3877392e08810a7994c2A19A000;
     address constant FREEZE_MANAGER = 0x363c256D368277BBFaf6EaF65beE123a7AdbA464;
@@ -29,11 +29,7 @@ contract DeployBeforeTransferHook is BaseScript {
         require(broadcaster == REQUIRED_DEPLOYER, "broadcaster is not the deployer SALT is prefixed with");
         require(FREEZE_LIST_BEFORE_TRANSFER_HOOK.code.length == 0, "hook already deployed on this chain");
 
-        bytes32 SALT = makeSalt(
-            broadcaster,
-            false,
-            string("FreezeListBeforeTransferHook")
-        );
+        bytes32 SALT = makeSalt(broadcaster, false, string("FreezeListBeforeTransferHook"));
 
         address multisig = getMultisig();
 
