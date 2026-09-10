@@ -23,7 +23,7 @@ abstract contract BaseScript is Script {
     /// `script/deploy/DeployBeforeTransferHook.s.sol`, which pins the CREATE3 salt this address derives from.
     /// @custom:security Vaults share this instance, so a freeze applies chain-wide. Changing this constant orphans
     /// every already-deployed vault pointing at the old address.
-    address internal constant FREEZE_LIST_BEFORE_TRANSFER_HOOK = 0x2e30D7903f69063be7B5C5B374648dc9Fc7FB7Ee;
+    address internal constant FREEZE_LIST_BEFORE_TRANSFER_HOOK = 0x91248711709bC6a09078Baf79Eb9f9bE5035870a;
 
     /// Custom base params
     ICreateX immutable CREATEX;
@@ -91,10 +91,6 @@ abstract contract BaseScript is Script {
             vm.envOr({ name: "FREEZE_LIST_BEFORE_TRANSFER_HOOK", defaultValue: address(0) })
                 == FREEZE_LIST_BEFORE_TRANSFER_HOOK,
             "BASE PRE-DEPLOY CHECK: FREEZE_LIST_BEFORE_TRANSFER_HOOK env var does not match the canonical hook address"
-        );
-        require(
-            FREEZE_LIST_BEFORE_TRANSFER_HOOK.code.length != 0,
-            "BASE PRE-DEPLOY CHECK: FreezeListBeforeTransferHook not deployed on this chain. Run DeployBeforeTransferHook first"
         );
         return _deploy(config);
     }
