@@ -29,7 +29,7 @@ library ConfigReader {
         uint16 performanceFee;
         string boringVaultName;
         string boringVaultSymbol;
-        address beforeTransferHookAddress;
+        bool setBeforeTransferHook;
         address balancerVault;
         uint32 peerEid;
         bool setupLZConfigs;
@@ -90,10 +90,8 @@ library ConfigReader {
         uint256 withdrawQueueMinimumOrderSize;
         address withdrawQueue;
         address withdrawQueueProcessorAddress;
-        address freezeListBeforeTransferHook;
         address genericDecoderAndSanitizer;
         string boringVaultModuleSpecificNameEntropy;
-        string freezeListBeforeTransferHookModuleSpecificNameEntropy;
         string managerModuleSpecificNameEntropy;
         string accountantModuleSpecificNameEntropy;
         string tellerModuleSpecificNameEntropy;
@@ -126,7 +124,7 @@ library ConfigReader {
         config.boringVault = _config.readAddress(".boringVault.address");
         config.boringVaultName = _config.readString(".boringVault.boringVaultName");
         config.boringVaultSymbol = _config.readString(".boringVault.boringVaultSymbol");
-        config.beforeTransferHookAddress = _config.readAddress(".boringVault.beforeTransferHookAddress");
+        config.setBeforeTransferHook = _config.readBoolOr(".boringVault.setBeforeTransferHookAddress", true);
         config.boringVaultModuleSpecificNameEntropy = _config.readStringOr(".boringVault.moduleSpecificNameEntropy", "");
 
         // Reading from the 'manager' section
@@ -222,11 +220,6 @@ library ConfigReader {
         config.withdrawQueueProcessorAddress = _config.readAddress(".withdrawQueue.processorAddress");
         config.withdrawQueueModuleSpecificNameEntropy =
             _config.readStringOr(".withdrawQueue.moduleSpecificNameEntropy", "");
-
-        // Reading from the 'freezeListBeforeTransferHook' section
-        config.freezeListBeforeTransferHook = _config.readAddress(".freezeListBeforeTransferHook.address");
-        config.freezeListBeforeTransferHookModuleSpecificNameEntropy =
-            _config.readStringOr(".freezeListBeforeTransferHook.moduleSpecificNameEntropy", "");
 
         // Reading from the 'chainConfig' section
         config.balancerVault = _chainConfig.readAddress(".balancerVault");

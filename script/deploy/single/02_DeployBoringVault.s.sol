@@ -43,6 +43,13 @@ contract DeployIonBoringVaultScript is BaseScript {
                 ))
         );
 
+        if (config.setBeforeTransferHook) {
+            boringVault.setBeforeTransferHook(FREEZE_LIST_BEFORE_TRANSFER_HOOK);
+            require(
+                address(boringVault.hook()) == FREEZE_LIST_BEFORE_TRANSFER_HOOK, "boringVault must have freeze hook"
+            );
+        }
+
         // Post Deploy Checks
         require(boringVault.owner() == broadcaster, "owner should be the deployer");
         require(
