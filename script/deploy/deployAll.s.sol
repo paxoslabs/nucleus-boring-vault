@@ -65,7 +65,6 @@ contract DeployAll is BaseScript {
         deploy(ConfigReader.toConfig(vm.readFile(string.concat(CONFIG_PATH_ROOT, deployFile)), getChainConfigFile()));
         // write everything to an out file
         mainConfig.boringVault.toHexString().write(OUTPUT_JSON_PATH, ".boringVault");
-        FREEZE_LIST_BEFORE_TRANSFER_HOOK.toHexString().write(OUTPUT_JSON_PATH, ".freezeListBeforeTransferHook");
         mainConfig.manager.toHexString().write(OUTPUT_JSON_PATH, ".manager");
         mainConfig.accountant.toHexString().write(OUTPUT_JSON_PATH, ".accountant");
         mainConfig.teller.toHexString().write(OUTPUT_JSON_PATH, ".teller");
