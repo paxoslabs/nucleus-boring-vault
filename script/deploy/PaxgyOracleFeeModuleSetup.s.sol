@@ -3,7 +3,6 @@ pragma solidity 0.8.21;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ERC20 } from "@solmate/tokens/ERC20.sol";
-import { stdJson as StdJson } from "@forge-std/StdJson.sol";
 import { console2 } from "forge-std/console2.sol";
 
 import { PaxgyDynamicDepositFeeModule } from "src/helper/PaxgyDynamicDepositFeeModule.sol";
@@ -18,21 +17,17 @@ import { BaseScript } from "../Base.s.sol";
  * (XAU per PAXG) followed by the {PaxgyDynamicDepositFeeModule} and {PaxgyDynamicWithdrawalFeeModule}
  * that price against it, all via CreateX CREATE3.
  * @dev The Chainlink PAXG/USD and XAU/USD feeds and the PAXG token only exist on Ethereum mainnet, so the
- * run is gated to chain id 1. The vault share token is read from the deployment config's
- * `.boringVault.address`, so the modules can only be wired to a vault that has already been deployed and
- * recorded. Deploying the oracle in the same run removes the cross-script address handoff: the modules
- * always bind to the oracle this run produced and verified.
+ * run is gated to chain id 1. Every input is a constant below, including {BORING_VAULT}: the modules can
+ * only be wired to a vault that has already been deployed. Deploying the oracle in the same run removes the
+ * cross-script address handoff: the modules always bind to the oracle this run produced and verified.
  */
 contract PaxgyOracleFeeModuleSetup is BaseScript {
 
-    using StdJson for string;
+    address constant BORING_VAULT = 0x6c6494Fd9962eB98B94ffA48F6679058F820700e;
 
-    // Vanity salt cracked for this deployer; CreateX rejects it from any other sender.
-    bytes32 constant RATE_PROVIDER_SALT = 0x12341eD9cb38Ae1b15016c6eD9F88e247f2AF76f005555555555555555550901;
-    address constant RATE_PROVIDER_SALT_DEPLOYER = 0x12341eD9cb38Ae1b15016c6eD9F88e247f2AF76f;
-
-    string constant DEPOSIT_FEE_MODULE_NAME_ENTROPY = "Paxgy: DynamicDepositFeeModule";
-    string constant WITHDRAWAL_FEE_MODULE_NAME_ENTROPY = "Paxgy: DynamicWithdrawalFeeModule";
+    string constant RATE_PROVIDER_NAME_ENTROPY = "Paxgy:PaxgXauRateProvider";
+    string constant DEPOSIT_FEE_MODULE_NAME_ENTROPY = "Paxgy:DynamicDepositFeeModule";
+    string constant WITHDRAWAL_FEE_MODULE_NAME_ENTROPY = "Paxgy:DynamicWithdrawalFeeModule";
 
     // Chainlink Ethereum mainnet feeds. Verify against docs.chain.link before broadcasting.
     address constant PAXG_USD_FEED = 0x9944D86CEB9160aF5C5feB251FD671923323f8C3;
@@ -50,47 +45,46 @@ contract PaxgyOracleFeeModuleSetup is BaseScript {
 
     // Fixed withdrawal fee in basis points: 10 = 0.10%.
     uint256 constant WITHDRAWAL_FIXED_FEE_BPS = 10;
+    uint256 constant BPS_DIVISOR = 10_000;
 
-    /// @notice Prompts for the deployment config file, then deploys the oracle and both fee modules.
-    function run() public returns (address rateProvider, address depositFeeModule, address withdrawalFeeModule) {
-        return _deployPricingStack(requestConfigFileFromUser().readAddress(".boringVault.address"));
-    }
+    // Used for checking that the output fees are accurate
+    uint256 constant PEG_PRICE = 1e18;
 
-    /// @notice Non-interactive entrypoint.
-    /// @param deployFile Config file name relative to CONFIG_PATH_ROOT, e.g. "paxgy.json".
-    function run(string memory deployFile)
+    // Equal to PEG_PRICE so each module's mulDivUp divides evenly: the expected probe fee is exact, not a
+    // rounded band.
+    uint256 constant FEE_PROBE_AMOUNT = PEG_PRICE;
+
+    // Launch gate, not a safety property: PAXG tracks gold spot well inside 1% in an ordinary market, so a
+    // depeg fee past 2% of the probe means the market is wrong, not the wiring.
+    uint256 constant MAX_DEPEG_FEE = 0.02e18;
+
+    /// @notice Deploys the oracle and both fee modules, then verifies each one's wiring before returning.
+    function run()
         public
-        returns (address rateProvider, address depositFeeModule, address withdrawalFeeModule)
-    {
-        string memory config = vm.readFile(string.concat(CONFIG_PATH_ROOT, deployFile));
-        return _deployPricingStack(config.readAddress(".boringVault.address"));
-    }
-
-    function _deployPricingStack(address shares)
-        internal
         broadcast
         returns (address rateProvider, address depositFeeModule, address withdrawalFeeModule)
     {
         if (block.chainid != 1) {
             revert("PaxgyOracleFeeModuleSetup: PAXG/XAU feeds and PAXG only exist on Ethereum mainnet (chainid 1)");
         }
-        require(broadcaster == RATE_PROVIDER_SALT_DEPLOYER, "PaxgyOracleFeeModuleSetup: broadcaster does not own salt");
-        require(shares != address(0), "PaxgyOracleFeeModuleSetup: config .boringVault.address is unset");
-        require(shares.code.length != 0, "PaxgyOracleFeeModuleSetup: boring vault has no code on this chain");
+        require(BORING_VAULT != address(0), "PaxgyOracleFeeModuleSetup: BORING_VAULT is unset");
+        require(BORING_VAULT.code.length != 0, "PaxgyOracleFeeModuleSetup: boring vault has no code on this chain");
 
         rateProvider = _deployRateProvider();
-        depositFeeModule = _deployDepositFeeModule(rateProvider, shares);
-        withdrawalFeeModule = _deployWithdrawalFeeModule(rateProvider, shares);
+        depositFeeModule = _deployDepositFeeModule(rateProvider, BORING_VAULT);
+        withdrawalFeeModule = _deployWithdrawalFeeModule(rateProvider, BORING_VAULT);
 
-        console2.log("PAXGy shares (BoringVault): ", shares);
+        console2.log("PAXGy shares (BoringVault): ", BORING_VAULT);
         console2.log("PaxgXauRateProvider: ", rateProvider);
         console2.log("PaxgyDynamicDepositFeeModule: ", depositFeeModule);
         console2.log("PaxgyDynamicWithdrawalFeeModule: ", withdrawalFeeModule);
     }
 
     function _deployRateProvider() internal returns (address rateProvider) {
+        bytes32 salt = makeSalt(broadcaster, false, RATE_PROVIDER_NAME_ENTROPY);
+
         rateProvider = CREATEX.deployCreate3(
-            RATE_PROVIDER_SALT,
+            salt,
             abi.encodePacked(
                 type(PaxgXauRateProvider).creationCode,
                 abi.encode(
@@ -143,6 +137,17 @@ contract PaxgyOracleFeeModuleSetup is BaseScript {
         );
         require(address(module.PAXG()) == PAXG_TOKEN, "PaxgyOracleFeeModuleSetup: deposit PAXG mismatch");
         require(address(module.SHARES()) == shares, "PaxgyOracleFeeModuleSetup: deposit shares mismatch");
+
+        // Equality pins the module's math to the live oracle end-to-end; the immutable checks above only
+        // compare stored addresses and never execute the fee path.
+        uint256 rate = IRateProvider(rateProvider).getRate();
+        uint256 fee = module.calculateOfferFees(FEE_PROBE_AMOUNT, IERC20(PAXG_TOKEN), IERC20(shares), address(0));
+        require(
+            fee == (rate >= PEG_PRICE ? 0 : PEG_PRICE - rate), "PaxgyOracleFeeModuleSetup: deposit fee != peg shortfall"
+        );
+        require(fee <= MAX_DEPEG_FEE, "PaxgyOracleFeeModuleSetup: deposit depeg fee above launch cap");
+
+        console2.log("PaxgyDynamicDepositFeeModule fee on 1e18 PAXG: ", fee);
     }
 
     function _deployWithdrawalFeeModule(address rateProvider, address shares) internal returns (address feeModule) {
@@ -167,6 +172,16 @@ contract PaxgyOracleFeeModuleSetup is BaseScript {
             module.FIXED_FEE_BPS() == WITHDRAWAL_FIXED_FEE_BPS,
             "PaxgyOracleFeeModuleSetup: withdrawal fixed fee mismatch"
         );
+
+        // The fixed fee is charged at any price, so it floors the total. A total below it means the fixed
+        // component never took, which the FIXED_FEE_BPS check above cannot see: that reads storage, not the
+        // fee path.
+        uint256 fixedFee = (FEE_PROBE_AMOUNT * WITHDRAWAL_FIXED_FEE_BPS) / BPS_DIVISOR;
+        uint256 fee = module.calculateOfferFees(FEE_PROBE_AMOUNT, IERC20(shares), IERC20(PAXG_TOKEN), address(0));
+        require(fee >= fixedFee, "PaxgyOracleFeeModuleSetup: withdrawal fee below fixed floor");
+        require(fee <= fixedFee + MAX_DEPEG_FEE, "PaxgyOracleFeeModuleSetup: withdrawal depeg fee above launch cap");
+
+        console2.log("PaxgyDynamicWithdrawalFeeModule fee on 1e18 shares: ", fee);
     }
 
 }
