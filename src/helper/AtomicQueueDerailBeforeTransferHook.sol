@@ -61,7 +61,7 @@ contract AtomicQueueDerailBeforeTransferHook is BeforeTransferHook {
         // empty return data indicates we did not hit the reentrancy guard
         if (returnData.length == 0) return;
 
-        if (keccak256(returnData) != REENTRANCY_REVERT_HASH) {
+        if (keccak256(returnData) == REENTRANCY_REVERT_HASH) {
             revert UseOfInvalidContract(from, address(atomicQueue), returnData);
         }
 
