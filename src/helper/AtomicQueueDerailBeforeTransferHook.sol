@@ -5,6 +5,16 @@ import { ERC20 } from "@solmate/tokens/ERC20.sol";
 import { BeforeTransferHook } from "src/interfaces/BeforeTransferHook.sol";
 import { AtomicQueue } from "src/atomic-queue/AtomicQueue.sol";
 
+/**
+ * @title AtomicQueueDerailBeforeTransferHook
+ * @dev The old AtomicQueue contract has a vulnerability whereby dangling approvals can be taken advantage of. Users
+ * with BoringVault shares and outstanding approvals may be drained by attackers. To make this attack impossible on old
+ * vaults that used this contract, we have created this de-railing beforeTransferHook. We can de-rail any attempt to use
+ * BoringVault shares with this contract by attempting to re-enter the solve() function – triggering the reenterency
+ * guard. A normal transfer will successfully pass as a no-op will occur and the reenterency guard will not be
+ * triggered.
+ * @custom:security-contact security@molecularlabs.io
+ */
 contract AtomicQueueDerailBeforeTransferHook is BeforeTransferHook {
     error UnexpectedRevert(address from, bytes returnData);
     error UseOfInvalidContract(address from, address blockedContract, bytes returnData);
