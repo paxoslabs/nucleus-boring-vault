@@ -20,20 +20,20 @@ contract AtomicQueueDerailBeforeTransferHook is BeforeTransferHook {
     }
 
     /**
-     * @dev This use of the beforeTransfer hook derails any attempt to use the vault tokens in a vulnerable AtomicQueue
+     * @dev This use of the beforeTransfer hook de-rails any attempt to use the vault tokens in a vulnerable AtomicQueue
      * contract.
      *   It does this by weaponizing the reenternacy guard and attempting on every single token transfer, to enter the
      * solve() function.
      *   This is slightly complicated by the fact that this beforeTransfer hook is a view function but we may still
-     * utilize this technique by attempting a staticcall to solve() with empty imputs and inspecting the revert message.
+     * utilize this technique by attempting a staticcall to solve() with empty inputs and inspecting the revert message.
      * A staticcall will revert upon an attempt to modify storage with empty data. Whereas a reenterency will revert
      * early (within the modifier) with a specific revert message. We handle the revert data as follows:
      *
-     *       1. If the transaction suceeded we panic as this should never happen
+     *       1. If the transaction succeeded we panic as this should never happen
      *       2. If the revert message is empty, indicating the revert was NOT due to a reenterency guard, we return
-     * empty data and allow the transfer to continue as this transfer is shown to not occur durring use of the
-     * vulnerable contract. It's worth noting this practically ocurrs when a transaction passes the reenterncy guard and
-     * fails attempting to query offerAsset decimals(). But this may also ocurr even with a real ERC20 offerAsset
+     * empty data and allow the transfer to continue as this transfer is shown to not occur during use of the
+     * vulnerable contract. It's worth noting this practically occurs when a transaction passes the reenterncy guard and
+     * fails attempting to query offerAsset decimals(). But this may also occur even with a real ERC20 offerAsset
      * contract due to an attempted SSTORE within a static call.
      *       3. If the return data matches the reentrancy guard signature, we revert with a revert message to block this
      * interaction with the vulnerable atomicQueue.
