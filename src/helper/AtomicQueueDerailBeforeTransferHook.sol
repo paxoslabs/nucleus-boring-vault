@@ -36,18 +36,17 @@ contract AtomicQueueDerailBeforeTransferHook is BeforeTransferHook {
      * solve() function.
      *   This is slightly complicated by the fact that this beforeTransfer hook is a view function but we may still
      * utilize this technique by attempting a staticcall to solve() with empty inputs and inspecting the revert message.
-     * A staticcall will revert upon an attempt to modify storage with empty data. Whereas a reenterency will revert
+     * A staticcall will revert with empty data upon an attempt to modify storage. Whereas a reenterency will revert
      * early (within the modifier) with a specific revert message. We handle the revert data as follows:
      *
      *       1. If the transaction succeeded we panic as this should never happen
      *       2. If the revert message is empty, indicating the revert was NOT due to a reenterency guard, we return
      * empty data and allow the transfer to continue as this transfer is shown to not occur during use of the
-     * vulnerable contract. It's worth noting this practically occurs when a transaction passes the reenterncy guard and
-     * fails attempting to query offerAsset decimals(). But this may also occur even with a real ERC20 offerAsset
-     * contract due to an attempted SSTORE within a static call.
+     * vulnerable contract.
      *       3. If the return data matches the reentrancy guard signature, we revert with a revert message to block this
      * interaction with the vulnerable atomicQueue.
-     *       4. If for any reason the call reverted with different revert data, we revert with that data.
+     *       4. If for any reason the call reverted with different revert data, we throw a custom revert containing that
+     * data.
      */
     function beforeTransfer(address from) external view override {
         bytes memory payload = abi.encodeCall(
@@ -56,11 +55,11 @@ contract AtomicQueueDerailBeforeTransferHook is BeforeTransferHook {
 
         (bool success, bytes memory returnData) = address(atomicQueue).staticcall{ gas: DERAIL_GAS_STIPEND }(payload);
 
-        assert(!success); // The above call should always fail. Either by a reenterncy or by attempting to SSTORE as a
+        assert(!success); // The above call should always fail. Either by a reentrancy or by attempting to SSTORE as a
         // staticcall. There should be no possible path that results in a positive success value
 
-        bool haltedWithoutReverting = returnData.length == 0;
-        if (haltedWithoutReverting) return;
+        // empty return data indicates we did not hit the reentrancy guard
+        if (returnData.length == 0) return;
 
         if (keccak256(returnData) != REENTRANCY_REVERT_HASH) {
             revert UseOfInvalidContract(from, address(atomicQueue), returnData);
