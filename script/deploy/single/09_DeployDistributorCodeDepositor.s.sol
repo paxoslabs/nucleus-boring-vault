@@ -91,22 +91,23 @@ contract DeployDistributorCodeDepositor is BaseScript {
                 abi.encodePacked(type(DistributorCodeDepositor).creationCode, dcdInitCalldata)
             )
         );
+        console.log("DistributorCodeDepositor deployed: ", address(distributorCodeDepositor));
 
-        RolesAuthority(config.rolesAuthority)
-            .setPublicCapability(address(distributorCodeDepositor), distributorCodeDepositor.deposit.selector, true);
-        RolesAuthority(config.rolesAuthority)
-            .setPublicCapability(
-                address(distributorCodeDepositor), distributorCodeDepositor.depositWithPermit.selector, true
-            );
-        if (config.distributorCodeDepositorIsNativeDepositSupported) {
-            RolesAuthority(config.rolesAuthority)
-                .setPublicCapability(
-                    address(distributorCodeDepositor), distributorCodeDepositor.depositNative.selector, true
-                );
-        }
+        // RolesAuthority(config.rolesAuthority)
+        //     .setPublicCapability(address(distributorCodeDepositor), distributorCodeDepositor.deposit.selector, true);
+        // RolesAuthority(config.rolesAuthority)
+        //     .setPublicCapability(
+        //         address(distributorCodeDepositor), distributorCodeDepositor.depositWithPermit.selector, true
+        //     );
+        // if (config.distributorCodeDepositorIsNativeDepositSupported) {
+        //     RolesAuthority(config.rolesAuthority)
+        //         .setPublicCapability(
+        //             address(distributorCodeDepositor), distributorCodeDepositor.depositNative.selector, true
+        //         );
+        // }
 
-        // Grant the DEPOSITOR ROLE to the distributor code depositor
-        RolesAuthority(config.rolesAuthority).setUserRole(address(distributorCodeDepositor), DEPOSITOR_ROLE, true);
+        // // Grant the DEPOSITOR ROLE to the distributor code depositor
+        // RolesAuthority(config.rolesAuthority).setUserRole(address(distributorCodeDepositor), DEPOSITOR_ROLE, true);
 
         return address(distributorCodeDepositor);
     }

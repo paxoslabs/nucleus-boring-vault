@@ -44,20 +44,20 @@ contract TellerSetup is BaseScript {
             bool isPegged = getChainConfigFile().readBool(isPeggedKey);
 
             console.log("WITHDRAW ASSET: ", config.withdrawAssets[i]);
-            if (isPegged) {
-                teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), true, address(0));
-                console.log("- PEGGED");
-            } else {
-                // set the corresponding rate provider
-                string memory key = string(
-                    abi.encodePacked(
-                        ".assetToRateProviderAndPriceFeed.", config.withdrawAssets[i].toHexString(), ".rateProvider"
-                    )
-                );
-                address rateProvider = getChainConfigFile().readAddress(key);
-                teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), false, rateProvider);
-                console.log("- RATE PROVIDER: ", rateProvider);
-            }
+            // if (isPegged) {
+            //     teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), true, address(0));
+            //     console.log("- PEGGED");
+            // } else {
+            //     // set the corresponding rate provider
+            //     string memory key = string(
+            //         abi.encodePacked(
+            //             ".assetToRateProviderAndPriceFeed.", config.withdrawAssets[i].toHexString(), ".rateProvider"
+            //         )
+            //     );
+            //     address rateProvider = getChainConfigFile().readAddress(key);
+            //     teller.accountant().setRateProviderData(ERC20(config.withdrawAssets[i]), false, rateProvider);
+            //     console.log("- RATE PROVIDER: ", rateProvider);
+            // }
         }
 
         // add the deposit assets specified in the array of config
@@ -74,20 +74,20 @@ contract TellerSetup is BaseScript {
             bool isPegged = getChainConfigFile().readBool(isPeggedKey);
 
             console.log("DEPOSIT ASSET: ", config.depositAssets[i]);
-            if (isPegged) {
-                teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), true, address(0));
-                console.log("- PEGGED");
-            } else {
-                // set the corresponding rate provider
-                string memory key = string(
-                    abi.encodePacked(
-                        ".assetToRateProviderAndPriceFeed.", config.depositAssets[i].toHexString(), ".rateProvider"
-                    )
-                );
-                address rateProvider = getChainConfigFile().readAddress(key);
-                teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), false, rateProvider);
-                console.log("- RATE PROVIDER: ", rateProvider);
-            }
+            // if (isPegged) {
+            //     teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), true, address(0));
+            //     console.log("- PEGGED");
+            // } else {
+            //     // set the corresponding rate provider
+            //     string memory key = string(
+            //         abi.encodePacked(
+            //             ".assetToRateProviderAndPriceFeed.", config.depositAssets[i].toHexString(), ".rateProvider"
+            //         )
+            //     );
+            //     address rateProvider = getChainConfigFile().readAddress(key);
+            //     teller.accountant().setRateProviderData(ERC20(config.depositAssets[i]), false, rateProvider);
+            //     console.log("- RATE PROVIDER: ", rateProvider);
+            // }
         }
     }
 

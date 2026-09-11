@@ -50,7 +50,7 @@
     "depositAssets": ["0x45804880De22913dAFE09f4980848ECE6EcbAf78"],
     "depositAssetFlatFees": ["0"],
     "depositAssetPercentFees": ["0"],
-    "address": "0x0000000000000000000000000000000000000000"
+    "address": "0x41AB5d8387e60E30AACCF11357C306f6d875A6f7"
   },
   "rolesAuthority": {
     "moduleSpecificNameEntropy": "",
